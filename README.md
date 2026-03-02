@@ -1,3 +1,6 @@
+### 사용가능한 브라우저
+크롬, 크롬 확장자 지원하는 모든 브라우저 (Edge등)
+
 ### 최초 설치 방법
 
 1. [릴리즈](https://github.com/dongkkase/Chrome_Library_Management/releases)에서 최신 버전의 `libmanagement.zip` 파일을 다운로드 받습니다.
