@@ -28,7 +28,7 @@
 - 기가파일, 고파일 페이지에 직접 접속하지 않아도 바로 다운로드 가능
 
 
-관리프로그램램
+관리프로그램
 
 <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/1.png?v=1)</kbd>
 
