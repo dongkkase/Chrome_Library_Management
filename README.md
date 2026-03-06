@@ -30,44 +30,66 @@
 
 관리프로그램
 
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/1.png?v=1)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/1.png?v=2)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/1_2.png?v=2)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/1_3.png?v=2)</kbd>
 
 최신화 및 고해상도 체크
 
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/2.png?v=1)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/2.png?v=2)</kbd>
 
 제외 및 미완 처리시 알람 표기
 
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/3.png?v=1)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/3.png?v=2)</kbd>
 
 바로 다운로드 기능
 
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/10.png?v=1)</kbd>
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/11.png?v=1)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/10.png?v=2)</kbd>
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/11.png?v=2)</kbd>
 
 썸네일 미리보기 기능
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/12.png?v=2)</kbd>
 
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/12.png?v=1)</kbd>
-<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13.png?v=1)</kbd>
+타 사이트에서도 사용 가능
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13.png?v=2)</kbd>
+
+사이트 상세페이지에서 책 제목 우 클릭하여 '이 요소를 상세페이지 제목으로 등록' 메뉴 클릭(사이트당 최초 1회 등록)
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13_2.png?v=2)</kbd>
+
+기본 퀵 등록 버튼
+
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13_3.png?v=2)</kbd>
+
+제외 등록시
+
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13_4.png?v=2)</kbd>
+
+미완 등록시
+
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13_5.png?v=2)</kbd>
+
+완결 등록시
+
+<kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/13_6.png?v=2)</kbd>
 
 
 ### 주요 사용 방법
 
 - 기능을 적용할 사이트 도메인을 입력해주세요.
-  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/4.png?v=1)</kbd>
+  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/4.png?v=2)</kbd>
 - 직접 입력(여러줄 입력하여 일괄 등록 가능)
-  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/5.png?v=1)</kbd>
+  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/5.png?v=2)</kbd>
 - 링크 오른쪽 클릭하여 추가 (단축키: 키보드 1key + 1 or 2key 조합하여 사용 가능)
-  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/6.png?v=1)</kbd>
+  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/6.png?v=2)</kbd>
 - 링크가 아니여도, 책 제목을 드래그한 뒤 오른쪽 클릭하여 추가 가능
-  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/7.png?v=1)</kbd>
+  <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/7.png?v=2)</kbd>
 
 
 ### 단점
 - **과도한 매칭**: 유사도 기준을 80%로 설정했기 때문에, 시리즈물이 아닌데 제목이 매우 유사한 전혀 다른 책이 제외/미완 처리될 가능성이 있습니다  
     (문 스바루와 스바루는 1글자 밖에 차이 나지 않아서 같은 제목으로 매칭되버리는 문제)  
-    <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/8.png?v=1)</kbd>
-    <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/9.png?v=1)</kbd>
+    <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/8.png?v=2)</kbd>
+    <kbd>![image](https://github.com/dongkkase/Chrome_Library_Management/blob/main/images/9.png?v=2)</kbd>
 - **매칭 실패**: 제목 자체가 완전히 다른 별칭으로 등록되어 있거나(예: 원어 제목 vs 번역 제목), 정규표현식으로 제거되지 않는 특수한 기기호가 포함된 경우 매칭에 실패할 수 있습니다.
     - 제목의 패턴이 깔끔하지 않을수록 매칭실패율은 올라갑니다.
  
