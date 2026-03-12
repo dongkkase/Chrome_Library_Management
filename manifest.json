@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "1.도서 목록 매칭 매니저",
+  "version": "1.17.0",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "permissions": [
+    "contextMenus", 
+    "storage", 
+    "unlimitedStorage",
+    "activeTab", 
+    "scripting", 
+    "downloads", 
+    "cookies"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "options.html",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["common.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}

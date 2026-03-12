@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    /* 라이트/다크 모드 변수 */
+    :root {
+      --bg: #f8f9fa;
+      --panel: #ffffff;
+      --text: #333333;
+      --text-muted: #6c757d;
+      --border: #dee2e6;
+      --input-bg: #ffffff;
+      --tab-btn: #f1f3f5;
+      --tab-hover: #e9ecef;
+      --th-bg: #f8f9fa;
+      --input-text: #495057;
+      --release-bg: #ffffff;
+    }
+    body.dark-mode {
+      --bg: #121212;
+      --panel: #1e1e1e;
+      --text: #e0e0e0;
+      --text-muted: #a0a0a0;
+      --border: #333333;
+      --input-bg: #2d2d2d;
+      --tab-btn: #252525;
+      --tab-hover: #333333;
+      --th-bg: #252525;
+      --input-text: #e0e0e0;
+      --release-bg: #252525;
+    }
+
+    body { 
+      font-family: 'Malgun Gothic', sans-serif; 
+      padding: 15px; 
+      margin: 0;
+      min-width: 720px; 
+      width: calc(100% - 30px);
+      line-height: 1.6; 
+      overflow-x: auto;
+      background-color: var(--bg);
+      color: var(--text);
+      transition: background-color 0.3s, color 0.3s;
+    }
+    
+    .container { 
+      width: 100%; 
+      background: var(--panel);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+    }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    h2, h3, h4 { margin: 0; color: var(--text); }
+    
+    /* 테마 토글 스위치 */
+    .theme-switch-wrapper { display: flex; align-items: center; gap: 10px; margin-left: 15px;}
+    .theme-switch { display: inline-block; width: 46px; height: 24px; position: relative; }
+    .theme-switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #80bdff; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: "☀️"; font-size: 13px; display:flex; align-items:center; justify-content:center; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #495057; }
+    input:checked + .slider:before { transform: translateX(22px); content: "🌙"; background-color: #2d2d2d; }
+
+    .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 15px; gap: 5px; }
+    .tab-btn {
+      background: var(--tab-btn); border: 1px solid var(--border); border-bottom: none;
+      padding: 8px 20px; font-size: 14px; cursor: pointer; color: var(--text-muted); font-weight: bold;
+      border-radius: 8px 8px 0 0; transition: background 0.2s, color 0.2s;
+    }
+    .tab-btn:hover { background: var(--tab-hover); }
+    .tab-btn.active { 
+      background: var(--panel); color: #0d6efd; border: 2px solid var(--border); 
+      border-bottom: 2px solid var(--panel); margin-bottom: -2px; 
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.2s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    input[type="text"], textarea, select { 
+      width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); 
+      border-radius: 4px; background: var(--input-bg); color: var(--text);
+    }
+    input[type="text"]:focus, textarea:focus, select:focus {
+      outline: none; border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    }
+    button { 
+      cursor: pointer; padding: 6px 12px; border: none; border-radius: 4px; 
+      background: #0d6efd; color: white; white-space: nowrap; font-weight: bold; transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.85; }
+    
+    .site-tag { 
+      background: var(--bg); padding: 6px 10px; border-radius: 6px; font-size: 12px; 
+      display: inline-flex; align-items: center; gap: 8px; margin: 0 6px 6px 0; border: 1px solid var(--border);
+    }
+    .site-tag code { color: #d63384; font-size: 11px; background: rgba(127,127,127,0.1); padding: 2px 6px; border-radius: 4px;}
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; font-size: 13px; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: center; vertical-align: middle; }
+    th { background: var(--th-bg); font-weight: bold; color: var(--text); }
+    td:nth-child(2) { text-align: left; }
+    .edit-type, .edit-title, .edit-res, .edit-vol { width: 100%; }
+    
+    .btn-save { background: #20c997; margin-right: 4px; padding: 4px 10px; font-size: 11px; }
+    .btn-del { background: #fa5252; padding: 4px 10px; font-size: 11px; }
+    
+    .flex-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .batch-control { 
+      margin-top: 15px; padding: 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; font-size: 13px;
+    }
+    
+    .panel-box {
+      background: var(--panel); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 15px;
+    }
+    .panel-box h4 { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+    .release-item { background: var(--release-bg); border: 1px solid var(--border); padding: 20px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+    .release-version { font-size: 18px; font-weight: bold; color: #0d6efd; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 15px; }
+    .release-date { font-size: 12px; color: var(--text-muted); font-weight: normal; }
+    .release-body { font-size: 13px; color: var(--text); line-height: 1.7; }
+    .release-body h3 { margin: 20px 0 10px 0; font-size: 15px; color: var(--text); font-weight: 800; display: flex; align-items: center; gap: 5px; }
+    .release-body h4 { margin: 15px 0 8px 0; font-size: 14px; color: var(--text); font-weight: bold; }
+    .release-body p { margin: 8px 0; }
+    .release-body ul { margin: 10px 0; padding-left: 25px; }
+    .release-body li { margin-bottom: 6px; }
+    .release-body li.sub-li { list-style-type: circle; color: var(--text-muted); font-size: 12px; margin-top: 4px; margin-bottom: 4px;}
+    .release-body strong { color: #20c997; background: rgba(32, 201, 151, 0.1); padding: 0 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-row">
+      <h2>⚙️ 도서 목록 매칭 매니저</h2>
+      <div style="display: flex; align-items: center;">
+        <span style="font-size: 13px; color: var(--text-muted);">현재 버전: <b id="current-version">v1.0</b></span>
+        
+        <div class="theme-switch-wrapper">
+          <label class="theme-switch" title="다크 모드 온/오프 (기본: 시스템 테마)">
+            <input type="checkbox" id="themeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <button id="manual-check-btn" style="margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
+        <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
+        <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-target="tab-books">📚 도서 목록 관리</button>
+      <button class="tab-btn" data-target="tab-settings">🌐 사이트 및 설정</button>
+      <button class="tab-btn" data-target="tab-backup">💾 데이터 백업</button>
+      <button class="tab-btn" data-target="tab-history">📜 업데이트 내역</button>
+    </div>
+
+    <div id="tab-books" class="tab-content active">
+      <div id="statsDashboard" style="display: flex; gap: 8px; margin-bottom: 15px; text-align: center;">
+          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">전체 수집</div>
+              <div style="font-size: 18px; font-weight: 900; color: #0d6efd;" id="stat-total">0</div>
+          </div>
+          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">완결 도서</div>
+              <div style="font-size: 18px; font-weight: 900; color: #4dabf7;" id="stat-complete">0</div>
+          </div>
+          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">미완결 도서</div>
+              <div style="font-size: 18px; font-weight: 900; color: #ff922b;" id="stat-incomplete">0</div>
+          </div>
+          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">제외 도서</div>
+              <div style="font-size: 18px; font-weight: 900; color: #ff6b6b;" id="stat-exclude">0</div>
+          </div>
+      </div>
+
+      <div class="panel-box" style="background: var(--bg);">
+        <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
+        <select id="bulkTypeSelect" style="width: 100%; margin-bottom: 8px; border-color: var(--border); font-weight: bold; color: var(--input-text); font-size: 13px;">
+            <option value="exclude">🚫 '제외' 타입으로 일괄 저장 (기본값)</option>
+            <option value="incomplete">⏳ '미완' 타입으로 일괄 저장</option>
+            <option value="complete">✅ '완결' 타입으로 일괄 저장</option>
+        </select>
+        <textarea id="bulkInput" rows="3" placeholder="제목 권수 해상도 (여러 줄 입력 가능)&#10;예: 원피스 13권 1500px" style="font-size: 13px;"></textarea>
+        
+        <div id="bulkPreview" style="margin-top:8px; font-size:12px; color:var(--text-muted); background:var(--panel); padding:8px 12px; border-radius:4px; border:1px solid var(--border); display:none;"></div>
+        
+        <button id="saveBtn" style="width:100%; margin-top: 8px; background: #20c997; font-size: 14px;">목록에 일괄 추가하기</button>
+      </div>
+
+      <div class="batch-control">
+          <div>
+              <strong style="color: var(--text);">선택된 타입 변경:</strong>
+              <select id="batchTypeSelect" style="width: auto; margin-left: 5px; display: inline-block;">
+                  <option value="exclude">제외</option>
+                  <option value="incomplete">미완</option>
+                  <option value="complete">완결</option>
+              </select>
+              <button id="batchUpdateBtn" style="margin-left: 5px; background: #6c757d; padding: 4px 12px;">일괄 적용</button>
+          </div>
+          <div style="display: flex; gap: 10px; width: 45%;">
+              <select id="sortSelect" style="width: 40%;">
+                  <option value="id_desc">최신 등록순</option>
+                  <option value="id_asc">오래된 등록순</option>
+                  <option value="title_asc">제목 가나다순</option>
+                  <option value="title_desc">제목 역순</option>
+              </select>
+              <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 60%; border-color: #0d6efd;">
+          </div>
+      </div>
+      
+      <div id="listCountDisplay" style="margin-top: 15px; margin-bottom: 8px; font-weight: bold; color: var(--text-muted); font-size: 13px;"></div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 75px;">타입</th>
+            <th>도서 제목</th>
+            <th style="width: 80px;">해상도</th>
+            <th style="width: 60px;">권수</th>
+            <th style="width: 80px;">등록일</th>
+            <th style="width: 110px;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+      <div class="panel-box">
+        <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">확장프로그램이 작동할 사이트를 관리합니다. 낯선 사이트는 상세페이지에서 <b>[우클릭 ➡️ 요소를 상세페이지 제목으로 등록]</b> 기능을 사용하면 훨씬 정확하게 등록됩니다.</p>
+        <div class="flex-row">
+          <input type="text" id="siteInput" placeholder="직접 추가 (예: domain.com)">
+          <button id="addSiteBtn">수동 추가</button>
+        </div>
+        <div id="siteList" style="margin-top: 10px; display: flex; flex-wrap: wrap;"></div>
+      </div>
+
+      <div class="panel-box">
+        <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
+          웹사이트 제목에서 <b>무조건 삭제하고 싶은 단어(작가명, 스캔팀 등)</b>를 등록하세요. <br>
+          <span style="color:#e83e8c;">💡 예시:</span> '신카이 마코토'를 등록하면 👉 "별의 목소리 신카이 마코토"가 "별의 목소리"로 자동 정제됩니다. (주의: 일반 명사를 등록하면 정상적인 책 제목도 잘릴 수 있습니다.)
+        </p>
+        <div class="flex-row">
+          <input type="text" id="filterInput" placeholder="삭제할 텍스트 정확히 입력 (예: 오다 에이치로)">
+          <button id="addFilterBtn" style="background:#dc3545;">금지어 추가</button>
+        </div>
+        <div id="filterList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      </div>
+
+      <div class="panel-box">
+        <h4 style="font-size: 14px;">⚙️ 확장 기능 설정</h4>
+        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--text);">
+            <input type="checkbox" id="autoFolderCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
+            <b>자동 폴더 생성 다운로드</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(바로다운로드 시 책 제목으로 폴더를 자동 생성합니다)</span>
+        </label>
+        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--text);">
+            <input type="checkbox" id="showDownloadUICheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
+            <b>다운로드 현황판 표시</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(화면 좌측 하단에 실시간 진행률 팝업 노출)</span>
+        </label>
+        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text);">
+            <input type="checkbox" id="autoConfirmCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
+            <b>확인창(Confirm) 자동 스킵</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(포인트 차감 등 반복되는 귀찮은 알림창 무시)</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="tab-backup" class="tab-content">
+      <div class="panel-box" style="text-align: center; padding: 30px 20px;">
+        <h4 style="border:none; margin-bottom: 5px; font-size: 16px;">💾 데이터 안전하게 보관하기</h4>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 25px;">소중하게 모은 도서 데이터를 파일로 저장하거나, 기존 데이터를 복구합니다.</p>
+        
+        <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px;">
+          <button id="exportBtn" style="background: #17a2b8; padding: 10px 25px; font-size: 14px;">⬇️ 내 PC로 데이터 백업</button>
+          <button id="importBtn" style="background: #fd7e14; padding: 10px 25px; font-size: 14px;">⬆️ 기존 데이터 복구</button>
+          <input type="file" id="fileInput" style="display:none" accept=".json">
+        </div>
+        
+        <div style="background: var(--bg); display: inline-block; padding: 8px 15px; border-radius: 15px; font-size: 13px; color: var(--text-muted); border: 1px solid var(--border);">
+          <b id="lastBackupTime">최근 백업 기록: 없음</b>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-history" class="tab-content">
+      <div class="panel-box" style="border:none; padding: 0;">
+        <div id="releaseHistoryContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+            ⏳ GitHub에서 업데이트 기록을 불러오는 중입니다...
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+
+  <button id="undoBtn" style="position: fixed; bottom: 30px; right: 30px; display: none; padding: 10px 18px; font-size: 14px; font-weight: 900; background: #ffc107; color: #000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-radius: 30px; z-index: 9999; animation: fadeIn 0.3s;">
+      ⏪ 방금 전 작업 취소하기
+  </button>
+
+  <script src="common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
