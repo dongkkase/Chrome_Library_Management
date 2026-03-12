@@ -1,3 +1,4 @@
 libmanagement.zip
 .vscode/
 build.ps1
+.gitignore
