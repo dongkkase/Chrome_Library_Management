@@ -1,16 +1,46 @@
 // 👇 [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
 const PRE_DEFINED_SITES = [
-  { 
+{ 
     url: "tcafe21.com", 
     selector: ".board-hot-posts, #fboardlist",
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
     allowedDLs: ["giga", "gofile"],
     autoConfirmKeywords: ["포인트", "열람"], 
-    getHighResUrl: (src) => {
-      if (!src) return "";
-      return src.split('?')[0].replace(/\/thumb\d*-/, '/').replace(/_\d+x\d+(?=\.[a-zA-Z]+$)/, '');  
+    
+    // 💡 기존 getHighResUrl 대신 아래의 getHighResUrlAsync 함수로 교체합니다.
+    getHighResUrlAsync: async (thumb) => {
+        const link = thumb.closest('a');
+        if (!link || !link.href) return "";
+
+        // 이미 가져온 주소가 있다면 캐시된 주소 반환 (네트워크 중복 요청 방지)
+        if (thumb.dataset.cachedHighRes) return thumb.dataset.cachedHighRes;
+
+        try {
+            // 백그라운드에서 해당 게시글 페이지를 몰래 불러옵니다.
+            const res = await fetch(link.href);
+            const html = await res.text();
+            
+            // HTML을 분석하여 본문(.view-content)의 첫 번째 이미지를 찾습니다.
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const viewContent = doc.querySelector('.view-content');
+            
+            if (viewContent) {
+                const firstImg = viewContent.querySelector('img');
+                if (firstImg) {
+                    // 상대 경로일 수 있으므로 절대 경로로 변환
+                    const absoluteUrl = new URL(firstImg.getAttribute('src'), link.href).href;
+                    thumb.dataset.cachedHighRes = absoluteUrl; // 캐시에 저장
+                    return absoluteUrl;
+                }
+            }
+        } catch (error) {
+            console.error("고화질 썸네일 추출 실패:", error);
+        }
+        return "";
     },
+    // 👇 이전 질문에서 추가하셨던 customCss는 그대로 유지하세요!
     customCss: `
         .well { 
             position: fixed !important; 
@@ -21,7 +51,7 @@ const PRE_DEFINED_SITES = [
             left: 50% !important;
             transform: translateX(-50%) !important;
             width: 95% !important;
-            max-width:1000px;
+            max-width: 1200px !important;
             background: rgba(255, 255, 255, 0.95) !important;
             box-shadow: 0 -5px 15px rgba(0,0,0,0.15) !important;
             backdrop-filter: blur(5px) !important;
@@ -264,7 +294,7 @@ function showToast(book, isDelete = false) {
   if (!container) {
     container = document.createElement('div');
     container.id = 'book-manager-toast-container';
-    container.style.cssText = "position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
+    container.style.cssText = "position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
     document.body.appendChild(container);
   }
   const toast = document.createElement('div');
@@ -457,7 +487,7 @@ function injectDirectDownloadButtons(allowedDLs) {
                 autoBtn.innerHTML = btnText;
                 autoBtn.style.backgroundColor = bgColor;
                 autoBtn.style.pointerEvents = "auto";
-            }, 5000); 
+            }, 50000); 
         };
         
         insertAfterElement.insertAdjacentElement('afterend', autoBtn);
@@ -1087,7 +1117,9 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
         }, true);
 
         const config = PRE_DEFINED_SITES.find(site => window.location.hostname.includes(site.url));
-        if (config && config.thumbSelector && config.getHighResUrl) {
+        
+        // 💡 조건문에 config.getHighResUrlAsync 를 추가합니다.
+        if (config && config.thumbSelector && (config.getHighResUrl || config.getHighResUrlAsync)) {
             const hoverContainer = getOrCreateHoverContainer();
             const previewImg = document.getElementById('book-manager-hover-img');
             const hoverSpinner = document.getElementById('book-manager-hover-spinner'); 
@@ -1095,31 +1127,59 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
             let hoverTimer = null;
             let currentThumb = null;
 
-            document.addEventListener('mouseover', (e) => {
+            // 💡 async 키워드 추가
+            // 💡 async 키워드가 있는 mouseover 이벤트 전체를 아래 코드로 교체합니다.
+            document.addEventListener('mouseover', async (e) => {
                 const thumb = e.target.closest(config.thumbSelector);
                 if (!thumb || thumb.tagName !== 'IMG') return;
                 if (config.selector && !thumb.closest(config.selector)) return;
                 if (config.excludeThumbSelector && config.excludeThumbSelector && thumb.closest(config.excludeThumbSelector)) return;
                 
-                const highResSrc = config.getHighResUrl(thumb.src);
-                if (!highResSrc) return;
-
                 currentThumb = thumb;
 
+                // 💡 [신규] 이미 고화질 썸네일로 교체된 항목이라면 추출(스피너/통신)을 생략하고 즉시 띄움
+                if (thumb.dataset.isHighResReplaced === "true") {
+                    previewImg.src = thumb.src;
+                    previewImg.style.filter = "none";
+                    hoverContainer.style.display = 'block';
+                    hoverSpinner.style.display = 'none';
+                    return;
+                }
+
+                // 아직 추출되지 않은 썸네일: 블러 처리 및 빙글빙글 도는 스피너 표시
                 previewImg.src = thumb.src;
                 previewImg.style.filter = "blur(8px)";
                 hoverContainer.style.display = 'block';
                 hoverSpinner.style.display = 'block'; 
 
                 if (hoverTimer) clearTimeout(hoverTimer);
+
+                // 상세페이지 파싱(비동기) 로직 호출
+                let highResSrc = "";
+                if (config.getHighResUrlAsync) {
+                    highResSrc = await config.getHighResUrlAsync(thumb);
+                } else if (config.getHighResUrl) {
+                    highResSrc = config.getHighResUrl(thumb.src);
+                }
+
+                // 이미지를 못 찾았거나, 로딩 중에 마우스가 다른 곳으로 이동한 경우 취소
+                if (!highResSrc || currentThumb !== thumb) {
+                    if (currentThumb === thumb) hoverSpinner.style.display = 'none';
+                    return;
+                }
+
                 hoverTimer = setTimeout(() => {
                     const tempImg = new Image();
                     tempImg.src = highResSrc;
                     tempImg.onload = () => {
                         if (currentThumb === thumb) {
                             previewImg.src = highResSrc;
-                            previewImg.style.filter = "blur(0px)"; 
+                            previewImg.style.filter = "none"; 
                             hoverSpinner.style.display = 'none'; 
+                            
+                            // 💡 [신규] 원본 썸네일 이미지의 src를 추출해 온 고화질 이미지로 영구 교체
+                            thumb.src = highResSrc;
+                            thumb.dataset.isHighResReplaced = "true"; // 다음번 호버 시 재추출 방지 플래그
                         }
                     };
                     tempImg.onerror = () => {
@@ -1127,7 +1187,7 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                             hoverSpinner.style.display = 'none';
                         }
                     };
-                }, 200); 
+                }, 50); 
             });
 
             document.addEventListener('mousemove', (e) => {
