@@ -583,95 +583,154 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
   }
 
-  else if (message.action === "DOWNLOAD_TRANSFERIT") {
-    (async () => {
-        try {
-            const url = message.url;
-            
-            // 1. URL에서 transfer_id 추출
-            const idMatch = url.match(/\/(?:t|s)\/([a-zA-Z0-9_-]+)/);
-            if (!idMatch) throw new Error("Transfer ID를 찾을 수 없습니다.");
-            const transferId = idMatch[1];
 
-            // 2. 백그라운드에서 Transfer.it 퍼블릭 페이지 페치 후 파라미터 추출
-            const pageRes = await fetch(url);
-            const html = await pageRes.text();
+else if (message.action === "DOWNLOAD_TRANSFERIT") {
+      (async () => {
+          try {
+              const transferUrl = message.url;
+              
+              chrome.tabs.sendMessage(sender.tab.id, { 
+                  action: "SHOW_INFO_TOAST", 
+                  msg: "🚀 Transfer.it 백그라운드 다운로드를 준비합니다..." 
+              }).catch(() => {});
 
-            let nParam = null;
-            // JSON 및 JS 변수 삽입 패턴 등 유연한 파싱 적용
-            const nRegexes = [
-                /["']n["']\s*:\s*["']([^"']+)["']/,
-                /n\s*=\s*["']([^"']+)["']/,
-                /data-n=["']([^"']+)["']/
-            ];
-            
-            for (let regex of nRegexes) {
-                const match = html.match(regex);
-                if (match && match[1]) {
-                    nParam = match[1];
-                    break;
-                }
-            }
+              // 1. 화면 포커스를 뺏지 않고(active: false) 뒤쪽에 조용히 탭 열기
+              chrome.tabs.create({ url: transferUrl, active: false }, (tab) => {
+                  const macroTabId = tab.id;
 
-            if (!nParam) throw new Error("페이지에서 보안 파라미터(n)를 찾을 수 없습니다.");
+                  // 2. 탭 로드 대기
+                  const tabListener = (updatedTabId, changeInfo) => {
+                      if (updatedTabId === macroTabId && changeInfo.status === 'complete') {
+                          chrome.tabs.onUpdated.removeListener(tabListener);
 
-            // 3. MEGA API 주소 생성 (302 리다이렉트를 반환하는 주소)
-            const apiUrl = `https://bt7.api.mega.co.nz/cs?id=${transferId}&n=${nParam}`;
+                          // 3. 강력한 버튼 추적 매크로 주입
+                          chrome.scripting.executeScript({
+                              target: { tabId: macroTabId },
+                              func: () => {
+                                  // 디버깅 및 사용자 안내용 오버레이 (클릭을 방해하지 않도록 pointer-events: none 처리)
+                                  if (!document.getElementById('bm-macro-overlay')) {
+                                      const overlay = document.createElement('div');
+                                      overlay.id = 'bm-macro-overlay';
+                                      overlay.style.cssText = `
+                                          position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                                          background: rgba(0, 0, 0, 0.85); z-index: 2147483647;
+                                          display: flex; flex-direction: column; align-items: center; justify-content: center;
+                                          color: white; font-family: 'Malgun Gothic', sans-serif; pointer-events: none;
+                                      `;
+                                      overlay.innerHTML = `
+                                          <div style="width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); border-top: 5px solid #dc3545; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                                          <h2 style="margin: 0 0 15px 0; color: #fff; font-size: 26px;">🚀 Transfer.it 자동 다운로드 중...</h2>
+                                          <p style="margin: 0; color: #ced4da; font-size: 16px;">파일을 준비하고 있습니다. 다운로드가 시작되면 이 탭은 자동으로 닫힙니다.</p>
+                                          <p id="bm-macro-status" style="margin: 15px 0 0 0; color: #ffc107; font-size: 15px; font-weight: bold;">(다운로드 버튼 추적 중...)</p>
+                                          <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                                      `;
+                                      document.body.appendChild(overlay);
+                                  }
 
-            // 4. API 페치 (수동 리다이렉트로 실제 파일 위치 획득)
-            let finalUrl = null;
-            try {
-                const apiRes = await fetch(apiUrl, { method: 'GET', redirect: 'manual' });
-                
-                if (apiRes.status >= 300 && apiRes.status < 400) {
-                    finalUrl = apiRes.headers.get('location');
-                } else if (apiRes.type === 'opaqueredirect' || !apiRes.headers.get('location')) {
-                    // 크롬 확장프로그램 정책상 opaqueredirect 처리 시 fallback
-                    const fallbackRes = await fetch(apiUrl, { method: 'GET', redirect: 'follow' });
-                    finalUrl = fallbackRes.url;
-                }
-            } catch (fetchErr) {
-                // Fetch가 실패하거나 CORS가 막혀도 chrome.downloads가 직접 302를 처리하도록 API 주소를 전달
-                finalUrl = apiUrl; 
-            }
+                                  let attempts = 0;
+                                  const clickDownload = () => {
+                                      attempts++;
+                                      
+                                      // 🚨 [핵심 수정] 버튼을 찾는 조건을 극단적으로 넓혔습니다. (div, span 태그 모두 포함)
+                                      let dlBtn = document.querySelector('.js-standard-download, .js-zip-download, .download-btn');
+                                      
+                                      if (!dlBtn) {
+                                          const elements = Array.from(document.querySelectorAll('button, a, div, span'));
+                                          dlBtn = elements.find(el => {
+                                              if (el.offsetParent === null) return false; // 화면에 안 보이는 요소 제외
+                                              if (el.children.length > 2) return false;   // 너무 큰 컨테이너 영역 제외
+                                              
+                                              const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                                              return text === 'download' || 
+                                                     text === '다운로드' || 
+                                                     text === 'download as zip' || 
+                                                     text === 'zip으로 다운로드' || 
+                                                     text === '모두 다운로드' || 
+                                                     text === '일반 다운로드' ||
+                                                     text === 'download all';
+                                          });
+                                      }
 
-            if (!finalUrl || finalUrl === url) {
-                finalUrl = apiUrl; 
-            }
+                                      const statusEl = document.getElementById('bm-macro-status');
 
-            // 5. 최종 추출된 주소로 크롬 기본 다운로드 트리거
-            chrome.downloads.download({ 
-                url: finalUrl, 
-                conflictAction: "uniquify" 
-            }, (downloadId) => {
-                if (downloadId && message.title) {
-                    downloadTitlesMap[downloadId] = message.title; 
-                }
-                if (chrome.runtime.lastError) {
-                    chrome.tabs.sendMessage(sender.tab.id, { 
-                        action: "SHOW_INFO_TOAST", 
-                        msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, 
-                        isError: true 
-                    }).catch(() => {});
-                } else {
-                    chrome.tabs.sendMessage(sender.tab.id, { 
-                        action: "SHOW_INFO_TOAST", 
-                        msg: "✅ Transfer.it 백그라운드 다운로드가 시작되었습니다!" 
-                    }).catch(() => {});
-                }
-            });
+                                      if (dlBtn) {
+                                          if (statusEl) statusEl.innerText = "✅ 버튼 클릭 완료! 서버 응답 대기 중...";
+                                          dlBtn.click(); 
+                                      } else if (attempts < 60) {
+                                          // SPA 사이트는 렌더링이 늦으므로 최대 60초까지 끈질기게 추적합니다.
+                                          setTimeout(clickDownload, 1000);
+                                      } else {
+                                          if (statusEl) {
+                                              statusEl.innerText = "⚠️ 버튼을 찾을 수 없습니다. 화면을 클릭하여 수동으로 다운로드 해주세요.";
+                                              statusEl.style.color = "#dc3545";
+                                          }
+                                      }
+                                  };
+                                  setTimeout(clickDownload, 2000);
+                              }
+                          }).catch(err => console.log("스크립트 주입 에러:", err));
+                      }
+                  };
+                  chrome.tabs.onUpdated.addListener(tabListener);
 
-        } catch (error) {
-            console.error("Transfer.it 오류: ", error);
-            chrome.tabs.sendMessage(sender.tab.id, { 
-                action: "SHOW_INFO_TOAST", 
-                msg: `❌ Transfer.it 오류: ${error.message}`, 
-                isError: true 
-            }).catch(() => {});
-        }
-    })();
-    return true;
+                  // 4. 다운로드 감지 및 숨김 탭 자동 종료 로직
+                  let myDownloadId = null;
+
+                  const onCreatedListener = (item) => {
+                      // 🚨 [핵심 수정] ZIP 파일의 직접 다운로드 주소(userstorage.mega.co.nz) 완벽 대응
+                      const isTransferItDownload = 
+                          item.url.includes('.userstorage.mega.co.nz') || 
+                          item.url.includes('transfer.it') ||
+                          (item.referrer && item.referrer.includes('transfer.it'));
+
+                      if (isTransferItDownload) {
+                          myDownloadId = item.id;
+                          if (message.title) downloadTitlesMap[item.id] = message.title; 
+                          
+                          chrome.tabs.sendMessage(sender.tab.id, { 
+                              action: "SHOW_INFO_TOAST", msg: "✅ Transfer.it 다운로드가 시작되었습니다! (탭 자동 종료)" 
+                          }).catch(() => {});
+                          
+                          chrome.downloads.onCreated.removeListener(onCreatedListener);
+
+                          // Blob 다운로드(개별 파일 암호 해독)가 아닌, 일반 HTTPS 주소(ZIP 파일)면 탭을 바로 닫아도 안전함
+                          if (!item.url.startsWith('blob:')) {
+                              setTimeout(() => { chrome.tabs.remove(macroTabId).catch(() => {}); }, 2000);
+                          }
+                      }
+                  };
+                  chrome.downloads.onCreated.addListener(onCreatedListener);
+
+                  // Blob 다운로드일 경우 다운로드가 '완료'되어야 탭을 닫음 (도중에 닫으면 끊김)
+                  const onChangedListener = (delta) => {
+                      if (delta.id === myDownloadId && delta.state) {
+                          if (delta.state.current === 'complete' || delta.state.current === 'interrupted') {
+                              chrome.tabs.remove(macroTabId).catch(() => {}); 
+                              chrome.downloads.onChanged.removeListener(onChangedListener);
+                          }
+                      }
+                  };
+                  chrome.downloads.onChanged.addListener(onChangedListener);
+                  
+                  // 무한 대기 방지 10분 타이머
+                  setTimeout(() => {
+                      chrome.tabs.remove(macroTabId).catch(() => {});
+                      chrome.downloads.onCreated.removeListener(onCreatedListener);
+                      chrome.downloads.onChanged.removeListener(onChangedListener);
+                  }, 1000 * 60 * 10);
+              });
+
+          } catch (error) {
+              console.error("[Transfer.it] 에러:", error);
+              chrome.tabs.sendMessage(sender.tab.id, { 
+                  action: "SHOW_INFO_TOAST", msg: `❌ Transfer.it 오류: ${error.message}`, isError: true 
+              }).catch(() => {});
+          }
+      })();
+      return true;
   }
+
+
 
 });
 
@@ -943,3 +1002,83 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     });
     return true; 
 });
+
+
+/**
+ * Resolves a transfer.it public link to the final MEGA download URL.
+ * * @param {string} url - The original transfer.it URL (e.g., https://transfer.it/t/VNuLzl5xULIS)
+ * @returns {Promise<string>} - The final direct download URL
+ */
+async function getTransferDownloadUrl(url) {
+    try {
+        // Step 1: Extract transfer_id from the URL
+        const idMatch = url.match(/\/(?:t|s)\/([a-zA-Z0-9_-]+)/);
+        if (!idMatch || !idMatch[1]) {
+            throw new Error("Invalid transfer.it URL. Could not extract transfer ID.");
+        }
+        const transferId = idMatch[1];
+        console.log("[Transfer.it] Extracted Transfer ID:", transferId);
+
+        // Step 2: Call the internal transfer.it API to get the exact state
+        const transferApiUrl = `https://transfer.it/api/transfer/${transferId}`;
+        const transferApiRes = await fetch(transferApiUrl);
+        
+        if (!transferApiRes.ok) {
+            throw new Error(`Failed to fetch transfer details (HTTP ${transferApiRes.status}). The link might be expired or invalid.`);
+        }
+        
+        const transferData = await transferApiRes.json();
+        const nParam = transferData.n;
+        
+        if (!nParam) {
+            throw new Error("Security parameter 'n' is missing from the transfer.it API response.");
+        }
+        console.log("[Transfer.it] Successfully extracted 'n':", nParam);
+
+        // Step 3: Call the MEGA API using the exact 'n' parameter
+        const megaApiUrl = 'https://bt7.api.mega.co.nz/cs';
+        const megaApiRes = await fetch(megaApiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Referer': 'https://transfer.it/'
+            },
+            body: JSON.stringify([
+                {
+                    "a": "g",    // Action: Get file info/url
+                    "g": 1,      // Request download link generation
+                    "n": nParam  // Security node ID
+                }
+            ])
+        });
+
+        if (!megaApiRes.ok) {
+            throw new Error(`MEGA API communication failed (HTTP ${megaApiRes.status})`);
+        }
+        
+        const megaData = await megaApiRes.json();
+        console.log("[Transfer.it] MEGA API Response:", megaData);
+
+        // Step 4: Robust Error Handling for MEGA's proprietary error codes
+        if (typeof megaData === 'number' && megaData < 0) {
+            throw new Error(`MEGA API Error Code: ${megaData}`);
+        }
+        if (Array.isArray(megaData) && typeof megaData[0] === 'number' && megaData[0] < 0) {
+            throw new Error(`MEGA API Error Array: ${megaData[0]}`);
+        }
+
+        // Step 5: Extract and return the final download URL
+        if (!Array.isArray(megaData) || !megaData[0] || !megaData[0].g) {
+            throw new Error("MEGA API did not return a valid download URL.");
+        }
+
+        const finalUrl = megaData[0].g;
+        console.log("[Transfer.it] Final Download URL Resolved:", finalUrl);
+
+        return finalUrl;
+
+    } catch (error) {
+        console.error("[Transfer.it] Resolution Error:", error);
+        throw error; // Re-throw to be handled by the caller
+    }
+}
