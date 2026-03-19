@@ -2,6 +2,7 @@ importScripts('common.js');
 
 let lastRightClickedTitle = "";
 let downloadTitlesMap = {}; // 💡 다운로드 ID와 폴더명(책 제목) 매핑
+let urlToTitleMap = {};
 let gofileAuthLock = null;
 
 async function getGofileCredentials(forceRefresh = false) {
@@ -581,6 +582,97 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return true;
   }
+
+  else if (message.action === "DOWNLOAD_TRANSFERIT") {
+    (async () => {
+        try {
+            const url = message.url;
+            
+            // 1. URL에서 transfer_id 추출
+            const idMatch = url.match(/\/(?:t|s)\/([a-zA-Z0-9_-]+)/);
+            if (!idMatch) throw new Error("Transfer ID를 찾을 수 없습니다.");
+            const transferId = idMatch[1];
+
+            // 2. 백그라운드에서 Transfer.it 퍼블릭 페이지 페치 후 파라미터 추출
+            const pageRes = await fetch(url);
+            const html = await pageRes.text();
+
+            let nParam = null;
+            // JSON 및 JS 변수 삽입 패턴 등 유연한 파싱 적용
+            const nRegexes = [
+                /["']n["']\s*:\s*["']([^"']+)["']/,
+                /n\s*=\s*["']([^"']+)["']/,
+                /data-n=["']([^"']+)["']/
+            ];
+            
+            for (let regex of nRegexes) {
+                const match = html.match(regex);
+                if (match && match[1]) {
+                    nParam = match[1];
+                    break;
+                }
+            }
+
+            if (!nParam) throw new Error("페이지에서 보안 파라미터(n)를 찾을 수 없습니다.");
+
+            // 3. MEGA API 주소 생성 (302 리다이렉트를 반환하는 주소)
+            const apiUrl = `https://bt7.api.mega.co.nz/cs?id=${transferId}&n=${nParam}`;
+
+            // 4. API 페치 (수동 리다이렉트로 실제 파일 위치 획득)
+            let finalUrl = null;
+            try {
+                const apiRes = await fetch(apiUrl, { method: 'GET', redirect: 'manual' });
+                
+                if (apiRes.status >= 300 && apiRes.status < 400) {
+                    finalUrl = apiRes.headers.get('location');
+                } else if (apiRes.type === 'opaqueredirect' || !apiRes.headers.get('location')) {
+                    // 크롬 확장프로그램 정책상 opaqueredirect 처리 시 fallback
+                    const fallbackRes = await fetch(apiUrl, { method: 'GET', redirect: 'follow' });
+                    finalUrl = fallbackRes.url;
+                }
+            } catch (fetchErr) {
+                // Fetch가 실패하거나 CORS가 막혀도 chrome.downloads가 직접 302를 처리하도록 API 주소를 전달
+                finalUrl = apiUrl; 
+            }
+
+            if (!finalUrl || finalUrl === url) {
+                finalUrl = apiUrl; 
+            }
+
+            // 5. 최종 추출된 주소로 크롬 기본 다운로드 트리거
+            chrome.downloads.download({ 
+                url: finalUrl, 
+                conflictAction: "uniquify" 
+            }, (downloadId) => {
+                if (downloadId && message.title) {
+                    downloadTitlesMap[downloadId] = message.title; 
+                }
+                if (chrome.runtime.lastError) {
+                    chrome.tabs.sendMessage(sender.tab.id, { 
+                        action: "SHOW_INFO_TOAST", 
+                        msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, 
+                        isError: true 
+                    }).catch(() => {});
+                } else {
+                    chrome.tabs.sendMessage(sender.tab.id, { 
+                        action: "SHOW_INFO_TOAST", 
+                        msg: "✅ Transfer.it 백그라운드 다운로드가 시작되었습니다!" 
+                    }).catch(() => {});
+                }
+            });
+
+        } catch (error) {
+            console.error("Transfer.it 오류: ", error);
+            chrome.tabs.sendMessage(sender.tab.id, { 
+                action: "SHOW_INFO_TOAST", 
+                msg: `❌ Transfer.it 오류: ${error.message}`, 
+                isError: true 
+            }).catch(() => {});
+        }
+    })();
+    return true;
+  }
+
 });
 
 function createIndependentMenus() {
@@ -828,15 +920,26 @@ chrome.downloads.onChanged.addListener((delta) => {
 // 💡 [신규] 브라우저가 파일 이름을 결정하기 직전에 가로채서 폴더 경로를 씌워줍니다.
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     chrome.storage.local.get({ autoFolder: true }, (data) => {
-        if (data.autoFolder !== false && downloadTitlesMap[item.id]) {
-            let safeTitle = downloadTitlesMap[item.id].replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+        let title = downloadTitlesMap[item.id];
+        
+        // 💡 ID 매핑이 없다면 Referrer(접속 출처) 매핑에서 찾기 (Transfer.it 및 Gofile 매크로 처리용)
+        if (!title && item.referrer) {
+            for (let mappedUrl in urlToTitleMap) {
+                if (item.referrer.includes(mappedUrl) || mappedUrl.includes(item.referrer)) {
+                    title = urlToTitleMap[mappedUrl];
+                    break;
+                }
+            }
+        }
+
+        if (data.autoFolder !== false && title) {
+            let safeTitle = title.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
             if (safeTitle) {
-                // "책제목/원래파일명" 형태로 제안하면 크롬이 자동으로 폴더를 생성합니다.
                 suggest({ filename: safeTitle + "/" + item.filename, conflictAction: "uniquify" });
                 return;
             }
         }
-        suggest(); // 조건에 안 맞으면 기본 저장 방식 따름
+        suggest(); 
     });
-    return true; // 비동기 suggest 호출을 위해 필수
+    return true; 
 });

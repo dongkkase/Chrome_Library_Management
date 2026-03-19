@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "1.도서 목록 매칭 매니저",
-  "version": "1.18.0",
+  "version": "1.18.1",
   "icons": {
     "16": "icon.png",
     "32": "icon.png",
@@ -18,6 +18,9 @@
     "cookies"
   ],
   "host_permissions": [
+    "https://transfer.it/*",
+    "https://*.api.mega.co.nz/*",
+    "https://*.userstorage.mega.co.nz/*",
     "<all_urls>"
   ],
   "background": {

@@ -5,7 +5,7 @@ const PRE_DEFINED_SITES = [
     selector: ".board-hot-posts, #fboardlist",
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
-    allowedDLs: ["giga", "gofile"],
+    allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     
     // 💡 기존 getHighResUrl 대신 아래의 getHighResUrlAsync 함수로 교체합니다.
@@ -377,6 +377,7 @@ function injectDirectDownloadButtons(allowedDLs) {
     if (allowedDLs.includes('giga')) regexParts.push('gigafile\\.nu|xgf\\.nu');
     if (allowedDLs.includes('gofile')) regexParts.push('gofile\\.io');
     if (allowedDLs.includes('hk')) regexParts.push('hellkdis\\.net\\/s\\/|hellkaiv\\.net\\/s\\/');
+    if (allowedDLs.includes('transfer')) regexParts.push('transfer\\.it\\/s\\/|transfer\\.it\\/t\\/'); // 💡 Transfer.it 정규식 추가
 
     if (regexParts.length === 0) return;
     
@@ -385,7 +386,6 @@ function injectDirectDownloadButtons(allowedDLs) {
     regexStr += ")[^\\s\"'<>]+)";
     const targetRegex = new RegExp(regexStr, "i");
 
-    // 💡 [신규] 불필요한 텍스트 찌꺼기를 걸러내고 진짜 책 제목만 안전하게 추출
     function extractTargetBookTitle(element) {
         if (typeof globalDetailSelector !== 'undefined' && globalDetailSelector) {
             const detailEl = document.querySelector(globalDetailSelector);
@@ -433,7 +433,6 @@ function injectDirectDownloadButtons(allowedDLs) {
         return "";
     }
 
-    // 💡 [수정] bookTitle 파라미터 추가
     function createButton(insertAfterElement, url, pw, targetType, bookTitle) {
         if (insertAfterElement.nextElementSibling && insertAfterElement.nextElementSibling.classList.contains('auto-dl-btn')) return;
         
@@ -446,6 +445,8 @@ function injectDirectDownloadButtons(allowedDLs) {
         
         if (targetType === 'HELLKDIS') {
             bgColor = "#6f42c1"; 
+        } else if (targetType === 'TRANSFERIT') {
+            bgColor = "#dc3545"; // 💡 Transfer.it 전용 색상 (빨간색 계열)
         }
 
         autoBtn.innerHTML = btnText;
@@ -465,11 +466,10 @@ function injectDirectDownloadButtons(allowedDLs) {
             autoBtn.style.backgroundColor = "#6c757d";
             autoBtn.style.pointerEvents = "none";
             
-            const platformName = targetType === 'GOFILE' ? 'Gofile' : (targetType === 'HELLKDIS' ? 'Hellkdis' : 'Gigafile');
+            const platformName = targetType === 'GOFILE' ? 'Gofile' : (targetType === 'HELLKDIS' ? 'Hellkdis' : (targetType === 'TRANSFERIT' ? 'Transfer.it' : 'Gigafile'));
             showInfoToast(`🚀 ${platformName} 서버로 직접 다운로드를 요청합니다...`);
             
             try {
-                // 전송할 최종 폴더명(title) 결정 (미완일 경우 접두사 추가)
                 let finalTitle = bookTitle;
                 let bType = getBookTypeForTitle(bookTitle);
                 
@@ -477,7 +477,6 @@ function injectDirectDownloadButtons(allowedDLs) {
                     finalTitle = "(미완)" + bookTitle;
                 }
 
-                // 백그라운드로 메시지를 보낼 때 변경된 finalTitle 전달
                 chrome.runtime.sendMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle }).catch(()=>{});
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
@@ -513,10 +512,11 @@ function injectDirectDownloadButtons(allowedDLs) {
             if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
+            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; // 💡 판별 추가
 
             if(targetType){
                 let pw = extractPassword(link);
-                let titleStr = extractTargetBookTitle(link); // 💡 제목 정제 추출
+                let titleStr = extractTargetBookTitle(link);
                 createButton(link, url, pw, targetType, titleStr);
             }
         }
@@ -555,10 +555,11 @@ function injectDirectDownloadButtons(allowedDLs) {
             if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
+            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; // 💡 판별 추가
 
             if(targetType){
                 let pw = extractPassword(btn);
-                let titleStr = extractTargetBookTitle(btn); // 💡 제목 정제 추출
+                let titleStr = extractTargetBookTitle(btn);
                 createButton(btn, url, pw, targetType, titleStr);
             }
         }
