@@ -48,9 +48,14 @@ function renderFilters() {
 
 let renderFrame;
 
-function renderList(filter = "") {
+let currentPage = 1;
+const itemsPerPage = 100; // 한 페이지에 보여줄 항목 수 (100개 권장)
+let totalPages = 1;
+
+function renderList(filter = "", resetPage = false) {
+  if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
+
   chrome.storage.local.get({ bookList: [], sortOption: 'id_desc' }, (data) => {
-    if (renderFrame) cancelAnimationFrame(renderFrame); 
     listBody.innerHTML = '';
     
     let list = Array.isArray(data.bookList) ? data.bookList : [];
@@ -64,16 +69,23 @@ function renderList(filter = "") {
     document.getElementById('stat-incomplete').innerText = incompleteCount;
     document.getElementById('stat-exclude').innerText = excludeCount;
 
+    // 필터링 적용
     const filteredList = list.filter(b => b && b.title && b.title.toLowerCase().includes(filter.toLowerCase()));
+    
+    // 전체 페이지 계산 및 현재 페이지 보정
+    totalPages = Math.ceil(filteredList.length / itemsPerPage) || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+
     const countDisplay = document.getElementById('listCountDisplay');
     if (countDisplay) {
         if (filter.trim() === "") {
-            countDisplay.innerHTML = `검색 없이 모든 목록을 보고 있습니다.`;
+            countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
-            countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건`;
+            countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         }
     }
 
+    // 정렬 로직 적용
     let sortFn;
     switch(data.sortOption) {
         case 'title_asc': sortFn = (a, b) => (a.title || '').localeCompare(b.title || ''); break;
@@ -84,48 +96,86 @@ function renderList(filter = "") {
         case 'id_desc': 
         default: sortFn = (a, b) => (b.id || 0) - (a.id || 0); break;
     }
-
     filteredList.sort(sortFn);
 
-    let index = 0;
-    const chunkSize = 50; 
+    // 💡 데이터 자르기 (Slice)
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, filteredList.length);
+    const pageItems = filteredList.slice(startIndex, endIndex);
 
-    function drawChunk() {
-        const fragment = document.createDocumentFragment();
-        const end = Math.min(index + chunkSize, filteredList.length);
-        
-        for (; index < end; index++) {
-            const book = filteredList[index];
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>
-                <select class="edit-type" data-id="${book.id}" style="padding: 4px;">
-                  <option value="exclude" ${book.type==='exclude'?'selected':''}>제외</option>
-                  <option value="incomplete" ${book.type==='incomplete'?'selected':''}>미완</option>
-                  <option value="complete" ${book.type==='complete'?'selected':''}>완결</option>
-                </select>
-              </td>
-              <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
-              <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}"></td>
-              <td><input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}"></td>
-              <td style="color:var(--text-muted); font-size:11px;">${formatDisplayDate(book.date)}</td>
-              <td>
-                  <button class="btn-save" data-id="${book.id}">수정</button>
-                  <button class="btn-del" data-id="${book.id}">삭제</button>
-              </td>
-            `;
-            fragment.appendChild(tr);
-        }
-        
-        listBody.appendChild(fragment);
-        
-        if (index < filteredList.length) {
-            renderFrame = requestAnimationFrame(drawChunk);
-        }
-    }
+    // 화면에 그리기
+    const fragment = document.createDocumentFragment();
+    pageItems.forEach(book => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <select class="edit-type" data-id="${book.id}" style="padding: 4px;">
+              <option value="exclude" ${book.type==='exclude'?'selected':''}>제외</option>
+              <option value="incomplete" ${book.type==='incomplete'?'selected':''}>미완</option>
+              <option value="complete" ${book.type==='complete'?'selected':''}>완결</option>
+            </select>
+          </td>
+          <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
+          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}"></td>
+          <td><input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}"></td>
+          <td style="color:var(--text-muted); font-size:11px;">${formatDisplayDate(book.date)}</td>
+          <td>
+              <button class="btn-save" data-id="${book.id}">수정</button>
+              <button class="btn-del" data-id="${book.id}">삭제</button>
+          </td>
+        `;
+        fragment.appendChild(tr);
+    });
     
-    renderFrame = requestAnimationFrame(drawChunk);
+    listBody.appendChild(fragment);
+    
+    // 페이지네이션 버튼 렌더링 호출
+    renderPagination();
   });
+}
+
+// 💡 하단 페이지네이션 버튼 생성 로직
+function renderPagination() {
+    const container = document.getElementById('paginationContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    const createBtn = (text, targetPage, disabled = false, active = false) => {
+        const btn = document.createElement('button');
+        btn.className = 'page-btn' + (active ? ' active' : '');
+        btn.innerHTML = text;
+        btn.disabled = disabled;
+        
+        if (!disabled && !active) {
+            btn.onclick = () => {
+                currentPage = targetPage;
+                renderList(document.getElementById('searchInput').value, false);
+                window.scrollTo({ top: 0, behavior: 'smooth' }); // 페이지 이동 시 맨 위로
+            };
+        }
+        return btn;
+    };
+
+    // 처음, 이전 버튼
+    container.appendChild(createBtn('«', 1, currentPage === 1));
+    container.appendChild(createBtn('‹', currentPage - 1, currentPage === 1));
+
+    // 페이지 숫자 목록 (현재 페이지 기준으로 +- 2개씩 표시, 최대 5개)
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) {
+        startPage = Math.max(1, endPage - 4);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        container.appendChild(createBtn(i, i, false, i === currentPage));
+    }
+
+    // 다음, 마지막 버튼
+    container.appendChild(createBtn('›', currentPage + 1, currentPage === totalPages));
+    container.appendChild(createBtn('»', totalPages, currentPage === totalPages));
 }
 
 function saveWithUndo(newList, successMsg) {
@@ -133,7 +183,8 @@ function saveWithUndo(newList, successMsg) {
         chrome.storage.local.set({ backupList: data.bookList }, () => {
             chrome.storage.local.set({ bookList: newList }, () => {
                 if (successMsg) alert(successMsg);
-                renderList(document.getElementById('searchInput').value);
+                // 💡 수정/삭제 후 현재 페이지 유지 (false 전달)
+                renderList(document.getElementById('searchInput').value, false); 
                 
                 const undoBtn = document.getElementById('undoBtn');
                 undoBtn.style.display = 'block';
@@ -148,7 +199,7 @@ document.getElementById('undoBtn').onclick = () => {
         if (data.backupList) {
             chrome.storage.local.set({ bookList: data.backupList }, () => {
                 alert('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
-                renderList(document.getElementById('searchInput').value);
+                renderList(document.getElementById('searchInput').value, false);
                 document.getElementById('undoBtn').style.display = 'none';
             });
         }
@@ -537,8 +588,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortSelect = document.getElementById('sortSelect');
         if (sortSelect) sortSelect.value = data.sortOption;
 
-        renderList(); 
-        renderSites(); 
+        renderList('', true); 
+        renderSites();
         renderFilters(); 
 
         const timeSpan = document.getElementById('lastBackupTime');
@@ -602,7 +653,8 @@ document.addEventListener('DOMContentLoaded', () => {
         searchInput.oninput = (e) => {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
-                renderList(e.target.value);
+                // 💡 검색어 입력 시 1페이지로 리셋 (true 전달)
+                renderList(e.target.value, true); 
             }, 300);
         };
     }
@@ -612,7 +664,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sortSelect.onchange = (e) => {
             chrome.storage.local.set({ sortOption: e.target.value }, () => {
                 const filter = searchInput ? searchInput.value : '';
-                renderList(filter);
+                // 💡 정렬 변경 시 1페이지로 리셋 (true 전달)
+                renderList(filter, true); 
             });
         };
     }

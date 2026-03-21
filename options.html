@@ -131,6 +131,17 @@
     .release-body li { margin-bottom: 6px; }
     .release-body li.sub-li { list-style-type: circle; color: var(--text-muted); font-size: 12px; margin-top: 4px; margin-bottom: 4px;}
     .release-body strong { color: #20c997; background: rgba(32, 201, 151, 0.1); padding: 0 4px; border-radius: 3px; }
+
+/* 페이지네이션 버튼 스타일 추가 */
+    .pagination-container { display: flex; justify-content: center; gap: 5px; margin-top: 15px; margin-bottom: 20px; }
+    .page-btn {
+      background: var(--panel); border: 1px solid var(--border);
+      padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--text);
+      font-weight: bold; font-size: 13px; transition: all 0.2s;
+    }
+    .page-btn:hover:not(:disabled) { background: var(--tab-hover); }
+    .page-btn.active { background: #0d6efd; color: white; border-color: #0d6efd; pointer-events: none; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -230,6 +241,8 @@
         </thead>
         <tbody id="listBody"></tbody>
       </table>
+
+      <div id="paginationContainer" class="pagination-container"></div>
     </div>
 
     <div id="tab-settings" class="tab-content">
