@@ -964,36 +964,74 @@ function applyStyleToDetailElement(el) {
         removeBadge(el); 
     }
 
+    // const br = document.createElement('br');
+    // el.insertBefore(br, el.lastChild);
+    el.style.setProperty("line-height", "1");
+    el.style.setProperty("margin-bottom", "10px", "important"); // 💡 뱃지와 텍스트가 겹치는 경우를 방지하기 위해 패딩 추가
+
     const existingBadge = el.querySelector('.book-badge');
     let actions = el.querySelector('.bm-quick-actions'); 
+    let existingBr = el.querySelector('.bm-badge-br'); // 💡 기존에 삽입된 줄바꿈 태그 찾기
     
+    // 1. 뱃지 HTML이 있을 때 (책 데이터가 매칭되었을 때)
     if (newBadgeHTML) {
         if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
             if (existingBadge) existingBadge.remove();
+            if (existingBr) existingBr.remove(); // 💡 업데이트를 위해 기존 br 삭제
+            
+            const br = document.createElement('br');
+            br.className = 'bm-badge-br'; // 💡 중복 생성을 막기 위해 클래스명 부여
+
             const badge = document.createElement('span');
             badge.className = 'book-badge';
-            badge.style.cssText = badgeStyle;
+            
+            badge.style.cssText = badgeStyle; 
             badge.innerHTML = newBadgeHTML;
             badge.dataset.html = newBadgeHTML; 
             
             if (actions) {
-                el.insertBefore(badge, actions);
+                el.insertBefore(badge, actions); // 💡 그 다음 뱃지 삽입
+                el.insertBefore(br, actions);    // 💡 뱃지보다 먼저 br 태그 삽입
             } else {
-                el.appendChild(badge);
+                el.appendChild(badge);           // 💡 그 다음 뱃지 삽입
+                el.appendChild(br);              // 💡 뱃지보다 먼저 br 태그 삽입
             }
         }
     } else if (existingBadge) {
         existingBadge.remove();
+        if (existingBr) existingBr.remove(); // 💡 뱃지가 사라지면 br도 함께 제거
     }
 
+    // 2. 퀵 액션 버튼(복사, 제외 등) 추가 및 갱신 로직
     if (!actions) {
         actions = createQuickActions(el._bmDetailData, !!book);
+        
+        // 💡 뱃지가 없어서 br 태그가 안 만들어졌다면 액션 버튼 앞에 br 삽입
+        if (!newBadgeHTML && !el.querySelector('.bm-badge-br')) {
+            const br = document.createElement('br');
+            br.className = 'bm-badge-br';
+            el.appendChild(br);
+        }
+        
+        // 💡 액션 버튼의 왼쪽 마진을 없애고 위쪽 마진을 주어 정렬
+        actions.style.marginLeft = "0";
+        actions.style.marginTop = "5px";
         el.appendChild(actions);
     } else {
         const needsUpdate = (actions.children.length === 6 && !book) || (actions.children.length === 5 && !!book);
         if (needsUpdate) {
             actions.remove();
             actions = createQuickActions(el._bmDetailData, !!book);
+            
+            // 💡 갱신될 때 br 태그가 누락되었다면 다시 추가
+            if (!el.querySelector('.bm-badge-br')) {
+                const br = document.createElement('br');
+                br.className = 'bm-badge-br';
+                el.appendChild(br);
+            }
+            
+            actions.style.marginLeft = "0";
+            actions.style.marginTop = "5px";
             el.appendChild(actions);
         }
     }
