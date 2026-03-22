@@ -595,7 +595,8 @@ function createQuickActions(linkData, hasBook) {
         { label: '미완', color: '#ff922b', action: 'incomplete' },
         { label: '완결', color: '#4dabf7', action: 'complete' },
         { label: '삭제', color: '#868e96', action: 'delete', display: hasBook }, 
-        { label: '검색', color: '#20c997', action: 'search' }
+        { label: '구글검색', color: '#20c997', action: 'search' },
+        { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
     ];
 
     buttons.forEach(btnInfo => {
@@ -619,10 +620,8 @@ function createQuickActions(linkData, hasBook) {
                     navigator.clipboard.writeText(titleToCopy).then(() => {
                         const originalText = btn.textContent;
                         const originalColor = btn.style.backgroundColor;
-                        
                         btn.textContent = '복사됨!';
                         btn.style.backgroundColor = '#20c997'; 
-                        
                         setTimeout(() => {
                             btn.textContent = originalText;
                             btn.style.backgroundColor = originalColor;
@@ -631,7 +630,18 @@ function createQuickActions(linkData, hasBook) {
                     return;
                 }
 
-                if (btnInfo.action === 'search') {
+                if (btnInfo.action === 'search' || btnInfo.action === 'ridi_preview') {
+                    // 리디 검색의 경우 백그라운드 통신에 약간의 시간이 소요되므로 로딩 이모지를 띄워줍니다.
+                    if (btnInfo.action === 'ridi_preview') {
+                        const originalText = btn.textContent;
+                        btn.textContent = '⏳';
+                        btn.style.pointerEvents = 'none';
+                        setTimeout(() => { 
+                            btn.textContent = originalText; 
+                            btn.style.pointerEvents = 'auto';
+                        }, 2500);
+                    }
+
                     chrome.runtime.sendMessage({ 
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
@@ -1005,6 +1015,8 @@ function applyStyleToDetailElement(el) {
     // 2. 퀵 액션 버튼(복사, 제외 등) 추가 및 갱신 로직
     if (!actions) {
         actions = createQuickActions(el._bmDetailData, !!book);
+
+        actions.dataset.hasBook = !!book; // 💡 무한루프 방지용 속성 추가
         
         // 💡 뱃지가 없어서 br 태그가 안 만들어졌다면 액션 버튼 앞에 br 삽입
         if (!newBadgeHTML && !el.querySelector('.bm-badge-br')) {
@@ -1018,10 +1030,12 @@ function applyStyleToDetailElement(el) {
         actions.style.marginTop = "5px";
         el.appendChild(actions);
     } else {
-        const needsUpdate = (actions.children.length === 6 && !book) || (actions.children.length === 5 && !!book);
+        // const needsUpdate = (actions.children.length === 6 && !book) || (actions.children.length === 5 && !!book);
+        const needsUpdate = actions.dataset.hasBook !== String(!!book);
         if (needsUpdate) {
             actions.remove();
             actions = createQuickActions(el._bmDetailData, !!book);
+            actions.dataset.hasBook = !!book;
             
             // 💡 갱신될 때 br 태그가 누락되었다면 다시 추가
             if (!el.querySelector('.bm-badge-br')) {

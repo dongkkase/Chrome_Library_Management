@@ -109,6 +109,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(message.cleanTitle) }).catch(() => {});
           return true;
       }
+
+      console.log(message.type);
+      if (message.type === "ridi_preview") {
+          (async () => {
+              // 1. 책 제목 앞뒤에 쌍따옴표를 붙여 구글 정확도 검색(Exact match)을 유도합니다.
+              const query = `site:https://ridibooks.com/books "${message.cleanTitle}"`;
+              const googleUrl = "https://www.google.com/search?q=" + encodeURIComponent(query);
+
+              // 매칭 실패 시 사용할 일반 구글 검색 주소
+              const fallbackGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(message.cleanTitle);
+              
+              try {
+                  // 2. 화면 이동 없이 백그라운드에서 구글 검색 결과를 가져옵니다.
+                  const res = await fetch(googleUrl);
+                  const html = await res.text();
+                  
+                  // 3. 정규식을 사용하여 a 태그 내부의 href 링크와 텍스트(제목)를 추출합니다.
+                  const aTagRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+                  let matches = [];
+                  let m;
+                  while ((m = aTagRegex.exec(html)) !== null) {
+                      let href = m[1];
+                      let innerHtml = m[2];
+                      
+                      // 구글 리다이렉트 주소 형태 (/url?q=...) 처리
+                      if (href.startsWith('/url?q=')) {
+                          href = decodeURIComponent(href.split('&')[0].replace('/url?q=', ''));
+                      }
+                      
+                      // 리디북스 책 상세페이지 링크인 경우만 수집
+                      if (href.includes('ridibooks.com/books/')) {
+                          // 태그 제거 및 띄어쓰기 정제
+                          let text = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                          matches.push({ url: href, title: text });
+                      }
+                  }
+
+                  // 4. 요구사항에 맞춘 우선순위 조건 판별
+                  let finalRidiUrl = null;
+                  if (matches.length > 0) {
+                      let p1 = matches.find(m => m.title.includes('1권 미리보기'));
+                      let p2 = matches.find(m => m.title.includes('- 만화 e북'));
+                      let p3 = matches.find(m => m.title.includes('- 만화 연재'));
+                      
+                      if (p1) finalRidiUrl = p1.url;
+                      else if (p2) finalRidiUrl = p2.url;
+                      else if (p3) finalRidiUrl = p3.url;
+                  }
+
+                  // 5. 조건에 맞는 결과가 있으면 해당 리디북스 링크를 열고, 아예 없으면 구글 검색 결과창을 엽니다.
+                  if (finalRidiUrl) {
+                      chrome.tabs.create({ url: finalRidiUrl }).catch(() => {});
+                  } else {
+                      chrome.tabs.create({ url: fallbackGoogleUrl }).catch(() => {});
+                  }
+              } catch (err) {
+                  // 네트워크 에러 등이 발생했을 때의 차선책 (구글 검색창 띄우기)
+                  chrome.tabs.create({ url: googleUrl }).catch(() => {});
+              }
+          })();
+          return true;
+      }
       
       if (message.type === "delete") {
           chrome.storage.local.get({ bookList: [] }, (data) => {
