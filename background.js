@@ -177,13 +177,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               let list = Array.isArray(data.bookList) ? data.bookList : [];
               let targetTitleStr = message.cleanTitle.replace(/\s+/g, '').toLowerCase();
 
-              let existingIndex = list.findIndex(b => {
-                  const bTitle = (b.title || "").replace(/\s+/g, '').toLowerCase();
-                  return targetTitleStr === bTitle;
-              });
+              // 💡 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
+              let existingIndex = -1;
+              for (let i = list.length - 1; i >= 0; i--) {
+                  if ((list[i].title || "").replace(/\s+/g, '').toLowerCase() === targetTitleStr) {
+                      existingIndex = i;
+                      break;
+                  }
+              }
 
               if (existingIndex > -1) {
                   let deletedBook = list.splice(existingIndex, 1)[0];
+                  
+                  bgListMapCache = null; // 💡 [추가] 삭제 시 백그라운드 캐시 무효화
+                  
                   chrome.storage.local.set({ bookList: list }, () => {
                       if (tabId) chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
                   });
@@ -814,6 +821,8 @@ chrome.runtime.onStartup.addListener(createIndependentMenus);
 let pendingTasks = [];
 let isSaving = false;
 let saveTimer = null;
+let bgListMapCache = null; // 💡 [신규] 백그라운드 해시맵 캐시
+let bgListLength = -1;
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const menuId = info.menuItemId;
@@ -854,6 +863,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
           if (existingIndex > -1) {
               let deletedBook = list.splice(existingIndex, 1)[0];
+              bgListMapCache = null; // 💡 캐시 초기화
               chrome.storage.local.set({ bookList: list }, () => {
                   if (tab && tab.id) {
                       chrome.tabs.sendMessage(tab.id, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
@@ -906,10 +916,14 @@ function processSaveQueue() {
     chrome.storage.local.get({ bookList: [] }, (data) => {
         let list = Array.isArray(data.bookList) ? data.bookList : [];
         
-        let hashMap = new Map();
-        for (let i = 0; i < list.length; i++) {
-            const t = (list[i].title || "").replace(/\s+/g, '').toLowerCase();
-            hashMap.set(t, i);
+        // 💡 [핵심 최적화] 매번 6만번 루프 돌며 해시맵을 만들지 않고, 갯수가 같으면 캐시된 맵 사용
+        if (!bgListMapCache || bgListLength !== list.length) {
+            bgListMapCache = new Map();
+            for (let i = 0; i < list.length; i++) {
+                const t = (list[i].title || "").replace(/\s+/g, '').toLowerCase();
+                bgListMapCache.set(t, i);
+            }
+            bgListLength = list.length;
         }
 
         let lastSavedBook = null;
@@ -917,16 +931,7 @@ function processSaveQueue() {
 
         for (let task of tasks) {
             const targetTitleStr = task.cleanTitle.replace(/\s+/g, '').toLowerCase();
-            let existingIndex = -1;
-
-            if (hashMap.has(targetTitleStr)) {
-                existingIndex = hashMap.get(targetTitleStr);
-            } else {
-                existingIndex = list.findIndex(b => {
-                    const bTitle = (b.title || "").replace(/\s+/g, '').toLowerCase();
-                    return targetTitleStr === bTitle;
-                });
-            }
+            let existingIndex = bgListMapCache.has(targetTitleStr) ? bgListMapCache.get(targetTitleStr) : -1;
 
             if (existingIndex > -1) {
                 list[existingIndex].lastVol = task.lastVol || list[existingIndex].lastVol;
@@ -944,7 +949,8 @@ function processSaveQueue() {
                     date: task.dateString 
                 };
                 list.push(lastSavedBook);
-                hashMap.set(targetTitleStr, list.length - 1);
+                bgListMapCache.set(targetTitleStr, list.length - 1);
+                bgListLength = list.length;
             }
             if (task.tabId) targetTabId = task.tabId;
         }

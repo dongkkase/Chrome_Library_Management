@@ -48,7 +48,7 @@ function cleanSiteTitle(title) {
     .replace(/^\s*\[?웹툰\]?\s*/, ''); 
 
   // 'OOO 원작', 'OOO 그림' 등의 패턴을 묶어서 삭제
-  cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|그림|지음|글|작화|스토리|번역)(?=\s|$)/g, ' ');
+  cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|그림|지음|글|작화|번역)(?=\s|$)/g, ' ');
 
   // 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
   const delimiterRegex = /(\d{3,4}\s*px|\d+\s*(?:권|화|부(?!터))?\s*[~-]\s*\d+|\d+\s*(?:권|화|부(?!터)|화씩)|완결|\s완(\s|$))/i;

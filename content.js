@@ -43,17 +43,17 @@ const PRE_DEFINED_SITES = [
     // 👇 이전 질문에서 추가하셨던 customCss는 그대로 유지하세요!
     customCss: `
         .well { 
-            position: fixed !important; 
-            z-index: 9000 !important; 
-            bottom: 0 !important; 
+            
+            
+            
             border-radius: 10px !important; 
             padding: 20px !important; 
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            width: 95% !important;
+            
+            
+            width: 100% !important;
             max-width: 1200px !important;
             background: rgba(255, 255, 255, 0.95) !important;
-            box-shadow: 0 -5px 15px rgba(0,0,0,0.15) !important;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.15) !important;
             backdrop-filter: blur(5px) !important;
         }
         body { padding-bottom: 120px !important; }
@@ -90,6 +90,7 @@ let lastRightClickedLink = null;
 let lastRightClickedElement = null; 
 
 let isDownloadUIEnabled = true; 
+let titleProcessingCache = new Map(); // 💡 [신규] 6만건 정규식 재연산 방지를 위한 캐시 맵
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
@@ -123,9 +124,22 @@ function initDataCache(data) {
     exactMatchCache = {};
     similarityCache = {}; 
 
+    // 💡 [핵심 최적화] 정규식 연산 결과를 캐시하여 화면 멈춤(Freeze) 현상 원천 차단
     cachedBookList = (Array.isArray(data.bookList) ? data.bookList : []).map(b => {
-        const processedOriginal = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
-        const processedNoSpace = processedOriginal.replace(/\s+/g, ''); 
+        let processedOriginal, processedNoSpace;
+        
+        if (titleProcessingCache.has(b.title)) {
+            // 이미 계산해둔 제목이라면 정규식을 돌리지 않고 캐시에서 즉시 반환 (0ms 소요)
+            const cached = titleProcessingCache.get(b.title);
+            processedOriginal = cached.original;
+            processedNoSpace = cached.nospace;
+        } else {
+            // 처음 보는 제목만 무거운 정규식 연산 수행 후 캐시에 저장
+            processedOriginal = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
+            processedNoSpace = processedOriginal.replace(/\s+/g, ''); 
+            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace });
+        }
+
         const enhanced = { ...b, _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace };
         
         if(!exactMatchCache[processedNoSpace]) exactMatchCache[processedNoSpace] = enhanced;
@@ -1047,6 +1061,38 @@ function applyStyleToDetailElement(el) {
             actions.style.marginLeft = "0";
             actions.style.marginTop = "5px";
             el.appendChild(actions);
+        }
+    }
+
+    // 💡 [신규] 티카페 다운로드 영역 상단 끌어올리기 (Teleport)
+    const hostname = window.location.hostname;
+    if (hostname.includes('tcafe') || hostname.includes('tcafed')) {
+        let downloadArea = null;
+        
+        // 1. 실제 다운로드 링크를 기준으로 가장 가까운 부모 박스(.well)를 정확하게 역추적합니다.
+        // (단순히 .well만 찾으면 페이지 내의 다른 엉뚱한 박스가 잡힐 수 있기 때문입니다)
+        const dlLink = document.querySelector('a[href*="download.php?bo_table="]');
+        if (dlLink) {
+            downloadArea = dlLink.closest('.well, #bo_v_file, .view-attach') || dlLink.parentElement;
+        } else {
+            // 혹시라도 링크를 못 찾았을 경우 최후의 수단으로 .well 클래스 직접 탐색
+            downloadArea = document.querySelector('.well');
+        }
+
+        // 2. 영역을 찾았고 아직 옮기지 않았다면 뱃지(el) 밑으로 이동
+        if (downloadArea && downloadArea.dataset.moved !== 'true') {
+            downloadArea.dataset.moved = 'true'; // 중복 이동 방지
+            
+            // 기존에 추가하셨던 .well CSS가 깨지지 않도록, 위치 정렬을 위한 최소한의 스타일만 줍니다.
+            downloadArea.style.marginTop = '15px';
+            downloadArea.style.display = 'block';
+            downloadArea.style.clear = 'both'; // 좌우 레이아웃(float) 꼬임 방지
+            
+            // 💡 핵심: <h1> 같은 제목 태그(el) '안'에 넣으면 글씨가 거대해지거나 레이아웃이 깨지므로, 
+            // 제목 태그가 끝나는 '바로 다음(형제 노드)' 위치에 끼워 넣습니다.
+            if (el.parentNode) {
+                el.parentNode.insertBefore(downloadArea, el.nextSibling);
+            }
         }
     }
 }
