@@ -1150,3 +1150,82 @@ async function getTransferDownloadUrl(url) {
         throw error; // Re-throw to be handled by the caller
     }
 }
+
+
+// 💡 [수정] 활성 탭 종료 시 왼쪽 탭으로 포커스 이동시키는 매크로 로직 (크롬 레이스 컨디션 완벽 대응)
+let focusWindowStates = {}; 
+let focusTabIndices = {};
+
+function initFocusLeftMacro() {
+    if (!chrome.tabs) return;
+
+    // 전체 탭 인덱스 및 활성 상태 초기화
+    chrome.tabs.query({}, tabs => {
+        tabs.forEach(t => {
+            focusTabIndices[t.id] = t.index;
+            if (t.active) {
+                focusWindowStates[t.windowId] = { activeTabId: t.id, prevTabId: null, lastSwitchTime: 0 };
+            }
+        });
+    });
+
+    // 탭 이동, 생성 시 인덱스 업데이트
+    const updateIndices = () => {
+        chrome.tabs.query({}, tabs => {
+            tabs.forEach(t => focusTabIndices[t.id] = t.index);
+        });
+    };
+    
+    chrome.tabs.onCreated.addListener(updateIndices);
+    chrome.tabs.onMoved.addListener(updateIndices);
+    chrome.tabs.onAttached.addListener(updateIndices);
+    chrome.tabs.onDetached.addListener(updateIndices);
+
+    // 💡 탭 활성화 변경 시 히스토리 기록 (크롬의 자동 포커스 이동 이벤트 캐치)
+    chrome.tabs.onActivated.addListener(activeInfo => {
+        let win = focusWindowStates[activeInfo.windowId] || { activeTabId: null, prevTabId: null, lastSwitchTime: 0 };
+        win.prevTabId = win.activeTabId;
+        win.activeTabId = activeInfo.tabId;
+        win.lastSwitchTime = Date.now(); // 포커스가 바뀐 시간 기록
+        focusWindowStates[activeInfo.windowId] = win;
+    });
+
+    // 탭 삭제 이벤트 감지
+    chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+        if (removeInfo.isWindowClosing) return;
+
+        chrome.storage.local.get({ focusLeftTab: false }, (data) => {
+            if (!data.focusLeftTab) return;
+
+            let win = focusWindowStates[removeInfo.windowId];
+            let closedIndex = focusTabIndices[tabId];
+
+            // 💡 탭이 닫힐 때 크롬이 자동으로 우측 탭을 포커스하는 찰나의 시간(약 100ms 이내)을 계산하여 
+            // 실제로 활성화되어 있던 탭이 닫힌 것인지 정확하게 판별합니다.
+            let wasActive = false;
+            if (win) {
+                if (win.activeTabId === tabId) {
+                    wasActive = true;
+                } else if (win.prevTabId === tabId && (Date.now() - win.lastSwitchTime < 150)) {
+                    wasActive = true;
+                }
+            }
+
+            // 활성화 상태였던 탭이 닫혔고, 왼쪽에 탭이 존재한다면 강제 이동
+            if (wasActive && closedIndex > 0) {
+                let leftIndex = closedIndex - 1;
+                
+                chrome.tabs.query({ windowId: removeInfo.windowId }, (tabs) => {
+                    let leftTab = tabs.find(t => t.index === leftIndex);
+                    if (leftTab) {
+                        chrome.tabs.update(leftTab.id, { active: true });
+                    }
+                });
+            }
+            
+            delete focusTabIndices[tabId];
+        });
+    });
+}
+
+initFocusLeftMacro();

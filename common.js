@@ -77,5 +77,7 @@ function cleanSiteTitle(title) {
     .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
     .replace(/\<\s\>/g, '')
     .replace(/\s+/g, ' ')
+    .replace(/^\]\s*/, '')
+    .replace(/,\s*$/, '')
     .trim();
 }
