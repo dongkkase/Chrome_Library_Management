@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "1.도서 목록 매칭 매니저",
-  "version": "1.23.1",
+  "version": "1.24.0",
   "icons": {
     "16": "icon.png",
     "32": "icon.png",

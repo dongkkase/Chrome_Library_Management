@@ -1,5 +1,3 @@
-// let isDataStale = false;
-
 // 👇 [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
 const PRE_DEFINED_SITES = [
 { 
@@ -664,16 +662,49 @@ function createQuickActions(linkData, hasBook) {
                         cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
                     }).catch(()=>{});
                 } else {
+                    // 💡 [핵심 최적화: 낙관적 UI 업데이트 (Optimistic UI)]
+                    // DB 저장을 기다리지 않고, 현재 탭의 메모리를 직접 조작해 0.001초 만에 화면부터 바꿉니다!
+                    const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+                    
+                    // 1. 현재 탭의 캐시 메모리 즉시 수정
+                    if (exactMatchCache[targetNoSpace]) {
+                        exactMatchCache[targetNoSpace].type = btnInfo.action;
+                    } else {
+                        let found = false;
+                        for (let i = 0; i < cachedBookList.length; i++) {
+                            if (cachedBookList[i]._regBodyNoSpace === targetNoSpace) {
+                                cachedBookList[i].type = btnInfo.action;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) { // 목록에 없던 책이면 가상으로 생성해서 꽂아 넣음
+                            const newBook = {
+                                title: pureCleanTitle, type: btnInfo.action,
+                                resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
+                                lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
+                                _regBodyOriginal: pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim(),
+                                _regBodyNoSpace: targetNoSpace
+                            };
+                            cachedBookList.push(newBook);
+                            exactMatchCache[targetNoSpace] = newBook;
+                        }
+                    }
+
+                    // 2. 캐시 지우고 화면 즉시 렌더링 (0.001초 소요)
+                    similarityCache[targetNoSpace] = undefined; 
+                    linkData.raw = null; 
+                    debouncedApplyStyles();
+
+                    // 3. 백그라운드에는 비동기로 "천천히 알아서 저장해라"라고 던져만 놓고 대기하지 않음
                     chrome.runtime.sendMessage({ 
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
-                        cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText,
+                        cleanTitle: pureCleanTitle,
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
                     }).catch(()=>{});
-                    
-                    linkData.raw = null; 
-                    setTimeout(debouncedApplyStyles, 100);
                 }
             } catch (err) {}
         };
@@ -990,23 +1021,20 @@ function applyStyleToDetailElement(el) {
         removeBadge(el); 
     }
 
-    // const br = document.createElement('br');
-    // el.insertBefore(br, el.lastChild);
     el.style.setProperty("line-height", "1");
-    el.style.setProperty("margin-bottom", "10px", "important"); // 💡 뱃지와 텍스트가 겹치는 경우를 방지하기 위해 패딩 추가
+    el.style.setProperty("margin-bottom", "10px", "important"); 
 
     const existingBadge = el.querySelector('.book-badge');
     let actions = el.querySelector('.bm-quick-actions'); 
-    let existingBr = el.querySelector('.bm-badge-br'); // 💡 기존에 삽입된 줄바꿈 태그 찾기
+    let existingBr = el.querySelector('.bm-badge-br'); 
     
-    // 1. 뱃지 HTML이 있을 때 (책 데이터가 매칭되었을 때)
     if (newBadgeHTML) {
         if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
             if (existingBadge) existingBadge.remove();
-            if (existingBr) existingBr.remove(); // 💡 업데이트를 위해 기존 br 삭제
+            if (existingBr) existingBr.remove(); 
             
             const br = document.createElement('br');
-            br.className = 'bm-badge-br'; // 💡 중복 생성을 막기 위해 클래스명 부여
+            br.className = 'bm-badge-br'; 
 
             const badge = document.createElement('span');
             badge.className = 'book-badge';
@@ -1016,44 +1044,39 @@ function applyStyleToDetailElement(el) {
             badge.dataset.html = newBadgeHTML; 
             
             if (actions) {
-                el.insertBefore(badge, actions); // 💡 그 다음 뱃지 삽입
-                el.insertBefore(br, actions);    // 💡 뱃지보다 먼저 br 태그 삽입
+                el.insertBefore(badge, actions); 
+                el.insertBefore(br, actions);    
             } else {
-                el.appendChild(badge);           // 💡 그 다음 뱃지 삽입
-                el.appendChild(br);              // 💡 뱃지보다 먼저 br 태그 삽입
+                el.appendChild(badge);           
+                el.appendChild(br);              
             }
         }
     } else if (existingBadge) {
         existingBadge.remove();
-        if (existingBr) existingBr.remove(); // 💡 뱃지가 사라지면 br도 함께 제거
+        if (existingBr) existingBr.remove(); 
     }
 
-    // 2. 퀵 액션 버튼(복사, 제외 등) 추가 및 갱신 로직
     if (!actions) {
         actions = createQuickActions(el._bmDetailData, !!book);
 
-        actions.dataset.hasBook = !!book; // 💡 무한루프 방지용 속성 추가
+        actions.dataset.hasBook = !!book; 
         
-        // 💡 뱃지가 없어서 br 태그가 안 만들어졌다면 액션 버튼 앞에 br 삽입
         if (!newBadgeHTML && !el.querySelector('.bm-badge-br')) {
             const br = document.createElement('br');
             br.className = 'bm-badge-br';
             el.appendChild(br);
         }
         
-        // 💡 액션 버튼의 왼쪽 마진을 없애고 위쪽 마진을 주어 정렬
         actions.style.marginLeft = "0";
         actions.style.marginTop = "5px";
         el.appendChild(actions);
     } else {
-        // const needsUpdate = (actions.children.length === 6 && !book) || (actions.children.length === 5 && !!book);
         const needsUpdate = actions.dataset.hasBook !== String(!!book);
         if (needsUpdate) {
             actions.remove();
             actions = createQuickActions(el._bmDetailData, !!book);
             actions.dataset.hasBook = !!book;
             
-            // 💡 갱신될 때 br 태그가 누락되었다면 다시 추가
             if (!el.querySelector('.bm-badge-br')) {
                 const br = document.createElement('br');
                 br.className = 'bm-badge-br';
@@ -1066,32 +1089,23 @@ function applyStyleToDetailElement(el) {
         }
     }
 
-    // 💡 [신규] 티카페 다운로드 영역 상단 끌어올리기 (Teleport)
     const hostname = window.location.hostname;
     if (hostname.includes('tcafe') || hostname.includes('tcafed')) {
         let downloadArea = null;
         
-        // 1. 실제 다운로드 링크를 기준으로 가장 가까운 부모 박스(.well)를 정확하게 역추적합니다.
-        // (단순히 .well만 찾으면 페이지 내의 다른 엉뚱한 박스가 잡힐 수 있기 때문입니다)
         const dlLink = document.querySelector('a[href*="download.php?bo_table="]');
         if (dlLink) {
             downloadArea = dlLink.closest('.well, #bo_v_file, .view-attach') || dlLink.parentElement;
         } else {
-            // 혹시라도 링크를 못 찾았을 경우 최후의 수단으로 .well 클래스 직접 탐색
             downloadArea = document.querySelector('.well');
         }
 
-        // 2. 영역을 찾았고 아직 옮기지 않았다면 뱃지(el) 밑으로 이동
         if (downloadArea && downloadArea.dataset.moved !== 'true') {
-            downloadArea.dataset.moved = 'true'; // 중복 이동 방지
-            
-            // 기존에 추가하셨던 .well CSS가 깨지지 않도록, 위치 정렬을 위한 최소한의 스타일만 줍니다.
+            downloadArea.dataset.moved = 'true'; 
             downloadArea.style.marginTop = '15px';
             downloadArea.style.display = 'block';
-            downloadArea.style.clear = 'both'; // 좌우 레이아웃(float) 꼬임 방지
+            downloadArea.style.clear = 'both'; 
             
-            // 💡 핵심: <h1> 같은 제목 태그(el) '안'에 넣으면 글씨가 거대해지거나 레이아웃이 깨지므로, 
-            // 제목 태그가 끝나는 '바로 다음(형제 노드)' 위치에 끼워 넣습니다.
             if (el.parentNode) {
                 el.parentNode.insertBefore(downloadArea, el.nextSibling);
             }
@@ -1187,7 +1201,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
         const fixStyle = document.createElement('style');
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
         
-        // 💡 [신규 추가] 전역 변수에 저장된 커스텀 CSS가 있다면 스타일 태그에 덧붙입니다.
         if (globalCustomCss) {
             styleContent += "\n" + globalCustomCss;
         }
@@ -1219,7 +1232,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
 
         const config = PRE_DEFINED_SITES.find(site => window.location.hostname.includes(site.url));
         
-        // 💡 조건문에 config.getHighResUrlAsync 를 추가합니다.
         if (config && config.thumbSelector && (config.getHighResUrl || config.getHighResUrlAsync)) {
             const hoverContainer = getOrCreateHoverContainer();
             const previewImg = document.getElementById('book-manager-hover-img');
@@ -1228,8 +1240,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
             let hoverTimer = null;
             let currentThumb = null;
 
-            // 💡 async 키워드 추가
-            // 💡 async 키워드가 있는 mouseover 이벤트 전체를 아래 코드로 교체합니다.
             document.addEventListener('mouseover', async (e) => {
                 const thumb = e.target.closest(config.thumbSelector);
                 if (!thumb || thumb.tagName !== 'IMG') return;
@@ -1238,7 +1248,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                 
                 currentThumb = thumb;
 
-                // 💡 [신규] 이미 고화질 썸네일로 교체된 항목이라면 추출(스피너/통신)을 생략하고 즉시 띄움
                 if (thumb.dataset.isHighResReplaced === "true") {
                     previewImg.src = thumb.src;
                     previewImg.style.filter = "none";
@@ -1247,7 +1256,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                     return;
                 }
 
-                // 아직 추출되지 않은 썸네일: 블러 처리 및 빙글빙글 도는 스피너 표시
                 previewImg.src = thumb.src;
                 previewImg.style.filter = "blur(8px)";
                 hoverContainer.style.display = 'block';
@@ -1255,7 +1263,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
 
                 if (hoverTimer) clearTimeout(hoverTimer);
 
-                // 상세페이지 파싱(비동기) 로직 호출
                 let highResSrc = "";
                 if (config.getHighResUrlAsync) {
                     highResSrc = await config.getHighResUrlAsync(thumb);
@@ -1263,7 +1270,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                     highResSrc = config.getHighResUrl(thumb.src);
                 }
 
-                // 이미지를 못 찾았거나, 로딩 중에 마우스가 다른 곳으로 이동한 경우 취소
                 if (!highResSrc || currentThumb !== thumb) {
                     if (currentThumb === thumb) hoverSpinner.style.display = 'none';
                     return;
@@ -1278,9 +1284,8 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                             previewImg.style.filter = "none"; 
                             hoverSpinner.style.display = 'none'; 
                             
-                            // 💡 [신규] 원본 썸네일 이미지의 src를 추출해 온 고화질 이미지로 영구 교체
                             thumb.src = highResSrc;
-                            thumb.dataset.isHighResReplaced = "true"; // 다음번 호버 시 재추출 방지 플래그
+                            thumb.dataset.isHighResReplaced = "true"; 
                         }
                     };
                     tempImg.onerror = () => {
@@ -1317,31 +1322,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
         }
     }
 });
-
-// chrome.storage.onChanged.addListener((changes, namespace) => {
-//     if (namespace === 'local') {
-//         // 이 화면에 안 보인다면 무거운 파싱 연산을 패스
-//         // if (document.hidden) {
-//         //     isDataStale = true; // "나중에 화면 켜지면 업데이트해야 함" 메모만 남김
-//         //     return;
-//         // }
-
-//         if (changes.showDownloadUI !== undefined) {
-//             isDownloadUIEnabled = changes.showDownloadUI.newValue;
-//             if (!isDownloadUIEnabled) {
-//                 let container = document.getElementById('book-manager-dl-overlay');
-//                 if (container) container.style.display = 'none';
-//             }
-//         }
-        
-//         if (changes.bookList || changes.allowedSites) {
-//             chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
-//                 initDataCache(data);
-//                 debouncedApplyStyles();
-//             });
-//         }
-//     }
-// });
 
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
@@ -1427,6 +1407,7 @@ try {
           });
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
+          // 💡 낙관적 UI 렌더링을 적용했으므로 DB를 다시 읽어오는 로직 생략
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
@@ -1469,19 +1450,29 @@ chrome.storage.local.get({ autoConfirm: true }, (data) => {
     }
 });
 
+// =========================================================================
+// 💡 [지연 렌더링] 수십 개의 백그라운드 탭 연산 폭주(렉) 완벽 방지 로직
+// =========================================================================
+let isTabStale = true; 
 
-// // 💡 유저가 다른 탭을 클릭해서 이 탭의 화면이 눈에 보이게 되는 순간 발동
-// document.addEventListener("visibilitychange", () => {
-//     // 화면이 켜졌고, 그동안 밀려있던 데이터 업데이트가 있다면?
-//     if (!document.hidden && isDataStale) {
-//         isDataStale = false; // 플래그 초기화
-        
-//         // 저장소에서 가장 최신의 전체 데이터를 다시 불러옵니다.
-//         chrome.storage.local.get(null, (data) => {
-//             // 데이터를 캐싱하고 화면을 다시 그리는 메인 함수를 이곳에서 1회만 호출합니다.
-//             initDataCache(data); 
-            
-//             // (필요하다면 화면의 뱃지 상태를 다시 그리는 함수를 추가로 호출)
-//         });
-//     }
-// });
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && isTabStale) {
+        isTabStale = false;
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+            initDataCache(data);
+            debouncedApplyStyles();
+        });
+    } else if (document.hidden) {
+        isTabStale = true; 
+    }
+});
+
+window.addEventListener("focus", () => {
+    if (!document.hidden && isTabStale) {
+        isTabStale = false;
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+            initDataCache(data);
+            debouncedApplyStyles();
+        });
+    }
+});
