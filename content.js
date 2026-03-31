@@ -29,7 +29,7 @@ const PRE_DEFINED_SITES = [
                 }
             }
         } catch (error) {
-            console.error("고화질 썸네일 추출 실패:", error);
+            console.log("고화질 썸네일 추출 실패:", error);
         }
         return "";
     },
@@ -528,7 +528,8 @@ function injectDirectDownloadButtons(allowedDLs) {
 }
 
 function removeBadge(link) {
-    if (link.style.textDecoration || link.querySelector('.book-badge')) {
+    // 💡 :scope > 를 추가하여 엄한 자식 요소의 뱃지를 건드리지 않게 방어
+    if (link.style.textDecoration || link.querySelector(':scope > .book-badge')) {
         link.style.removeProperty("text-decoration");
         link.style.removeProperty("color");
         link.style.removeProperty("opacity");
@@ -537,7 +538,7 @@ function removeBadge(link) {
         link.style.removeProperty("padding");
         link.style.removeProperty("border-radius");
         link.removeAttribute("title");
-        const badge = link.querySelector('.book-badge');
+        const badge = link.querySelector(':scope > .book-badge');
         if (badge) badge.remove();
     }
 }
@@ -660,6 +661,7 @@ function createQuickActions(linkData, hasBook) {
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
                     }).catch(()=>{});
+                    
                 }
             } catch (err) {}
         };
@@ -669,6 +671,9 @@ function createQuickActions(linkData, hasBook) {
 }
 
 function applyStyleToSingleLink(link) {
+    // 🚨 핵심 방어: 이미 상세페이지 로직이 처리한 요소면 일반 링크 함수는 쳐다보지도 않고 도망감 (무한루프 차단)
+    if (link.dataset.bmIsDetail === "true") return; 
+
     const currentRawText = link.textContent || "";
     
     if (!link._bmData || link._bmData.raw !== currentRawText) {
@@ -786,7 +791,8 @@ function applyStyleToSingleLink(link) {
         removeBadge(link);
     }
 
-    const existingBadge = link.querySelector('.book-badge');
+    // 💡 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
+    const existingBadge = link.querySelector(':scope > .book-badge');
     if (newBadgeHTML) {
         if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
             if (existingBadge) existingBadge.remove();
@@ -803,6 +809,9 @@ function applyStyleToSingleLink(link) {
 }
 
 function applyStyleToDetailElement(el) {
+    // 🚨 핵심 방어 마커 부착: 내가 상세페이지 로직으로 찜했으니 단일 링크 로직은 건들지 마라 선언
+    el.dataset.bmIsDetail = "true"; 
+    
     const currentRawText = el.textContent || "";
     
     if (!el._bmDetailData || el._bmDetailData.raw !== currentRawText) {
@@ -832,9 +841,9 @@ function applyStyleToDetailElement(el) {
 
     if (el._bmDetailData.skip) {
         removeBadge(el);
-        const act = el.querySelector('.bm-quick-actions');
+        const act = el.querySelector(':scope > .bm-quick-actions'); // 직계만 탐색
         if (act) act.remove(); 
-        const bbr = el.querySelector('.bm-badge-br');
+        const bbr = el.querySelector(':scope > .bm-badge-br'); // 직계만 탐색
         if (bbr) bbr.remove();
         return;
     }
@@ -930,37 +939,41 @@ function applyStyleToDetailElement(el) {
         removeBadge(el); 
     }
 
-    // 💡 [핵심 버그 수정] DOM Exception 방지 및 깔끔한 줄바꿈 보장 레이아웃
-    let existingBadge = el.querySelector('.book-badge');
-    let existingBr = el.querySelector('.bm-badge-br');
-    let existingActions = el.querySelector('.bm-quick-actions');
+    // 💡 직계 자손(:scope >)만 탐색하도록 교체! (엄한 자식 뱃지를 지우는 대참사 방지)
+    let existingBadge = el.querySelector(':scope > .book-badge');
+    let existingBr = el.querySelector(':scope > .bm-badge-br');
+    let existingActions = el.querySelector(':scope > .bm-quick-actions');
 
-    // 충돌과 꼬임을 막기 위해 완전히 떼어냅니다.
-    if (existingBadge) existingBadge.remove();
-    if (existingBr) existingBr.remove();
-    if (existingActions) existingActions.remove();
+    const needsBadgeUpdate = newBadgeHTML && (!existingBadge || existingBadge.dataset.html !== newBadgeHTML);
+    const needsBadgeRemoval = !newBadgeHTML && existingBadge;
+    const needsActionsUpdate = !existingActions || existingActions.dataset.hasBook !== String(!!book);
+    const needsBr = !existingBr;
 
-    // 상태값이 있을 경우 뱃지 부착
-    if (newBadgeHTML) {
-        const badge = document.createElement('span');
-        badge.className = 'book-badge';
-        badge.style.cssText = badgeStyle;
-        badge.innerHTML = newBadgeHTML;
-        badge.dataset.html = newBadgeHTML;
-        el.appendChild(badge);
+    // 변경 사항이 하나라도 있을 때만 기존 요소를 뜯어내고 다시 그립니다
+    if (needsBadgeUpdate || needsBadgeRemoval || needsActionsUpdate || needsBr) {
+        if (existingBadge) existingBadge.remove();
+        if (existingBr) existingBr.remove();
+        if (existingActions) existingActions.remove();
+
+        if (newBadgeHTML) {
+            const badge = document.createElement('span');
+            badge.className = 'book-badge';
+            badge.style.cssText = badgeStyle;
+            badge.innerHTML = newBadgeHTML;
+            badge.dataset.html = newBadgeHTML;
+            el.appendChild(badge);
+        }
+
+        const br = document.createElement('br');
+        br.className = 'bm-badge-br';
+        el.appendChild(br);
+
+        const actions = createQuickActions(el._bmDetailData, !!book);
+        actions.dataset.hasBook = !!book;
+        actions.style.marginLeft = "0";
+        actions.style.marginTop = "5px";
+        el.appendChild(actions);
     }
-
-    // 줄바꿈 보장
-    const br = document.createElement('br');
-    br.className = 'bm-badge-br';
-    el.appendChild(br);
-
-    // 액션 버튼 재생성 및 부착
-    const actions = createQuickActions(el._bmDetailData, !!book);
-    actions.dataset.hasBook = !!book;
-    actions.style.marginLeft = "0";
-    actions.style.marginTop = "5px";
-    el.appendChild(actions);
 
     const hostname = window.location.hostname;
     if (hostname.includes('tcafe') || hostname.includes('tcafed')) {
