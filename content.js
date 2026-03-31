@@ -1,3 +1,5 @@
+// let isDataStale = false;
+
 // 👇 [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
 const PRE_DEFINED_SITES = [
 { 
@@ -1316,24 +1318,30 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
     }
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local') {
-        if (changes.showDownloadUI !== undefined) {
-            isDownloadUIEnabled = changes.showDownloadUI.newValue;
-            if (!isDownloadUIEnabled) {
-                let container = document.getElementById('book-manager-dl-overlay');
-                if (container) container.style.display = 'none';
-            }
-        }
+// chrome.storage.onChanged.addListener((changes, namespace) => {
+//     if (namespace === 'local') {
+//         // 이 화면에 안 보인다면 무거운 파싱 연산을 패스
+//         // if (document.hidden) {
+//         //     isDataStale = true; // "나중에 화면 켜지면 업데이트해야 함" 메모만 남김
+//         //     return;
+//         // }
+
+//         if (changes.showDownloadUI !== undefined) {
+//             isDownloadUIEnabled = changes.showDownloadUI.newValue;
+//             if (!isDownloadUIEnabled) {
+//                 let container = document.getElementById('book-manager-dl-overlay');
+//                 if (container) container.style.display = 'none';
+//             }
+//         }
         
-        if (changes.bookList || changes.allowedSites) {
-            chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
-                initDataCache(data);
-                debouncedApplyStyles();
-            });
-        }
-    }
-});
+//         if (changes.bookList || changes.allowedSites) {
+//             chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+//                 initDataCache(data);
+//                 debouncedApplyStyles();
+//             });
+//         }
+//     }
+// });
 
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
@@ -1460,3 +1468,20 @@ chrome.storage.local.get({ autoConfirm: true }, (data) => {
         }
     }
 });
+
+
+// // 💡 유저가 다른 탭을 클릭해서 이 탭의 화면이 눈에 보이게 되는 순간 발동
+// document.addEventListener("visibilitychange", () => {
+//     // 화면이 켜졌고, 그동안 밀려있던 데이터 업데이트가 있다면?
+//     if (!document.hidden && isDataStale) {
+//         isDataStale = false; // 플래그 초기화
+        
+//         // 저장소에서 가장 최신의 전체 데이터를 다시 불러옵니다.
+//         chrome.storage.local.get(null, (data) => {
+//             // 데이터를 캐싱하고 화면을 다시 그리는 메인 함수를 이곳에서 1회만 호출합니다.
+//             initDataCache(data); 
+            
+//             // (필요하다면 화면의 뱃지 상태를 다시 그리는 함수를 추가로 호출)
+//         });
+//     }
+// });

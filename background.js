@@ -1044,33 +1044,63 @@ chrome.downloads.onChanged.addListener((delta) => {
     }
 });
 
-// 💡 [신규] 브라우저가 파일 이름을 결정하기 직전에 가로채서 폴더 경로를 씌워줍니다.
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-    chrome.storage.local.get({ autoFolder: true }, (data) => {
-        let title = downloadTitlesMap[item.id];
-        
-        // 💡 ID 매핑이 없다면 Referrer(접속 출처) 매핑에서 찾기 (Transfer.it 및 Gofile 매크로 처리용)
-        if (!title && item.referrer) {
-            for (let mappedUrl in urlToTitleMap) {
-                if (item.referrer.includes(mappedUrl) || mappedUrl.includes(item.referrer)) {
-                    title = urlToTitleMap[mappedUrl];
-                    break;
+// ==============================================================================
+// 🚨 VDH 충돌 완벽 차단: 스마트 스위치 (Smart Switch) 로직
+// 평상시에는 리스너를 지워두고, 우리 도서를 다운받을 때만 찰나의 순간에 켭니다.
+// ==============================================================================
+let expectedDownloadTitle = null;
+let hookFallbackTimer = null;
+
+const dynamicFolderListener = (item, suggest) => {
+    let title = downloadTitlesMap[item.id] || expectedDownloadTitle;
+    if (title) {
+        chrome.storage.local.get({ autoFolder: true }, (data) => {
+            if (data.autoFolder !== false) {
+                let safeTitle = title.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+                if (safeTitle) {
+                    suggest({ filename: safeTitle + "/" + item.filename, conflictAction: "uniquify" });
+                    return;
                 }
             }
-        }
+            suggest();
+        });
+        return true;
+    }
+    return false; 
+};
 
-        if (data.autoFolder !== false && title) {
-            let safeTitle = title.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
-            if (safeTitle) {
-                suggest({ filename: safeTitle + "/" + item.filename, conflictAction: "uniquify" });
-                return;
-            }
+// 1. 사용자가 도서 다운로드를 지시(DOWNLOAD_*)할 때만 스위치를 ON
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.action && message.action.startsWith("DOWNLOAD_") && message.title) {
+        expectedDownloadTitle = message.title;
+        
+        // 브라우저에 리스너(훅) 물리적 장착
+        if (!chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
+            chrome.downloads.onDeterminingFilename.addListener(dynamicFolderListener);
         }
-        suggest(); 
-    });
-    return true; 
+        
+        // 혹시라도 네트워크 오류로 다운로드가 꼬일 경우를 대비한 안전장치 (3분 뒤 무조건 OFF)
+        if (hookFallbackTimer) clearTimeout(hookFallbackTimer);
+        hookFallbackTimer = setTimeout(() => {
+            if (chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
+                chrome.downloads.onDeterminingFilename.removeListener(dynamicFolderListener);
+            }
+        }, 3 * 60 * 1000);
+    }
 });
 
+// 2. 다운로드가 끝나면 즉시 스위치를 물리적으로 OFF (VDH에게 통제권 100% 반환)
+chrome.downloads.onChanged.addListener((delta) => {
+    if (delta.state && (delta.state.current === 'complete' || delta.state.current === 'interrupted')) {
+        if (Object.keys(downloadTitlesMap).length === 0) {
+            // 진행 중인 우리 다운로드가 없다면 브라우저에서 리스너 완전 철거
+            if (chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
+                chrome.downloads.onDeterminingFilename.removeListener(dynamicFolderListener);
+                expectedDownloadTitle = null;
+            }
+        }
+    }
+});
 
 /**
  * Resolves a transfer.it public link to the final MEGA download URL.

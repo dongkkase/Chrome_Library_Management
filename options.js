@@ -228,9 +228,20 @@ document.getElementById('batchUpdateBtn').onclick = () => {
     });
 };
 
+// ============================================================================
+// 💡 [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
+// ============================================================================
 document.getElementById('exportBtn').onclick = () => {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-        const blob = new Blob([JSON.stringify(data.bookList, null, 2)], { type: 'application/json' });
+    // 저장소에서 3가지 데이터를 모두 불러옵니다.
+    chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [] }, (data) => {
+        // 객체(Object) 형태로 데이터를 묶어서 백업
+        const exportData = {
+            bookList: data.bookList,
+            allowedSites: data.allowedSites,
+            filterWords: data.filterWords
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -249,6 +260,9 @@ document.getElementById('exportBtn').onclick = () => {
 
 document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
 
+// ============================================================================
+// 💡 [수정됨] 복구 (불러오기) 로직: 신규 포맷 및 구버전 포맷(하위 호환) 완벽 지원
+// ============================================================================
 document.getElementById('fileInput').onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -262,13 +276,41 @@ document.getElementById('fileInput').onchange = (e) => {
     reader.onload = (event) => {
         try {
             const importedData = JSON.parse(event.target.result);
-            if (Array.isArray(importedData)) {
-                saveWithUndo(importedData, '✅ 데이터 복구가 완료되었습니다.');
-            } else {
-                alert('❌ 올바른 JSON 형식이 아닙니다.');
+            
+            // 💡 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
+            if (importedData && typeof importedData === 'object' && !Array.isArray(importedData)) {
+                let hasSettings = false;
+                
+                // 사이트 설정이 존재하면 복구 및 화면 갱신
+                if (Array.isArray(importedData.allowedSites)) {
+                    chrome.storage.local.set({ allowedSites: importedData.allowedSites }, renderSites);
+                    hasSettings = true;
+                }
+                
+                // 필터(금지어) 설정이 존재하면 복구 및 화면 갱신
+                if (Array.isArray(importedData.filterWords)) {
+                    chrome.storage.local.set({ filterWords: importedData.filterWords }, renderFilters);
+                    hasSettings = true;
+                }
+
+                // 도서 목록이 존재하면 복구 (기존 saveWithUndo 재활용하여 취소 기능 유지)
+                if (Array.isArray(importedData.bookList)) {
+                    saveWithUndo(importedData.bookList, '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.');
+                } else if (hasSettings) {
+                    alert('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
+                } else {
+                    alert('❌ 유효한 백업 데이터가 없습니다.');
+                }
+            } 
+            // 💡 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
+            else if (Array.isArray(importedData)) {
+                saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
+            } 
+            else {
+                alert('❌ 올바른 백업 파일 형식이 아닙니다.');
             }
         } catch (err) {
-            alert('❌ 파일을 읽는 중 오류가 발생했습니다.');
+            alert('❌ 파일을 읽는 중 오류가 발생했습니다. (JSON 파싱 에러)');
         }
         e.target.value = '';
     };
