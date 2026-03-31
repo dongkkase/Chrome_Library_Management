@@ -8,20 +8,14 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     
-    // 💡 기존 getHighResUrl 대신 아래의 getHighResUrlAsync 함수로 교체합니다.
     getHighResUrlAsync: async (thumb) => {
         const link = thumb.closest('a');
         if (!link || !link.href) return "";
-
-        // 이미 가져온 주소가 있다면 캐시된 주소 반환 (네트워크 중복 요청 방지)
         if (thumb.dataset.cachedHighRes) return thumb.dataset.cachedHighRes;
 
         try {
-            // 백그라운드에서 해당 게시글 페이지를 몰래 불러옵니다.
             const res = await fetch(link.href);
             const html = await res.text();
-            
-            // HTML을 분석하여 본문(.view-content)의 첫 번째 이미지를 찾습니다.
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             const viewContent = doc.querySelector('.view-content');
@@ -29,9 +23,8 @@ const PRE_DEFINED_SITES = [
             if (viewContent) {
                 const firstImg = viewContent.querySelector('img');
                 if (firstImg) {
-                    // 상대 경로일 수 있으므로 절대 경로로 변환
                     const absoluteUrl = new URL(firstImg.getAttribute('src'), link.href).href;
-                    thumb.dataset.cachedHighRes = absoluteUrl; // 캐시에 저장
+                    thumb.dataset.cachedHighRes = absoluteUrl; 
                     return absoluteUrl;
                 }
             }
@@ -40,16 +33,10 @@ const PRE_DEFINED_SITES = [
         }
         return "";
     },
-    // 👇 이전 질문에서 추가하셨던 customCss는 그대로 유지하세요!
     customCss: `
         .well { 
-            
-            
-            
             border-radius: 10px !important; 
             padding: 20px !important; 
-            
-            
             width: 100% !important;
             max-width: 1200px !important;
             background: rgba(255, 255, 255, 0.95) !important;
@@ -90,7 +77,7 @@ let lastRightClickedLink = null;
 let lastRightClickedElement = null; 
 
 let isDownloadUIEnabled = true; 
-let titleProcessingCache = new Map(); // 💡 [신규] 6만건 정규식 재연산 방지를 위한 캐시 맵
+let titleProcessingCache = new Map(); 
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
@@ -124,24 +111,20 @@ function initDataCache(data) {
     exactMatchCache = {};
     similarityCache = {}; 
 
-    // 💡 [핵심 최적화] 정규식 연산 결과를 캐시하여 화면 멈춤(Freeze) 현상 원천 차단
     cachedBookList = (Array.isArray(data.bookList) ? data.bookList : []).map(b => {
         let processedOriginal, processedNoSpace;
         
         if (titleProcessingCache.has(b.title)) {
-            // 이미 계산해둔 제목이라면 정규식을 돌리지 않고 캐시에서 즉시 반환 (0ms 소요)
             const cached = titleProcessingCache.get(b.title);
             processedOriginal = cached.original;
             processedNoSpace = cached.nospace;
         } else {
-            // 처음 보는 제목만 무거운 정규식 연산 수행 후 캐시에 저장
             processedOriginal = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
             processedNoSpace = processedOriginal.replace(/\s+/g, ''); 
             titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace });
         }
 
         const enhanced = { ...b, _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace };
-        
         if(!exactMatchCache[processedNoSpace]) exactMatchCache[processedNoSpace] = enhanced;
         return enhanced;
     });
@@ -196,7 +179,6 @@ function calculateLevenshtein(s, t) {
   if (s === t) return 100;
   const n = s.length, m = t.length;
   if (n === 0 || m === 0) return 0;
-  
   if (n > 250 || m > 250) return 0; 
   if (Math.max(n, m) > Math.min(n, m) * 2.5) return 0;
 
@@ -218,9 +200,7 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
   const siteBody = siteBodyOriginal.replace(/\s+/g, '');
 
   if (regBody === siteBody) return 100;
-
   if (siteBody.length <= 2) return 0; 
-  
   if (regBody.length <= 2) {
       const sim = calculateLevenshtein(regBody, siteBody);
       return sim >= 90 ? sim : 0; 
@@ -247,11 +227,7 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
     if (lengthDiff <= 4) return 85;
 
     const isPrefixOrSuffix = siteBody.startsWith(regBody) || siteBody.endsWith(regBody) || regBody.startsWith(siteBody) || regBody.endsWith(siteBody);
-    
-    if (regBody.length >= 3 && isPrefixOrSuffix && lengthDiff <= 10) {
-        return 85; 
-    }
-
+    if (regBody.length >= 3 && isPrefixOrSuffix && lengthDiff <= 10) return 85; 
     return 75; 
   }
 
@@ -271,7 +247,6 @@ function showInfoToast(msg, isError = false) {
   const bgColor = isError ? '#dc3545' : '#17a2b8';
   
   toast.style.cssText = "background: " + bgColor + "; color: white; padding: 12px 35px 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(20px); transition: all 0.3s ease; white-space: nowrap; pointer-events: auto; position: relative;";
-  
   toast.innerHTML = msg;
 
   const closeBtn = document.createElement('span');
@@ -285,21 +260,16 @@ function showInfoToast(msg, isError = false) {
       setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
   };
   toast.appendChild(closeBtn);
-
   container.appendChild(toast);
 
   void toast.offsetWidth;
-  
   toast.style.opacity = '1';
   toast.style.transform = 'translateX(0)';
   
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(20px)';
-    
-    setTimeout(() => {
-        if (toast.parentNode) toast.remove();
-    }, 350); 
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350); 
   }, 7000);
 }
 
@@ -340,33 +310,24 @@ function showToast(book, isDelete = false) {
   container.appendChild(toast);
 
   void toast.offsetWidth;
-
   toast.style.opacity = '1';
   toast.style.transform = 'translateY(0)';
   
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(-10px)';
-    
-    setTimeout(() => {
-        if(toast.parentNode) toast.remove();
-    }, 350);
+    setTimeout(() => { if(toast.parentNode) toast.remove(); }, 350);
   }, 5000);
 }
 
-// 추출된 텍스트를 바탕으로 현재 도서의 상태(미완, 완결 등)를 알아내는 함수
 function getBookTypeForTitle(titleStr) {
     if (!isDataLoaded || !titleStr) return null;
     
     let siteBodyOriginal = titleStr.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
     let siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
     
-    if (exactMatchCache[siteBodyNoSpace]) {
-        return exactMatchCache[siteBodyNoSpace].type;
-    }
-    if (similarityCache[siteBodyNoSpace] !== undefined) {
-        return similarityCache[siteBodyNoSpace].book ? similarityCache[siteBodyNoSpace].book.type : null;
-    }
+    if (exactMatchCache[siteBodyNoSpace]) return exactMatchCache[siteBodyNoSpace].type;
+    if (similarityCache[siteBodyNoSpace] !== undefined) return similarityCache[siteBodyNoSpace].book ? similarityCache[siteBodyNoSpace].book.type : null;
     
     let book = null;
     let maxScore = 0;
@@ -391,7 +352,7 @@ function injectDirectDownloadButtons(allowedDLs) {
     if (allowedDLs.includes('giga')) regexParts.push('gigafile\\.nu|xgf\\.nu');
     if (allowedDLs.includes('gofile')) regexParts.push('gofile\\.io');
     if (allowedDLs.includes('hk')) regexParts.push('hellkdis\\.net\\/s\\/|hellkaiv\\.net\\/s\\/');
-    if (allowedDLs.includes('transfer')) regexParts.push('transfer\\.it\\/s\\/|transfer\\.it\\/t\\/'); // 💡 Transfer.it 정규식 추가
+    if (allowedDLs.includes('transfer')) regexParts.push('transfer\\.it\\/s\\/|transfer\\.it\\/t\\/'); 
 
     if (regexParts.length === 0) return;
     
@@ -433,7 +394,6 @@ function injectDirectDownloadButtons(allowedDLs) {
             element.parentElement ? element.parentElement.parentElement : null,
             element.closest('.bsx-body, .list-board, .bo_v_atc, td, tr, div, section')
         ];
-        
         for (let t of targets) {
             if (!t) continue;
             let text = t.textContent || "";
@@ -457,18 +417,14 @@ function injectDirectDownloadButtons(allowedDLs) {
         let btnText = "⚡ 바로다운로드";
         let bgColor = "#17a2b8";
         
-        if (targetType === 'HELLKDIS') {
-            bgColor = "#6f42c1"; 
-        } else if (targetType === 'TRANSFERIT') {
-            bgColor = "#dc3545"; // 💡 Transfer.it 전용 색상 (빨간색 계열)
-        }
+        if (targetType === 'HELLKDIS') bgColor = "#6f42c1"; 
+        else if (targetType === 'TRANSFERIT') bgColor = "#dc3545"; 
 
         autoBtn.innerHTML = btnText;
         autoBtn.style.cssText = `display:inline-block; padding:3px 10px; margin-left:5px; background-color:${bgColor}; color:white; border-radius:3px; text-decoration:none; font-size:12px; font-weight:bold; cursor:pointer; vertical-align:middle; transition: background 0.2s;`;
         
         autoBtn.onclick = (e) => {
             e.preventDefault();
-            
             if (targetType === 'HELLKDIS' && !pw) {
                 showInfoToast("⚠️ 비밀번호 자동 추출 실패. 페이지가 열리면 수동으로 입력해주세요.", true);
                 try { chrome.runtime.sendMessage({ action: "OPEN_HELLKDIS_WITH_PW", url: url, password: "" }).catch(()=>{}); } 
@@ -486,11 +442,7 @@ function injectDirectDownloadButtons(allowedDLs) {
             try {
                 let finalTitle = bookTitle;
                 let bType = getBookTypeForTitle(bookTitle);
-                
-                if (bType === 'incomplete') {
-                    finalTitle = "(미완)" + bookTitle;
-                }
-
+                if (bType === 'incomplete') finalTitle = "(미완)" + bookTitle;
                 chrome.runtime.sendMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle }).catch(()=>{});
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
@@ -502,7 +454,6 @@ function injectDirectDownloadButtons(allowedDLs) {
                 autoBtn.style.pointerEvents = "auto";
             }, 50000); 
         };
-        
         insertAfterElement.insertAdjacentElement('afterend', autoBtn);
     }
 
@@ -512,9 +463,8 @@ function injectDirectDownloadButtons(allowedDLs) {
         if (link.children.length > 2 || link.querySelector('img')) return;
 
         let url = "";
-        if (link.href && targetRegex.test(link.href)) {
-            url = link.href;
-        } else {
+        if (link.href && targetRegex.test(link.href)) url = link.href;
+        else {
             let textMatch = (link.textContent || "").match(targetRegex);
             if (textMatch) url = textMatch[1];
         }
@@ -522,11 +472,10 @@ function injectDirectDownloadButtons(allowedDLs) {
         if (url) {
             let targetType = "";
             let isHk = url.includes('hellkdis.net/s/') || url.includes('hellkaiv.net/s/');
-            
             if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
-            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; // 💡 판별 추가
+            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; 
 
             if(targetType){
                 let pw = extractPassword(link);
@@ -548,7 +497,6 @@ function injectDirectDownloadButtons(allowedDLs) {
 
     specialBtns.forEach(btn => {
         if (btn.nextElementSibling && btn.nextElementSibling.classList.contains('auto-dl-btn')) return;
-
         let container = btn.closest('.bsx-body, tr, li, td, p, div') || btn.parentElement;
         if (!container) return;
 
@@ -565,11 +513,10 @@ function injectDirectDownloadButtons(allowedDLs) {
         if (url) {
             let targetType = "";
             let isHk = url.includes('hellkdis.net/s/') || url.includes('hellkaiv.net/s/');
-            
             if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
-            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; // 💡 판별 추가
+            else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT";
 
             if(targetType){
                 let pw = extractPassword(btn);
@@ -590,7 +537,6 @@ function removeBadge(link) {
         link.style.removeProperty("padding");
         link.style.removeProperty("border-radius");
         link.removeAttribute("title");
-        
         const badge = link.querySelector('.book-badge');
         if (badge) badge.remove();
     }
@@ -619,7 +565,6 @@ function createQuickActions(linkData, hasBook) {
         const btn = document.createElement('button');
         btn.textContent = btnInfo.label;
         btn.style.cssText = btnStyle + `background-color: ${btnInfo.color};`;
-        
         btn.onmouseover = () => btn.style.transform = 'translateY(-1px)';
         btn.onmouseout = () => btn.style.transform = 'translateY(0)';
         
@@ -630,7 +575,6 @@ function createQuickActions(linkData, hasBook) {
             try {
                 if (btnInfo.action === 'copy') {
                     const titleToCopy = linkData.pureTitle || (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText);
-                    
                     navigator.clipboard.writeText(titleToCopy).then(() => {
                         const originalText = btn.textContent;
                         const originalColor = btn.style.backgroundColor;
@@ -645,7 +589,6 @@ function createQuickActions(linkData, hasBook) {
                 }
 
                 if (btnInfo.action === 'search' || btnInfo.action === 'ridi_preview') {
-                    // 리디 검색의 경우 백그라운드 통신에 약간의 시간이 소요되므로 로딩 이모지를 띄워줍니다.
                     if (btnInfo.action === 'ridi_preview') {
                         const originalText = btn.textContent;
                         btn.textContent = '⏳';
@@ -655,49 +598,61 @@ function createQuickActions(linkData, hasBook) {
                             btn.style.pointerEvents = 'auto';
                         }, 2500);
                     }
-
                     chrome.runtime.sendMessage({ 
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
                     }).catch(()=>{});
                 } else {
-                    // 💡 [핵심 최적화: 낙관적 UI 업데이트 (Optimistic UI)]
-                    // DB 저장을 기다리지 않고, 현재 탭의 메모리를 직접 조작해 0.001초 만에 화면부터 바꿉니다!
+                    // 💡 [낙관적 UI] 삭제 포함 즉시 캐시 갱신
                     const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
                     const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
                     
-                    // 1. 현재 탭의 캐시 메모리 즉시 수정
-                    if (exactMatchCache[targetNoSpace]) {
-                        exactMatchCache[targetNoSpace].type = btnInfo.action;
+                    if (btnInfo.action === 'delete') {
+                        if (exactMatchCache[targetNoSpace]) delete exactMatchCache[targetNoSpace];
+                        cachedBookList = cachedBookList.filter(b => b._regBodyNoSpace !== targetNoSpace);
                     } else {
-                        let found = false;
-                        for (let i = 0; i < cachedBookList.length; i++) {
-                            if (cachedBookList[i]._regBodyNoSpace === targetNoSpace) {
-                                cachedBookList[i].type = btnInfo.action;
-                                found = true;
-                                break;
+                        if (exactMatchCache[targetNoSpace]) {
+                            exactMatchCache[targetNoSpace].type = btnInfo.action;
+                        } else {
+                            let found = false;
+                            for (let i = 0; i < cachedBookList.length; i++) {
+                                if (cachedBookList[i]._regBodyNoSpace === targetNoSpace) {
+                                    cachedBookList[i].type = btnInfo.action;
+                                    found = true;
+                                    break;
+                                }
                             }
-                        }
-                        if (!found) { // 목록에 없던 책이면 가상으로 생성해서 꽂아 넣음
-                            const newBook = {
-                                title: pureCleanTitle, type: btnInfo.action,
-                                resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
-                                lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
-                                _regBodyOriginal: pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim(),
-                                _regBodyNoSpace: targetNoSpace
-                            };
-                            cachedBookList.push(newBook);
-                            exactMatchCache[targetNoSpace] = newBook;
+                            if (!found) { 
+                                const newBook = {
+                                    title: pureCleanTitle, type: btnInfo.action,
+                                    resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
+                                    lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
+                                    _regBodyOriginal: pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim(),
+                                    _regBodyNoSpace: targetNoSpace
+                                };
+                                cachedBookList.push(newBook);
+                                exactMatchCache[targetNoSpace] = newBook;
+                            }
                         }
                     }
 
-                    // 2. 캐시 지우고 화면 즉시 렌더링 (0.001초 소요)
                     similarityCache[targetNoSpace] = undefined; 
-                    linkData.raw = null; 
+                    
+                    document.querySelectorAll(globalTargetSelector).forEach(el => {
+                        if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
+                        else if (el.querySelectorAll) {
+                            el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
+                        }
+                    });
+                    if (globalDetailSelector) {
+                        document.querySelectorAll(globalDetailSelector).forEach(el => {
+                            if (el._bmDetailData) el._bmDetailData.raw = null;
+                        });
+                    }
+                    
                     debouncedApplyStyles();
 
-                    // 3. 백그라운드에는 비동기로 "천천히 알아서 저장해라"라고 던져만 놓고 대기하지 않음
                     chrome.runtime.sendMessage({ 
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
@@ -710,7 +665,6 @@ function createQuickActions(linkData, hasBook) {
         };
         container.appendChild(btn);
     });
-
     return container;
 }
 
@@ -727,7 +681,7 @@ function applyStyleToSingleLink(link) {
             const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
             const siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
             
-            const siteResMatch = originalText.match(/(\d{3,4})\s*px/i);
+            const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
@@ -748,7 +702,6 @@ function applyStyleToSingleLink(link) {
     }
 
     const { siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol } = link._bmData;
-    
     let book = null;
     let maxScore = 0;
     
@@ -761,13 +714,11 @@ function applyStyleToSingleLink(link) {
     } else {
         for (let i = 0; i < cachedBookList.length; i++) {
             const b = cachedBookList[i];
-            
             if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
             
             const score = getSimilarity(b._regBodyOriginal, siteBodyOriginal);
             if (score >= 85 && score > maxScore) { 
-                maxScore = score; 
-                book = b; 
+                maxScore = score; book = b; 
                 if (score === 100) break; 
             }
         }
@@ -781,7 +732,6 @@ function applyStyleToSingleLink(link) {
         const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
         const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
         const displayScore = Math.round(maxScore);
-        
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
 
@@ -799,81 +749,36 @@ function applyStyleToSingleLink(link) {
           link.style.setProperty("font-weight", "normal", "important");
           link.style.setProperty("opacity", "0.5", "important");
           link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
-          
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span>' + 
-                         '<span style="color:#ccc;"> | </span>' + 
-                         '<span style="color:#999;">' + volText + '</span>' + 
-                         '<span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
-          
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span><span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
           badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
-
         } else if (book.type === "incomplete") {
-          const isResUp = siteRes > regRes && regRes > 0;
-          const isVolUp = siteVol > regVol && regVol > 0;
-          const hasUpgrade = isResUp || isVolUp;
-
+          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
           link.style.setProperty("text-decoration", "none", "important");
           link.style.setProperty("color", "#d9480f", "important"); 
           link.style.setProperty("font-weight", "800", "important");
           link.style.setProperty("opacity", "1", "important");
           link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
-          
-          let resHtml = isResUp 
-              ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px; vertical-align:middle; line-height:1;">UP</b></span>'
-              : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-              
-          let volHtml = isVolUp 
-              ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px; vertical-align:middle; line-height:1;">UP</b></span>'
-              : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          
-          newBadgeHTML = resHtml + 
-                         '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + 
-                         volHtml + 
-                         '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
-          
+          let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
+          let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
-
         } else if (book.type === "complete") {
-          const isResUp = siteRes > regRes && regRes > 0;
-          const isVolUp = siteVol > regVol && regVol > 0;
-          const hasUpgrade = isResUp || isVolUp;
-
+          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
           link.style.setProperty("text-decoration", "none", "important");
           link.style.setProperty("opacity", "1", "important");
           link.setAttribute("title", "[완결] " + book.title + " (" + displayScore + "%)");
-          
           if (hasUpgrade) {
               link.style.setProperty("color", "#d9480f", "important"); 
               link.style.setProperty("font-weight", "800", "important");
-              
-              let resHtml = isResUp 
-                  ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px; vertical-align:middle; line-height:1;">UP</b></span>'
-                  : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-                  
-              let volHtml = isVolUp 
-                  ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px; vertical-align:middle; line-height:1;">UP</b></span>'
-                  : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              
-              newBadgeHTML = resHtml + 
-                             '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + 
-                             volHtml + 
-                             '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
-              
+              let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
+              let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
-                           
-} else {
+          } else {
               link.style.setProperty("color", "#0056b3", "important"); 
               link.style.setProperty("font-weight", "600", "important");
-              
-              let resHtml = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span>';
-              let volHtml = '<span style="color:#007bff; font-weight:normal;">' + volText + '</span>';
-              
-              newBadgeHTML = resHtml + 
-                             '<span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span>' + 
-                             volHtml + 
-                             '<span style="color:#868e96;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
-              
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span><span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
@@ -910,7 +815,7 @@ function applyStyleToDetailElement(el) {
             const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
             const siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
             
-            const siteResMatch = originalText.match(/(\d{3,4})\s*px/i);
+            const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
@@ -929,6 +834,8 @@ function applyStyleToDetailElement(el) {
         removeBadge(el);
         const act = el.querySelector('.bm-quick-actions');
         if (act) act.remove(); 
+        const bbr = el.querySelector('.bm-badge-br');
+        if (bbr) bbr.remove();
         return;
     }
 
@@ -937,6 +844,8 @@ function applyStyleToDetailElement(el) {
     el.style.setProperty("text-overflow", "clip", "important");
     el.style.setProperty("word-break", "break-all", "important");
     el.style.setProperty("height", "auto", "important");
+    el.style.setProperty("line-height", "1");
+    el.style.setProperty("margin-bottom", "10px", "important"); 
     
     if (window.getComputedStyle(el).display === 'inline') {
         el.style.setProperty("display", "inline-block", "important");
@@ -1021,78 +930,41 @@ function applyStyleToDetailElement(el) {
         removeBadge(el); 
     }
 
-    el.style.setProperty("line-height", "1");
-    el.style.setProperty("margin-bottom", "10px", "important"); 
+    // 💡 [핵심 버그 수정] DOM Exception 방지 및 깔끔한 줄바꿈 보장 레이아웃
+    let existingBadge = el.querySelector('.book-badge');
+    let existingBr = el.querySelector('.bm-badge-br');
+    let existingActions = el.querySelector('.bm-quick-actions');
 
-    const existingBadge = el.querySelector('.book-badge');
-    let actions = el.querySelector('.bm-quick-actions'); 
-    let existingBr = el.querySelector('.bm-badge-br'); 
-    
+    // 충돌과 꼬임을 막기 위해 완전히 떼어냅니다.
+    if (existingBadge) existingBadge.remove();
+    if (existingBr) existingBr.remove();
+    if (existingActions) existingActions.remove();
+
+    // 상태값이 있을 경우 뱃지 부착
     if (newBadgeHTML) {
-        if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
-            if (existingBadge) existingBadge.remove();
-            if (existingBr) existingBr.remove(); 
-            
-            const br = document.createElement('br');
-            br.className = 'bm-badge-br'; 
-
-            const badge = document.createElement('span');
-            badge.className = 'book-badge';
-            
-            badge.style.cssText = badgeStyle; 
-            badge.innerHTML = newBadgeHTML;
-            badge.dataset.html = newBadgeHTML; 
-            
-            if (actions) {
-                el.insertBefore(badge, actions); 
-                el.insertBefore(br, actions);    
-            } else {
-                el.appendChild(badge);           
-                el.appendChild(br);              
-            }
-        }
-    } else if (existingBadge) {
-        existingBadge.remove();
-        if (existingBr) existingBr.remove(); 
+        const badge = document.createElement('span');
+        badge.className = 'book-badge';
+        badge.style.cssText = badgeStyle;
+        badge.innerHTML = newBadgeHTML;
+        badge.dataset.html = newBadgeHTML;
+        el.appendChild(badge);
     }
 
-    if (!actions) {
-        actions = createQuickActions(el._bmDetailData, !!book);
+    // 줄바꿈 보장
+    const br = document.createElement('br');
+    br.className = 'bm-badge-br';
+    el.appendChild(br);
 
-        actions.dataset.hasBook = !!book; 
-        
-        if (!newBadgeHTML && !el.querySelector('.bm-badge-br')) {
-            const br = document.createElement('br');
-            br.className = 'bm-badge-br';
-            el.appendChild(br);
-        }
-        
-        actions.style.marginLeft = "0";
-        actions.style.marginTop = "5px";
-        el.appendChild(actions);
-    } else {
-        const needsUpdate = actions.dataset.hasBook !== String(!!book);
-        if (needsUpdate) {
-            actions.remove();
-            actions = createQuickActions(el._bmDetailData, !!book);
-            actions.dataset.hasBook = !!book;
-            
-            if (!el.querySelector('.bm-badge-br')) {
-                const br = document.createElement('br');
-                br.className = 'bm-badge-br';
-                el.appendChild(br);
-            }
-            
-            actions.style.marginLeft = "0";
-            actions.style.marginTop = "5px";
-            el.appendChild(actions);
-        }
-    }
+    // 액션 버튼 재생성 및 부착
+    const actions = createQuickActions(el._bmDetailData, !!book);
+    actions.dataset.hasBook = !!book;
+    actions.style.marginLeft = "0";
+    actions.style.marginTop = "5px";
+    el.appendChild(actions);
 
     const hostname = window.location.hostname;
     if (hostname.includes('tcafe') || hostname.includes('tcafed')) {
         let downloadArea = null;
-        
         const dlLink = document.querySelector('a[href*="download.php?bo_table="]');
         if (dlLink) {
             downloadArea = dlLink.closest('.well, #bo_v_file, .view-attach') || dlLink.parentElement;
@@ -1105,7 +977,6 @@ function applyStyleToDetailElement(el) {
             downloadArea.style.marginTop = '15px';
             downloadArea.style.display = 'block';
             downloadArea.style.clear = 'both'; 
-            
             if (el.parentNode) {
                 el.parentNode.insertBefore(downloadArea, el.nextSibling);
             }
@@ -1118,32 +989,25 @@ let applyStylesFrame = null;
 
 function debouncedApplyStyles() {
     if (applyStylesTimer) clearTimeout(applyStylesTimer);
-    applyStylesTimer = setTimeout(() => {
-        applyStyles();
-    }, 10); 
+    applyStylesTimer = setTimeout(() => { applyStyles(); }, 10); 
 }
 
 function applyStyles() {
   if (!chrome.runtime?.id || !isDataLoaded || !isTargetSite) return;
   
-  if (globalAllowedDLs.length > 0) {
-      injectDirectDownloadButtons(globalAllowedDLs);
-  }
+  if (globalAllowedDLs.length > 0) injectDirectDownloadButtons(globalAllowedDLs);
 
   if (globalDetailSelector) {
       const detailEls = document.querySelectorAll(globalDetailSelector);
-      for(let i=0; i<detailEls.length; i++) {
-          applyStyleToDetailElement(detailEls[i]);
-      }
+      for(let i=0; i<detailEls.length; i++) applyStyleToDetailElement(detailEls[i]);
   }
 
   const targetAreas = document.querySelectorAll(globalTargetSelector);
   let allLinks = [];
 
   targetAreas.forEach(area => {
-    if (area.tagName === 'A') {
-        allLinks.push(area);
-    } else {
+    if (area.tagName === 'A') allLinks.push(area);
+    else {
         const links = area.querySelectorAll('a');
         for (let i = 0; i < links.length; i++) {
             const link = links[i];
@@ -1154,7 +1018,6 @@ function applyStyles() {
   });
 
   allLinks = [...new Set(allLinks)];
-
   if (applyStylesFrame) cancelAnimationFrame(applyStylesFrame);
 
   let index = 0;
@@ -1164,33 +1027,22 @@ function applyStyles() {
 
   function processChunk() {
       const end = Math.min(index + chunkSize, allLinks.length);
-
-      for (; index < end; index++) {
-          applyStyleToSingleLink(allLinks[index]);
-      }
-
-      if (index < allLinks.length) {
-          applyStylesFrame = requestAnimationFrame(processChunk);
-      }
+      for (; index < end; index++) applyStyleToSingleLink(allLinks[index]);
+      if (index < allLinks.length) applyStylesFrame = requestAnimationFrame(processChunk);
   }
-
   applyStylesFrame = requestAnimationFrame(processChunk);
 }
 
 function generateOptimalSelector(el) {
     if (!el) return '';
     if (el.nodeType === 3) el = el.parentElement; 
-    
     if (el.id) return el.tagName.toLowerCase() + '#' + el.id;
-    
     const classes = Array.from(el.classList).filter(c => !['hover','active','focus'].includes(c));
     if (classes.length > 0) return el.tagName.toLowerCase() + '.' + classes.join('.');
-    
     if (el.parentElement) {
         const pClasses = Array.from(el.parentElement.classList).filter(c => !['hover','active','focus'].includes(c));
         if (pClasses.length > 0) return el.parentElement.tagName.toLowerCase() + '.' + pClasses.join('.') + ' > ' + el.tagName.toLowerCase();
     }
-    
     return el.tagName.toLowerCase();
 }
 
@@ -1200,11 +1052,7 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
     if (isTargetSite) {
         const fixStyle = document.createElement('style');
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-        
-        if (globalCustomCss) {
-            styleContent += "\n" + globalCustomCss;
-        }
-
+        if (globalCustomCss) styleContent += "\n" + globalCustomCss;
         fixStyle.textContent = styleContent;
         document.head.appendChild(fixStyle);
 
@@ -1219,7 +1067,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
             try {
                 if (!chrome.runtime?.id) return; 
                 lastRightClickedElement = e.target; 
-                
                 const link = e.target.closest('a');
                 if (link) { 
                     lastRightClickedLink = link; 
@@ -1231,7 +1078,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
         }, true);
 
         const config = PRE_DEFINED_SITES.find(site => window.location.hostname.includes(site.url));
-        
         if (config && config.thumbSelector && (config.getHighResUrl || config.getHighResUrlAsync)) {
             const hoverContainer = getOrCreateHoverContainer();
             const previewImg = document.getElementById('book-manager-hover-img');
@@ -1247,7 +1093,6 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                 if (config.excludeThumbSelector && config.excludeThumbSelector && thumb.closest(config.excludeThumbSelector)) return;
                 
                 currentThumb = thumb;
-
                 if (thumb.dataset.isHighResReplaced === "true") {
                     previewImg.src = thumb.src;
                     previewImg.style.filter = "none";
@@ -1264,11 +1109,8 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                 if (hoverTimer) clearTimeout(hoverTimer);
 
                 let highResSrc = "";
-                if (config.getHighResUrlAsync) {
-                    highResSrc = await config.getHighResUrlAsync(thumb);
-                } else if (config.getHighResUrl) {
-                    highResSrc = config.getHighResUrl(thumb.src);
-                }
+                if (config.getHighResUrlAsync) highResSrc = await config.getHighResUrlAsync(thumb);
+                else if (config.getHighResUrl) highResSrc = config.getHighResUrl(thumb.src);
 
                 if (!highResSrc || currentThumb !== thumb) {
                     if (currentThumb === thumb) hoverSpinner.style.display = 'none';
@@ -1283,15 +1125,12 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true 
                             previewImg.src = highResSrc;
                             previewImg.style.filter = "none"; 
                             hoverSpinner.style.display = 'none'; 
-                            
                             thumb.src = highResSrc;
                             thumb.dataset.isHighResReplaced = "true"; 
                         }
                     };
                     tempImg.onerror = () => {
-                        if (currentThumb === thumb) {
-                            hoverSpinner.style.display = 'none';
-                        }
+                        if (currentThumb === thumb) hoverSpinner.style.display = 'none';
                     };
                 }, 50); 
             });
@@ -1333,7 +1172,6 @@ function formatBytes(bytes) {
 
 function updateDownloadUI(downloads) {
     let container = document.getElementById('book-manager-dl-overlay');
-    
     if (!downloads || downloads.length === 0) {
         if (container) container.style.display = 'none';
         return;
@@ -1389,9 +1227,8 @@ try {
               let existing = sites.find(s => (typeof s === 'string' ? s : s.url) === host);
               
               if (existing) {
-                  if (typeof existing === 'string') {
-                      existing = { url: existing, detailSelector: selector };
-                  } else {
+                  if (typeof existing === 'string') existing = { url: existing, detailSelector: selector };
+                  else {
                       existing.detailSelector = selector;
                       delete existing.selector; 
                   }
@@ -1407,19 +1244,31 @@ try {
           });
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
-          // 💡 낙관적 UI 렌더링을 적용했으므로 DB를 다시 읽어오는 로직 생략
+          
+          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+              initDataCache(data);
+              document.querySelectorAll(globalTargetSelector).forEach(el => {
+                  if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
+                  else if (el.querySelectorAll) {
+                      el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
+                  }
+              });
+              if (globalDetailSelector) {
+                  document.querySelectorAll(globalDetailSelector).forEach(el => {
+                      if (el._bmDetailData) el._bmDetailData.raw = null;
+                  });
+              }
+              debouncedApplyStyles();
+          });
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
-          if (isDownloadUIEnabled) {
-              updateDownloadUI(request.downloads);
-          }
+          if (isDownloadUIEnabled) updateDownloadUI(request.downloads);
       } else if (request.action === "DOWNLOAD_COMPLETE_TOAST") {
           if (isDownloadUIEnabled) {
               const fname = request.filename.split(/[\\/]/).pop();
               const btnId = "btn-open-folder-" + request.id;
               showInfoToast(`✅ 다운로드 완료!<br><span style="font-size:12px; color:#ddd;">${fname}</span><br><button id="${btnId}" style="margin-top:8px; padding:4px 10px; font-size:12px; font-weight:bold; background:#ffc107; color:#000; border:none; border-radius:4px; cursor:pointer; width:100%; pointer-events:auto; box-shadow:0 2px 5px rgba(0,0,0,0.3);">📂 다운로드 폴더 열기</button>`);
-              
               setTimeout(() => {
                   const btn = document.getElementById(btnId);
                   if (btn) {
@@ -1438,21 +1287,14 @@ chrome.storage.local.get({ autoConfirm: true }, (data) => {
     if (data.autoConfirm) {
         const currentHostname = window.location.hostname;
         const activeConfig = PRE_DEFINED_SITES.find(site => currentHostname.includes(site.url));
-
         if (activeConfig && activeConfig.autoConfirmKeywords && activeConfig.autoConfirmKeywords.length > 0) {
             try {
-                chrome.runtime.sendMessage({ 
-                    action: "INJECT_BYPASS_SCRIPT", 
-                    keywords: activeConfig.autoConfirmKeywords 
-                }).catch(()=>{});
+                chrome.runtime.sendMessage({ action: "INJECT_BYPASS_SCRIPT", keywords: activeConfig.autoConfirmKeywords }).catch(()=>{});
             } catch (err) {}
         }
     }
 });
 
-// =========================================================================
-// 💡 [지연 렌더링] 수십 개의 백그라운드 탭 연산 폭주(렉) 완벽 방지 로직
-// =========================================================================
 let isTabStale = true; 
 
 document.addEventListener("visibilitychange", () => {

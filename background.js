@@ -880,8 +880,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (menuId === "addIncomplete") type = "incomplete";
   if (menuId === "addComplete") type = "complete";
 
-  const resMatch = rawTitle.match(/\d{3,4}\s*px/gi);
-  const resolution = resMatch ? Array.from(new Set(resMatch)).join(',') : "";
+  const resMatch = rawTitle.match(/\d{3,4}\s*p(?:x)?/gi);
+  const resolution = resMatch ? Array.from(new Set(resMatch)).map(s => {
+      let lower = s.toLowerCase();
+      return lower.endsWith('px') ? lower : lower + 'x';
+  }).join(',') : "";
   let lastVol = "";
   
   const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
