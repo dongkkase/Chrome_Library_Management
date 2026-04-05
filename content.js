@@ -690,7 +690,7 @@ function applyStyleToSingleLink(link) {
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
+            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜–—,/&]\s*(\d+)/);
             const singleMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
             if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);

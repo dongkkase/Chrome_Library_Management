@@ -887,7 +887,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }).join(',') : "";
   let lastVol = "";
   
-  const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
+  const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜–—,/&]\s*(\d+)/);
   const volMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))/);
   const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
 
