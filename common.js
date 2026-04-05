@@ -73,6 +73,7 @@ function cleanSiteTitle(title) {
     .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
     .replace(/\d+\s*[~-～〜–—,/&]\s*\d+/g, ' ')
     .replace(/[：:—\-\/]/g, ' ')
+    .replace(/[：:—\-\/～〜]/g, ' ')
     .replace(/\d+\s*(?:권|화)/g, ' ')
     .replace(/완결[!?.~]*/g, ' ')
     .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
