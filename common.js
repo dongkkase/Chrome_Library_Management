@@ -50,9 +50,9 @@ function cleanSiteTitle(title) {
   // 'OOO 원작', 'OOO 그림' 등의 패턴을 묶어서 삭제
   cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|그림|지음|글|작화|번역)(?=\s|$)/g, ' ');
 
-  // 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
-  const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화|부(?!터))?\s*[~-～〜–—,/&]\s*\d+|\d+\s*(?:권|화|부(?!터)|화씩)|완결|\s완(\s|$))/i;
-    
+// 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
+  // 💡 가운뎃점(・, ·, ･) 등을 범위 기호로 추가하여 16・17권 같은 패턴도 인식
+  const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화|부(?!터))?\s*[~～〜〰∼\-–—_,\/&・·･]\s*\d+|\d+\s*(?:권|화|부(?!터)|화씩)|완결|\s완(\s|$))/i;
   const match = cleaned.match(delimiterRegex);
   
   if (match && match.index > 0) {
@@ -71,9 +71,8 @@ function cleanSiteTitle(title) {
     .replace(/권\~/gi, '')
     .replace(/[\[\(].*?[\]\)]/g, ' ') 
     .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
-    .replace(/\d+\s*[~-～〜–—,/&]\s*\d+/g, ' ')
-    .replace(/[：:—\-\/]/g, ' ')
-    .replace(/[：:—\-\/～〜]/g, ' ')
+    .replace(/\d+\s*[~～〜〰∼\-–—_,\/&・·･]\s*\d+/g, ' ') 
+    .replace(/[：:—\-\/～〜〰∼~・·･]/g, ' ') // 💡 특수기호 찌꺼기 제거
     .replace(/\d+\s*(?:권|화)/g, ' ')
     .replace(/완결[!?.~]*/g, ' ')
     .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
@@ -84,6 +83,6 @@ function cleanSiteTitle(title) {
     .replace(/\.\s*$/, '')
     .replace(/\(\s*$/, '')
     .replace(/\[\s*$/, '')
-    .replace(/\s1\s*$/, '')
+    // .replace(/\s1\s*$/, '') // 💡 원래대로 복구 (리스토어 게리지 251 보호)
     .trim();
 }

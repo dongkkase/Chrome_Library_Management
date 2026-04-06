@@ -690,9 +690,11 @@ function applyStyleToSingleLink(link) {
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜–—,/&]\s*(\d+)/);
+            // 💡 [수정] 다양한 특수 물결표 및 범위 기호 대응
+            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜〰∼\-–—_,\/&・·･]\s*(\d+)/);
             const singleMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
+            
             if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
@@ -828,9 +830,11 @@ function applyStyleToDetailElement(el) {
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
+            // 💡 [수정] 다양한 특수 물결표 및 범위 기호 대응
+            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜〰∼\-–—_,\/&・·･]\s*(\d+)/);
             const singleMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
+
             if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
