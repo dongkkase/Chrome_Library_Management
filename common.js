@@ -20,19 +20,20 @@ if (typeof chrome !== 'undefined' && chrome.storage) {
 function cleanSiteTitle(title) {
   if (!title) return "";
   
-  let cleaned = title;
+  // 👻 눈에 보이지 않는 유령 공백(Zero-Width Space) 완전히 분쇄
+  let cleaned = title.replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '');
 
-  // 0️⃣ [최우선 적용] 사용자가 등록한 금지어를 가장 먼저 무조건 삭제합니다.
+  // 0️⃣ [최우선 적용] 사용자가 등록한 금지어를 가장 먼저 삭제합니다.
   if (globalCustomFilters && globalCustomFilters.length > 0) {
-      // 💡 길이가 긴 단어부터 지우기 위해 내림차순 정렬
-      // (예: '신카이 마코토'를 지우기 전에 '신카이'만 지워져서 '마코토'가 남는 현상 방지)
       const sortedFilters = [...globalCustomFilters].sort((a, b) => b.length - a.length);
       
       sortedFilters.forEach(word => {
-          // 등록된 단어의 특수문자를 이스케이프 처리하여 안전한 정규식으로 변환
+          const trimWord = word.trim();
+          if (['~', '-', '～', '〜', '〰', '∼', '–', '—'].includes(trimWord)) return;
+
           const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(safeWord, 'gi');
-          cleaned = cleaned.replace(regex, ' '); // 해당 단어를 공백으로 치환
+          cleaned = cleaned.replace(regex, ' ');
       });
   }
 
@@ -47,12 +48,11 @@ function cleanSiteTitle(title) {
     .replace(/업로드\s*$/g, '') 
     .replace(/^\s*\[?웹툰\]?\s*/, ''); 
 
-  // 'OOO 원작', 'OOO 그림' 등의 패턴을 묶어서 삭제
   cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|그림|지음|글|작화|번역)(?=\s|$)/g, ' ');
 
-// 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
-  // 💡 가운뎃점(・, ·, ･) 등을 범위 기호로 추가하여 16・17권 같은 패턴도 인식
-  const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화|부(?!터))?\s*[~～〜〰∼\-–—_,\/&・·･]\s*\d+|\d+\s*(?:권|화|부(?!터)|화씩)|완결|\s완(\s|$))/i;
+  // 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
+  // 💡 [핵심 수정] 정규식에서 '부'를 구분자로 자르지 않도록 부(?!터) 구문을 제거했습니다.
+  const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*\d+|\d+\s*(?:권|화|화씩)|완결|\s완(\s|$))/i;
   const match = cleaned.match(delimiterRegex);
   
   if (match && match.index > 0) {
@@ -71,8 +71,8 @@ function cleanSiteTitle(title) {
     .replace(/권\~/gi, '')
     .replace(/[\[\(].*?[\]\)]/g, ' ') 
     .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
-    .replace(/\d+\s*[~～〜〰∼\-–—_,\/&・·･]\s*\d+/g, ' ') 
-    .replace(/[：:—\-\/～〜〰∼~・·･]/g, ' ') // 💡 특수기호 찌꺼기 제거
+    .replace(/\d+\s*[\~\-～〜〰∼–—_,\/&・·･]\s*\d+/g, ' ') 
+    .replace(/[：:—\-\/～〜〰∼~・·･]/g, ' ') 
     .replace(/\d+\s*(?:권|화)/g, ' ')
     .replace(/완결[!?.~]*/g, ' ')
     .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
@@ -80,9 +80,8 @@ function cleanSiteTitle(title) {
     .replace(/\s+/g, ' ')
     .replace(/^\]\s*/, '')
     .replace(/,\s*$/, '')
-    .replace(/\.\s*$/, '')
+    // .replace(/\.\s*$/, '')
     .replace(/\(\s*$/, '')
     .replace(/\[\s*$/, '')
-    // .replace(/\s1\s*$/, '') // 💡 원래대로 복구 (리스토어 게리지 251 보호)
     .trim();
 }

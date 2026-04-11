@@ -691,8 +691,8 @@ function applyStyleToSingleLink(link) {
             
             let siteVol = 0;
             // 💡 [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
-            const singleMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))/);
+            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
+            const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
             
             if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
@@ -831,8 +831,8 @@ function applyStyleToDetailElement(el) {
             
             let siteVol = 0;
             // 💡 [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
-            const singleMatch = originalText.match(/(\d+)\s*(?:권|화|부(?!터))/);
+            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
+            const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
 
             if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
