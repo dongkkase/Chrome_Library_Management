@@ -887,8 +887,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }).join(',') : "";
   let lastVol = "";
   
-// 💡 [수정] 다양한 특수 물결표 및 범위 기호 대응
-  const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-～〜〰∼\-–—_,\/&・·･]\s*(\d+)/);
+  const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
   const volMatch = rawTitle.match(/(\d+)\s*(?:권|화|부(?!터))/);
   const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
 
