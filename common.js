@@ -59,8 +59,10 @@ function cleanSiteTitle(title) {
       cleaned = cleaned.substring(0, match.index);
   }
 
+  console.log('cleaned:', cleaned);
   // 3️⃣ 나머지 태그 및 불필요한 단어 제거 후 최종 다듬기
   return cleaned
+    .replace(/\[전/gi, '')
     .replace(/e-?book|e북|完/gi, '')
     .replace(/지원\s사격|지원사격/g, '')
     .replace(/완결은\s무료/g, '')
