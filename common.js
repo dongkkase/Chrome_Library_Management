@@ -1,5 +1,13 @@
 // common.js (공통 정규식 관리 파일)
-
+let globalFilters = [
+    "__", "=", "❤️한방팩❤️", "[완결]", "직작 |", 
+    "상/하권", "상,하권", "상-하권", "상~하", "상,하", "상/하", 
+    "(지원사격)", "지원사격)", "지원 -", "Web툰", "웹툰",
+    "(신작완결)", "19禁완)", "(완결)", "완결)", "완결]", "★★★★신작완결)", "(최신완결)", "최신완결)", 
+    // "", "", "", "", "", "", "", "", "", "",
+    // "", "", "", "", "", "", "", "", "", "",
+    "✅"
+];
 // 💡 [신규 추가] 사용자 정의 필터링(금지어) 단어를 저장할 전역 변수
 let globalCustomFilters = [];
 
@@ -22,6 +30,20 @@ function cleanSiteTitle(title) {
   
   // 👻 눈에 보이지 않는 유령 공백(Zero-Width Space) 완전히 분쇄
   let cleaned = title.replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '');
+
+  
+  if (globalFilters && globalFilters.length > 0) {
+      const sortedFilters = [...globalFilters].sort((a, b) => b.length - a.length);
+      
+      sortedFilters.forEach(word => {
+          const trimWord = word.trim();
+          if (['~', '-', '～', '〜', '〰', '∼', '–', '—'].includes(trimWord)) return;
+
+          const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(safeWord, 'gi');
+          cleaned = cleaned.replace(regex, ' ');
+      });
+  }
 
   // 0️⃣ [최우선 적용] 사용자가 등록한 금지어를 가장 먼저 삭제합니다.
   if (globalCustomFilters && globalCustomFilters.length > 0) {

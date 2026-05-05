@@ -46,20 +46,27 @@ const PRE_DEFINED_SITES = [
         body { padding-bottom: 120px !important; }
     `
   },
-  { url: "ridibooks.com", selector: ".infinite-scroll-component", allowedDLs: [] },
-  { url: "enterjoy.day", selector: ".list-board", allowedDLs: ["giga", "gofile"] }, 
-  { 
+{
+    url: "ridibooks.com", selector: ".infinite-scroll-component", allowedDLs: []
+},
+{
+    url: "enterjoy.day", 
+    selector: ".list-board", 
+    allowedDLs: ["giga", "gofile", "transfer"],
+    autoConfirmKeywords: ["열람하시겠습니까"], 
+}, 
+{ 
     url: "hellkaiv.net", 
     selector: "#gall_ul", 
     autoConfirmKeywords: ["링크", "발급"], 
     allowedDLs: ["giga", "gofile", "hk"] 
-  },
-  { 
+},
+{ 
     url: "amazon.co.jp", 
     selector: ".a-carousel-card, div[data-asin], .s-result-item, #gridItemRoot, .a-cardui", 
     allowedDLs: [] 
-  },
-  { url: "example.com", selector: "#board_list", allowedDLs: [] }
+},
+{ url: "example.com", selector: "#board_list", allowedDLs: [] }
 ];
 
 let globalAllowedDLs = [];
@@ -1301,11 +1308,15 @@ try {
 } catch(e) {}
 
 chrome.storage.local.get({ autoConfirm: true }, (data) => {
+    // console.log('auto confirm 1');
     if (data.autoConfirm) {
+        // console.log('auto confirm 2');
         const currentHostname = window.location.hostname;
         const activeConfig = PRE_DEFINED_SITES.find(site => currentHostname.includes(site.url));
         if (activeConfig && activeConfig.autoConfirmKeywords && activeConfig.autoConfirmKeywords.length > 0) {
+            // console.log('auto confirm 3');
             try {
+                // console.log('auto confirm 4');
                 chrome.runtime.sendMessage({ action: "INJECT_BYPASS_SCRIPT", keywords: activeConfig.autoConfirmKeywords }).catch(()=>{});
             } catch (err) {}
         }
