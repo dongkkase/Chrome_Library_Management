@@ -1,7 +1,7 @@
 // db.js
 var db = new Dexie('BookManagerDB');
 
-// 인덱스 정의 (id는 자동증가, cleanTitleStr은 중복방지 고유키로 사용)
-db.version(1).stores({
+// 버전을 3으로 올려 기존 스키마 충돌을 해결하고 데이터베이스 문을 엽니다.
+db.version(3).stores({
     books: '++id, &cleanTitleStr, title, type, resolution, lastVol, date'
 });

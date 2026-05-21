@@ -1070,15 +1070,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-async function initializeExtension() {
-    const data = await chrome.storage.local.get({ allowedSites: [], showDownloadUI: true });
-    
-    try {
-        data.bookList = await db.books.toArray();
-    } catch (e) {
-        data.bookList = [];
-    }
-
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1192,9 +1184,7 @@ async function initializeExtension() {
             });
         }
     }
-}
-
-initializeExtension();
+});
 
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
@@ -1279,15 +1269,8 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          (async () => {
-              const data = await chrome.storage.local.get({ allowedSites: [], showDownloadUI: true });
-              try {
-                  data.bookList = await db.books.toArray();
-              } catch (e) {
-                  data.bookList = [];
-              }
+          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
               initDataCache(data);
-              
               document.querySelectorAll(globalTargetSelector).forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
                   else if (el.querySelectorAll) {
@@ -1300,7 +1283,7 @@ try {
                   });
               }
               debouncedApplyStyles();
-          })();
+          });
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
@@ -1342,24 +1325,24 @@ chrome.storage.local.get({ autoConfirm: true }, (data) => {
 
 let isTabStale = true; 
 
-document.addEventListener("visibilitychange", async () => {
+document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        const data = await chrome.storage.local.get({ allowedSites: [], showDownloadUI: true });
-        data.bookList = await db.books.toArray();
-        initDataCache(data);
-        debouncedApplyStyles();
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+            initDataCache(data);
+            debouncedApplyStyles();
+        });
     } else if (document.hidden) {
         isTabStale = true; 
     }
 });
 
-window.addEventListener("focus", async () => {
+window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        const data = await chrome.storage.local.get({ allowedSites: [], showDownloadUI: true });
-        data.bookList = await db.books.toArray();
-        initDataCache(data);
-        debouncedApplyStyles();
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+            initDataCache(data);
+            debouncedApplyStyles();
+        });
     }
 });
