@@ -98,7 +98,7 @@ function renderList(filter = "", resetPage = false) {
     }
     filteredList.sort(sortFn);
 
-    // 💡 데이터 자르기 (Slice)
+    // 데이터 자르기 (Slice)
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = Math.min(startIndex + itemsPerPage, filteredList.length);
     const pageItems = filteredList.slice(startIndex, endIndex);
@@ -134,7 +134,7 @@ function renderList(filter = "", resetPage = false) {
   });
 }
 
-// 💡 하단 페이지네이션 버튼 생성 로직
+// 하단 페이지네이션 버튼 생성 로직
 function renderPagination() {
     const container = document.getElementById('paginationContainer');
     if (!container) return;
@@ -183,7 +183,7 @@ function saveWithUndo(newList, successMsg) {
         chrome.storage.local.set({ backupList: data.bookList }, () => {
             chrome.storage.local.set({ bookList: newList }, () => {
                 if (successMsg) alert(successMsg);
-                // 💡 수정/삭제 후 현재 페이지 유지 (false 전달)
+                // 수정/삭제 후 현재 페이지 유지 (false 전달)
                 renderList(document.getElementById('searchInput').value, false); 
                 
                 const undoBtn = document.getElementById('undoBtn');
@@ -229,7 +229,7 @@ document.getElementById('batchUpdateBtn').onclick = () => {
 };
 
 // ============================================================================
-// 💡 [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
+// [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
 // ============================================================================
 document.getElementById('exportBtn').onclick = () => {
     // 저장소에서 3가지 데이터를 모두 불러옵니다.
@@ -261,7 +261,7 @@ document.getElementById('exportBtn').onclick = () => {
 document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
 
 // ============================================================================
-// 💡 [수정됨] 복구 (불러오기) 로직: 신규 포맷 및 구버전 포맷(하위 호환) 완벽 지원
+// [수정됨] 복구 (불러오기) 로직: 신규 포맷 및 구버전 포맷(하위 호환) 완벽 지원
 // ============================================================================
 document.getElementById('fileInput').onchange = (e) => {
     const file = e.target.files[0];
@@ -277,7 +277,7 @@ document.getElementById('fileInput').onchange = (e) => {
         try {
             const importedData = JSON.parse(event.target.result);
             
-            // 💡 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
+            // 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
             if (importedData && typeof importedData === 'object' && !Array.isArray(importedData)) {
                 let hasSettings = false;
                 
@@ -302,7 +302,7 @@ document.getElementById('fileInput').onchange = (e) => {
                     alert('❌ 유효한 백업 데이터가 없습니다.');
                 }
             } 
-            // 💡 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
+            // 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
             else if (Array.isArray(importedData)) {
                 saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
             } 
@@ -367,7 +367,7 @@ document.getElementById('saveBtn').onclick = () => {
   const selectedTypeSelect = document.getElementById('bulkTypeSelect');
   const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';
   
-  // 💡 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
+  // 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
   const btn = document.getElementById('saveBtn');
   const originalBtnText = btn.innerText;
   btn.innerText = "⏳ 6만건 처리 중... (잠시만 기다려주세요)";
@@ -379,7 +379,7 @@ document.getElementById('saveBtn').onclick = () => {
       let currentList = Array.isArray(data.bookList) ? data.bookList : [];
       let skippedCount = 0;
 
-      // 🚀 [최적화 1] 검색 속도 무한대 향상 (O(N) -> O(1))
+      // [최적화 1] 검색 속도 무한대 향상 (O(N) -> O(1))
       // 매번 findIndex로 찾지 않도록 기존 목록을 Map(사전) 형태로 미리 만들어 둡니다.
       const titleMap = new Map();
       currentList.forEach((book, idx) => {
@@ -389,7 +389,7 @@ document.getElementById('saveBtn').onclick = () => {
           }
       });
 
-      // 🚀 [최적화 2] unshift 연산 제거
+      // [최적화 2] unshift 연산 제거
       // 매번 배열을 뒤로 미는 대신, 임시 배열에 일단 차곡차곡 쌓습니다(push).
       const newBooks = [];
 
@@ -434,19 +434,19 @@ document.getElementById('saveBtn').onclick = () => {
           id: Date.now() + Math.random() 
         };
 
-        // 🚀 [최적화 1 적용] Map에서 즉시(0.0001초) 찾아냅니다.
+        // [최적화 1 적용] Map에서 즉시(0.0001초) 찾아냅니다.
         if (titleMap.has(normalizedNewTitle)) {
             const existingIdx = titleMap.get(normalizedNewTitle);
             currentList[existingIdx] = { ...currentList[existingIdx], ...bookData };
         } else {
-            // 🚀 [최적화 2 적용] 무거운 unshift 대신 가벼운 push 사용
+            // [최적화 2 적용] 무거운 unshift 대신 가벼운 push 사용
             newBooks.push(bookData);
             // 6만 건의 새 데이터 안에서 중복이 발생할 수도 있으니 Map에도 등록
             titleMap.set(normalizedNewTitle, -1); 
         }
       });
 
-      // 🚀 [최적화 3] 마지막에 배열 합치기
+      // [최적화 3] 마지막에 배열 합치기
       // 기존 unshift처럼 최신 항목이 위로 오게 하려면, 새 책들을 뒤집은(reverse) 후 기존 목록 앞에 붙이면 됩니다.
       currentList = [...newBooks.reverse(), ...currentList];
 
@@ -695,7 +695,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchInput.oninput = (e) => {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
-                // 💡 검색어 입력 시 1페이지로 리셋 (true 전달)
+                // 검색어 입력 시 1페이지로 리셋 (true 전달)
                 renderList(e.target.value, true); 
             }, 300);
         };
@@ -717,17 +717,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const uiCheckbox = document.getElementById('showDownloadUICheckbox');
     const confirmCheckbox = document.getElementById('autoConfirmCheckbox');
     const folderCheckbox = document.getElementById('autoFolderCheckbox'); 
-    const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox'); // 💡 왼쪽 탭 체크박스 변수 추가
+    const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox'); // 왼쪽 탭 체크박스 변수 추가
 
-    // 💡 옵션값 로드 (focusLeftTab 추가)
+    // 옵션값 로드 (focusLeftTab 추가)
     chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
-        if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab; // 💡 로드 로직 추가
+        if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab; // 로드 로직 추가
     });
     
-    // 💡 옵션값 변경 시 저장 로직
+    // 옵션값 변경 시 저장 로직
     if (uiCheckbox) {
         uiCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ showDownloadUI: e.target.checked });
@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({ autoFolder: e.target.checked });
         });
     }
-    // 💡 왼쪽 탭 포커스 저장 로직 추가
+    // 왼쪽 탭 포커스 저장 로직 추가
     if (focusLeftCheckbox) {
         focusLeftCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ focusLeftTab: e.target.checked });

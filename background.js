@@ -1,7 +1,7 @@
 importScripts('common.js');
 
 let lastRightClickedTitle = "";
-let downloadTitlesMap = {}; // 💡 다운로드 ID와 폴더명(책 제목) 매핑
+let downloadTitlesMap = {}; // 다운로드 ID와 폴더명(책 제목) 매핑
 let urlToTitleMap = {};
 let gofileAuthLock = null;
 
@@ -148,7 +148,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                       }
                   }
 
-                  // 💡 [버그 수정] 구글 대체 검색 및 오탈자 방어를 위한 고도화된 교차 검증 로직
+                  // [버그 수정] 구글 대체 검색 및 오탈자 방어를 위한 고도화된 교차 검증 로직
                   // 레벤슈타인 거리 알고리즘 (오탈자 및 띄어쓰기 뭉개짐 계산용)
                   const getSimilarity = (a, b) => {
                       if (!a) return b ? 0 : 1;
@@ -238,7 +238,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               let list = Array.isArray(data.bookList) ? data.bookList : [];
               let targetTitleStr = message.cleanTitle.replace(/\s+/g, '').toLowerCase();
 
-              // 💡 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
+              // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
               let existingIndex = -1;
               for (let i = list.length - 1; i >= 0; i--) {
                   if ((list[i].title || "").replace(/\s+/g, '').toLowerCase() === targetTitleStr) {
@@ -250,7 +250,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               if (existingIndex > -1) {
                   let deletedBook = list.splice(existingIndex, 1)[0];
                   
-                  bgListMapCache = null; // 💡 [추가] 삭제 시 백그라운드 캐시 무효화
+                  bgListMapCache = null; // [추가] 삭제 시 백그라운드 캐시 무효화
                   
                   chrome.storage.local.set({ bookList: list }, () => {
                       if (tabId) chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
@@ -327,7 +327,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             return;
         }
 
-        // 💡 콜백에서 다운로드 ID와 폴더명(title) 연결
+        // 콜백에서 다운로드 ID와 폴더명(title) 연결
         chrome.downloads.download({ url: targetDlUrl, conflictAction: "uniquify" }, (downloadId) => {
             if (downloadId && message.title) {
                 downloadTitlesMap[downloadId] = message.title; 
@@ -582,7 +582,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 dlUrl = `${host}/s/${token}/download`; 
             }
             
-            // 💡 콜백에서 다운로드 ID와 폴더명(title) 연결
+            // 콜백에서 다운로드 ID와 폴더명(title) 연결
             chrome.downloads.download({ url: dlUrl, conflictAction: "uniquify" }, (downloadId) => {
                 if (downloadId && message.title) {
                     downloadTitlesMap[downloadId] = message.title;
@@ -882,7 +882,7 @@ chrome.runtime.onStartup.addListener(createIndependentMenus);
 let pendingTasks = [];
 let isSaving = false;
 let saveTimer = null;
-let bgListMapCache = null; // 💡 [신규] 백그라운드 해시맵 캐시
+let bgListMapCache = null; // [신규] 백그라운드 해시맵 캐시
 let bgListLength = -1;
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -924,7 +924,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
           if (existingIndex > -1) {
               let deletedBook = list.splice(existingIndex, 1)[0];
-              bgListMapCache = null; // 💡 캐시 초기화
+          bgListMapCache = null; // 캐시 초기화
               chrome.storage.local.set({ bookList: list }, () => {
                   if (tab && tab.id) {
                       chrome.tabs.sendMessage(tab.id, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
@@ -980,7 +980,7 @@ function processSaveQueue() {
     chrome.storage.local.get({ bookList: [] }, (data) => {
         let list = Array.isArray(data.bookList) ? data.bookList : [];
         
-        // 💡 [핵심 최적화] 매번 6만번 루프 돌며 해시맵을 만들지 않고, 갯수가 같으면 캐시된 맵 사용
+        // [핵심 최적화] 매번 6만번 루프 돌며 해시맵을 만들지 않고, 갯수가 같으면 캐시된 맵 사용
         if (!bgListMapCache || bgListLength !== list.length) {
             bgListMapCache = new Map();
             for (let i = 0; i < list.length; i++) {
@@ -1091,7 +1091,7 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
     startProgressBroadcasting();
 });
 
-// 💡 [수정] 다운로드가 끝났을 때 메모리 누수 방지를 위해 제목 맵핑 데이터(downloadTitlesMap) 삭제
+// [수정] 다운로드가 끝났을 때 메모리 누수 방지를 위해 제목 맵핑 데이터(downloadTitlesMap) 삭제
 chrome.downloads.onChanged.addListener((delta) => {
     if (delta.state && delta.state.current === 'complete') {
         chrome.downloads.search({ id: delta.id }, (res) => {
@@ -1109,7 +1109,7 @@ chrome.downloads.onChanged.addListener((delta) => {
 });
 
 // ==============================================================================
-// 🚨 VDH 충돌 완벽 차단: 스마트 스위치 (Smart Switch) 로직
+// VDH 충돌 완벽 차단: 스마트 스위치 (Smart Switch) 로직
 // 평상시에는 리스너를 지워두고, 우리 도서를 다운받을 때만 찰나의 순간에 켭니다.
 // ==============================================================================
 let expectedDownloadTitle = null;
@@ -1246,7 +1246,7 @@ async function getTransferDownloadUrl(url) {
 }
 
 
-// 💡 [수정] 활성 탭 종료 시 왼쪽 탭으로 포커스 이동시키는 매크로 로직 (크롬 레이스 컨디션 완벽 대응)
+// [수정] 활성 탭 종료 시 왼쪽 탭으로 포커스 이동시키는 매크로 로직 (크롬 레이스 컨디션 완벽 대응)
 let focusWindowStates = {}; 
 let focusTabIndices = {};
 
@@ -1275,7 +1275,7 @@ function initFocusLeftMacro() {
     chrome.tabs.onAttached.addListener(updateIndices);
     chrome.tabs.onDetached.addListener(updateIndices);
 
-    // 💡 탭 활성화 변경 시 히스토리 기록 (크롬의 자동 포커스 이동 이벤트 캐치)
+    // 탭 활성화 변경 시 히스토리 기록 (크롬의 자동 포커스 이동 이벤트 캐치)
     chrome.tabs.onActivated.addListener(activeInfo => {
         let win = focusWindowStates[activeInfo.windowId] || { activeTabId: null, prevTabId: null, lastSwitchTime: 0 };
         win.prevTabId = win.activeTabId;
@@ -1294,7 +1294,7 @@ function initFocusLeftMacro() {
             let win = focusWindowStates[removeInfo.windowId];
             let closedIndex = focusTabIndices[tabId];
 
-            // 💡 탭이 닫힐 때 크롬이 자동으로 우측 탭을 포커스하는 찰나의 시간(약 100ms 이내)을 계산하여 
+            // 탭이 닫힐 때 크롬이 자동으로 우측 탭을 포커스하는 찰나의 시간(약 100ms 이내)을 계산하여 
             // 실제로 활성화되어 있던 탭이 닫힌 것인지 정확하게 판별합니다.
             let wasActive = false;
             if (win) {

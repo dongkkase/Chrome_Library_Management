@@ -8,7 +8,7 @@ let globalFilters = [
     // "", "", "", "", "", "", "", "", "", "",
     "✅"
 ];
-// 💡 [신규 추가] 사용자 정의 필터링(금지어) 단어를 저장할 전역 변수
+// [신규 추가] 사용자 정의 필터링(금지어) 단어를 저장할 전역 변수
 let globalCustomFilters = [];
 
 // 크롬 스토리지에서 필터링 단어를 비동기적으로 불러와 자체 캐싱해둡니다.
@@ -59,7 +59,7 @@ function cleanSiteTitle(title) {
       });
   }
 
-  // 1️⃣ 꼬리표 및 찌꺼기 먼저 제거 
+  // 꼬리표 및 찌꺼기 먼저 제거 
   cleaned = cleaned
     .replace(/<[!]--[\s\S]*?-->/g, '')
     .replace(/<(?:span|div|i)\s+class="(?:count|comment-badge|fa-comment)[^"]*">[\s\S]*?<\/(?:span|div|i)>/g, '')
@@ -72,8 +72,8 @@ function cleanSiteTitle(title) {
 
   cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|그림|지음|글|작화|번역)(?=\s|$)/g, ' ');
 
-  // 2️⃣ 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
-  // 💡 [핵심 수정] 정규식에서 '부'를 구분자로 자르지 않도록 부(?!터) 구문을 제거했습니다.
+  // 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
+  // [핵심 수정] 정규식에서 '부'를 구분자로 자르지 않도록 부(?!터) 구문을 제거했습니다.
   const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*\d+|\d+\s*(?:권|화|화씩)|완결|\s완(\s|$))/i;
   const match = cleaned.match(delimiterRegex);
   
@@ -82,7 +82,7 @@ function cleanSiteTitle(title) {
   }
 
   console.log('cleaned:', cleaned);
-  // 3️⃣ 나머지 태그 및 불필요한 단어 제거 후 최종 다듬기
+  // 나머지 태그 및 불필요한 단어 제거 후 최종 다듬기
   return cleaned
     .replace(/\[전/gi, '')
     .replace(/e-?book|e북|完/gi, '')

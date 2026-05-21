@@ -1,4 +1,4 @@
-// 👇 [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
+// [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
@@ -16,17 +16,12 @@ const PRE_DEFINED_SITES = [
         try {
             const res = await fetch(link.href);
             const html = await res.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const viewContent = doc.querySelector('.view-content');
-            
-            if (viewContent) {
-                const firstImg = viewContent.querySelector('img');
-                if (firstImg) {
-                    const absoluteUrl = new URL(firstImg.getAttribute('src'), link.href).href;
-                    thumb.dataset.cachedHighRes = absoluteUrl; 
-                    return absoluteUrl;
-                }
+            // 최적화: 무거운 DOMParser 대신 정규표현식을 사용하여 추출 속도 대폭 향상
+            const match = html.match(/class=["'][^"']*view-content[^"']*["'][\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+            if (match && match[1]) {
+                const absoluteUrl = new URL(match[1], link.href).href;
+                thumb.dataset.cachedHighRes = absoluteUrl; 
+                return absoluteUrl;
             }
         } catch (error) {
             console.log("고화질 썸네일 추출 실패:", error);
@@ -535,7 +530,7 @@ function injectDirectDownloadButtons(allowedDLs) {
 }
 
 function removeBadge(link) {
-    // 💡 :scope > 를 추가하여 엄한 자식 요소의 뱃지를 건드리지 않게 방어
+    // :scope > 를 추가하여 엄한 자식 요소의 뱃지를 건드리지 않게 방어
     if (link.style.textDecoration || link.querySelector(':scope > .book-badge')) {
         link.style.removeProperty("text-decoration");
         link.style.removeProperty("color");
@@ -612,7 +607,7 @@ function createQuickActions(linkData, hasBook) {
                         cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
                     }).catch(()=>{});
                 } else {
-                    // 💡 [낙관적 UI] 삭제 포함 즉시 캐시 갱신
+                    // [낙관적 UI] 삭제 포함 즉시 캐시 갱신
                     const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
                     const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
                     
@@ -678,7 +673,7 @@ function createQuickActions(linkData, hasBook) {
 }
 
 function applyStyleToSingleLink(link) {
-    // 🚨 핵심 방어: 이미 상세페이지 로직이 처리한 요소면 일반 링크 함수는 쳐다보지도 않고 도망감 (무한루프 차단)
+    // 핵심 방어: 이미 상세페이지 로직이 처리한 요소면 일반 링크 함수는 쳐다보지도 않고 도망감 (무한루프 차단)
     if (link.dataset.bmIsDetail === "true") return; 
 
     const currentRawText = link.textContent || "";
@@ -697,7 +692,7 @@ function applyStyleToSingleLink(link) {
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
-            // 💡 [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
+            // [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
             const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
             const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
@@ -800,7 +795,7 @@ function applyStyleToSingleLink(link) {
         removeBadge(link);
     }
 
-    // 💡 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
+    // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
     const existingBadge = link.querySelector(':scope > .book-badge');
     if (newBadgeHTML) {
         if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
@@ -818,7 +813,7 @@ function applyStyleToSingleLink(link) {
 }
 
 function applyStyleToDetailElement(el) {
-    // 🚨 핵심 방어 마커 부착: 내가 상세페이지 로직으로 찜했으니 단일 링크 로직은 건들지 마라 선언
+    // 핵심 방어 마커 부착: 내가 상세페이지 로직으로 찜했으니 단일 링크 로직은 건들지 마라 선언
     el.dataset.bmIsDetail = "true"; 
     
     const currentRawText = el.textContent || "";
@@ -837,7 +832,7 @@ function applyStyleToDetailElement(el) {
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
             let siteVol = 0;
-            // 💡 [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
+            // [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
             const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
             const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
             const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
@@ -950,7 +945,7 @@ function applyStyleToDetailElement(el) {
         removeBadge(el); 
     }
 
-    // 💡 직계 자손(:scope >)만 탐색하도록 교체! (엄한 자식 뱃지를 지우는 대참사 방지)
+    // 직계 자손(:scope >)만 탐색하도록 교체! (엄한 자식 뱃지를 지우는 대참사 방지)
     let existingBadge = el.querySelector(':scope > .book-badge');
     let existingBr = el.querySelector(':scope > .bm-badge-br');
     let existingActions = el.querySelector(':scope > .bm-quick-actions');
