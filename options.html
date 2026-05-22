@@ -143,23 +143,64 @@
     .page-btn.active { background: #0d6efd; color: white; border-color: #0d6efd; pointer-events: none; }
     .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     
-    /* 패널 대응을 위한 반응형 스타일 추가 */
-    body.side-panel-mode { min-width: 320px; width: 100%; padding: 10px; }
-    body.side-panel-mode .container { padding: 5px; }
+    /* 슬라이드 패널 전용 스타일 (옵션창 크기 유지 및 2줄 레이아웃 적용) */
+    body.side-panel-mode { min-width: 120px; width: 100%; padding: 0px; }
+    body.side-panel-mode .container { padding: 10px; border-radius: 0; box-shadow: none; border: none; }
     body.side-panel-mode .header-row { flex-direction: column; align-items: flex-start; gap: 10px; }
-    body.side-panel-mode .header-row > div { flex-wrap: wrap; gap: 5px; margin-left: 0; }
+    body.side-panel-mode .header-row > div { flex-wrap: wrap; gap: 5px; margin-left: 0; width: 100%; justify-content: space-between; }
     body.side-panel-mode .theme-switch-wrapper { margin-left: 0; }
     body.side-panel-mode .tabs { flex-wrap: wrap; gap: 2px; }
-    body.side-panel-mode .tab-btn { flex: 1 1 45%; font-size: 13px; padding: 6px; text-align: center; border-radius: 4px 4px 0 0; }
-    body.side-panel-mode #statsDashboard { flex-wrap: wrap; }
-    body.side-panel-mode #statsDashboard > div { flex: 1 1 45%; margin-bottom: 5px; }
+    body.side-panel-mode .tab-btn { flex: 1 1 45%; font-size: 12px; padding: 6px; text-align: center; border-radius: 4px 4px 0 0; }
+    body.side-panel-mode #statsDashboard { flex-wrap: wrap; gap: 4px; }
+    body.side-panel-mode #statsDashboard > div { flex: 1 1 45%; margin-bottom: 2px; padding: 4px; }
     body.side-panel-mode .batch-control { flex-direction: column; align-items: flex-start; gap: 10px; }
-    body.side-panel-mode .batch-control > div { width: 100% !important; display: flex; align-items: center; gap: 5px; flex-direction: row; }
-    body.side-panel-mode table { display: block; overflow-x: auto; white-space: nowrap; }
-    body.side-panel-mode table th,
-    body.side-panel-mode table td{padding:2px}
+    body.side-panel-mode .batch-control > div { width: 100% !important; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+    body.side-panel-mode .batch-control select, body.side-panel-mode .batch-control input { width: 100% !important; margin-left: 0 !important; }
+    
+    body.side-panel-mode table { display: block; width: 100% !important; }
+    body.side-panel-mode thead, body.side-panel-mode tbody { display: block; width: 100% !important; }
+    body.side-panel-mode tr { 
+        display: grid !important; 
+        grid-template-columns: 65px 1.1fr 0.9fr 70px 80px; 
+        grid-template-rows: auto auto; 
+        border-bottom: 1px solid var(--border); 
+        padding: 8px 0; 
+        width: 100%;
+        box-sizing: border-box;
+    }
+    body.side-panel-mode th, body.side-panel-mode td { 
+        border: none !important; 
+        padding: 2px !important; 
+        text-align: center; 
+        vertical-align: middle;
+        box-sizing: border-box;
+        width: 100% !important;
+    }
+    body.side-panel-mode table td input,
+    body.side-panel-mode table td select{height:30px}
+    
+    body.side-panel-mode th:nth-child(1), body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; } 
+    body.side-panel-mode th:nth-child(3), body.side-panel-mode td:nth-child(3) { grid-row: 1; grid-column: 2; } 
+    body.side-panel-mode th:nth-child(4), body.side-panel-mode td:nth-child(4) { grid-row: 1; grid-column: 3; } 
+    body.side-panel-mode th:nth-child(5), body.side-panel-mode td:nth-child(5) { grid-row: 1; grid-column: 4; font-size: 11px; display: flex; align-items: center; justify-content: center; } 
+    body.side-panel-mode th:nth-child(6), body.side-panel-mode td:nth-child(6) { grid-row: 1; grid-column: 5; display: flex; gap: 2px; justify-content: center; align-items: center; } 
+    
+    body.side-panel-mode th:nth-child(2), body.side-panel-mode td:nth-child(2) { 
+        grid-row: 2; 
+        grid-column: 1 / span 5; 
+        text-align: left !important; 
+        padding-top: 6px !important;
+    }
+    body.side-panel-mode th:nth-child(2) {
+        font-weight: bold;
+        background: rgba(127,127,127,0.05);
+        padding: 4px 6px !important;
+        border-radius: 4px;
+    }
+
+    
     body.side-panel-mode .panel-box { padding: 10px; }
-    body.side-panel-mode .flex-row { flex-direction: column; align-items: stretch; }
+    body.side-panel-mode .flex-row { flex-direction: column; align-items: stretch; gap: 8px; }
     body.side-panel-mode .flex-row input { width: 100%; }
   </style>
 </head>
