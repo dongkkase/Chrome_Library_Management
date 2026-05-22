@@ -15,7 +15,8 @@
     "activeTab", 
     "scripting", 
     "downloads", 
-    "cookies"
+    "cookies",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://transfer.it/*",
@@ -34,6 +35,9 @@
       "48": "icon.png",
       "128": "icon.png"
     }
+  },
+  "side_panel": {
+    "default_path": "options.html#sidepanel"
   },
   "options_page": "options.html",
   "content_scripts": [

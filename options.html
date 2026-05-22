@@ -142,6 +142,25 @@
     .page-btn:hover:not(:disabled) { background: var(--tab-hover); }
     .page-btn.active { background: #0d6efd; color: white; border-color: #0d6efd; pointer-events: none; }
     .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    
+    /* 패널 대응을 위한 반응형 스타일 추가 */
+    body.side-panel-mode { min-width: 320px; width: 100%; padding: 10px; }
+    body.side-panel-mode .container { padding: 5px; }
+    body.side-panel-mode .header-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+    body.side-panel-mode .header-row > div { flex-wrap: wrap; gap: 5px; margin-left: 0; }
+    body.side-panel-mode .theme-switch-wrapper { margin-left: 0; }
+    body.side-panel-mode .tabs { flex-wrap: wrap; gap: 2px; }
+    body.side-panel-mode .tab-btn { flex: 1 1 45%; font-size: 13px; padding: 6px; text-align: center; border-radius: 4px 4px 0 0; }
+    body.side-panel-mode #statsDashboard { flex-wrap: wrap; }
+    body.side-panel-mode #statsDashboard > div { flex: 1 1 45%; margin-bottom: 5px; }
+    body.side-panel-mode .batch-control { flex-direction: column; align-items: flex-start; gap: 10px; }
+    body.side-panel-mode .batch-control > div { width: 100% !important; display: flex; align-items: center; gap: 5px; flex-direction: row; }
+    body.side-panel-mode table { display: block; overflow-x: auto; white-space: nowrap; }
+    body.side-panel-mode table th,
+    body.side-panel-mode table td{padding:2px}
+    body.side-panel-mode .panel-box { padding: 10px; }
+    body.side-panel-mode .flex-row { flex-direction: column; align-items: stretch; }
+    body.side-panel-mode .flex-row input { width: 100%; }
   </style>
 </head>
 <body>
@@ -286,6 +305,10 @@
         <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text);">
             <input type="checkbox" id="focusLeftTabCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
             <b>활성 탭 종료 시 왼쪽 탭 포커스</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(크롬 기본값인 '오른쪽 탭' 대신 '왼쪽 탭'으로 이동합니다)</span>
+        </label>
+        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); margin-top: 10px;">
+            <input type="checkbox" id="openSlidePanelCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+            <b>슬라이드 패널로 열기</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(체크 시 확장프로그램 아이콘 클릭 시 우측 사이드 패널로 열립니다)</span>
         </label>
       </div>
     </div>

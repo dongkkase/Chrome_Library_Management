@@ -876,8 +876,40 @@ function createIndependentMenus() {
     chrome.contextMenus.create({ id: "registerDetailSelector", title: "🎯 이 요소를 상세페이지 제목으로 등록 (버튼 표시)", contexts: ["all"] });
   });
 }
-chrome.runtime.onInstalled.addListener(createIndependentMenus);
-chrome.runtime.onStartup.addListener(createIndependentMenus);
+
+function initSidePanelBehavior() {
+    chrome.storage.local.get({ openSlidePanel: false }, (data) => {
+        if (chrome.action) {
+            chrome.action.setPopup({ popup: data.openSlidePanel ? "" : "options.html" });
+        }
+        if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+            chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: data.openSlidePanel }).catch(console.error);
+        }
+    });
+}
+
+// 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.openSlidePanel) {
+        const isSlide = changes.openSlidePanel.newValue;
+        if (chrome.action) {
+            chrome.action.setPopup({ popup: isSlide ? "" : "options.html" });
+        }
+        if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+            chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: isSlide }).catch(console.error);
+        }
+    }
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+    createIndependentMenus();
+    initSidePanelBehavior();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+    createIndependentMenus();
+    initSidePanelBehavior();
+});
 
 let pendingTasks = [];
 let isSaving = false;

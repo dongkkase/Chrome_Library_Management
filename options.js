@@ -592,6 +592,10 @@ async function loadReleaseHistory() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { 
+    if (window.location.hash === '#sidepanel') {
+        document.body.classList.add('side-panel-mode');
+    }
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -717,14 +721,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const uiCheckbox = document.getElementById('showDownloadUICheckbox');
     const confirmCheckbox = document.getElementById('autoConfirmCheckbox');
     const folderCheckbox = document.getElementById('autoFolderCheckbox'); 
-    const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox'); // 왼쪽 탭 체크박스 변수 추가
+    const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox');
+    const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
 
     // 옵션값 로드 (focusLeftTab 추가)
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
         if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab; // 로드 로직 추가
+        if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
     });
     
     // 옵션값 변경 시 저장 로직
@@ -747,6 +753,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (focusLeftCheckbox) {
         focusLeftCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ focusLeftTab: e.target.checked });
+        });
+    }
+    // 슬라이드 패널 저장 로직 수정 (레이스 컨디션 방지 및 백그라운드 이관)
+    if (slidePanelCheckbox) {
+        slidePanelCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ openSlidePanel: e.target.checked });
         });
     }
 });
