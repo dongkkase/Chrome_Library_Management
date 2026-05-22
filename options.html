@@ -81,9 +81,14 @@
     .tab-content.active { display: block; animation: fadeIn 0.2s; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-    input[type="text"], textarea, select { 
-      width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); 
-      border-radius: 4px; background: var(--input-bg); color: var(--text);
+    input[type="text"], textarea, select {
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text);
     }
     input[type="text"]:focus, textarea:focus, select:focus {
       outline: none; border-color: #80bdff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
@@ -100,20 +105,92 @@
     }
     .site-tag code { color: #d63384; font-size: 11px; background: rgba(127,127,127,0.1); padding: 2px 6px; border-radius: 4px;}
     
-    table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; font-size: 13px; }
-    th, td { border: 1px solid var(--border); padding: 8px; text-align: center; vertical-align: middle; }
-    th { background: var(--th-bg); font-weight: bold; color: var(--text); }
-    td:nth-child(2) { text-align: left; }
-    .edit-type, .edit-title, .edit-res, .edit-vol { width: 100%; }
+    /* 테이블 모던 스타일 도입 */
+    table { width: 100%; border-collapse: separate; border-spacing: 0 8px; margin-top: 10px; table-layout: fixed; font-size: 13px; }
+    th { padding: 12px 8px; font-weight: bold; color: var(--text-muted); background: transparent; border-bottom: 2px solid var(--border); text-align: center; font-size: 12px; letter-spacing: 0.5px; }
     
+    /* 각 열의 고정 너비를 명시하여 겹침 현상 완벽 방지 */
+    th:nth-child(1) { width: 70px; }
+    th:nth-child(2) { text-align: left; padding-left: 12px; width: auto; }
+    th:nth-child(3) { width: 75px; }
+    th:nth-child(4) { width: 145px; } /* 권수 + 누락 배지 영역 넉넉하게 확보 */
+    th:nth-child(5) { width: 95px; }  /* 등록일 영역 확보 */
+    th:nth-child(6) { width: 105px; } /* 관리 버튼 영역 확보 */
+    
+    td { background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 8px; text-align: center; vertical-align: middle; transition: background-color 0.2s; }
+    td:first-child { border-left: 1px solid var(--border); border-radius: 8px 0 0 8px; }
+    td:last-child { border-right: 1px solid var(--border); border-radius: 0 8px 8px 0; }
+    tr:hover td { background: var(--tab-hover); }
+
     .btn-save { background: #20c997; margin-right: 4px; padding: 4px 10px; font-size: 11px; }
     .btn-del { background: #fa5252; padding: 4px 10px; font-size: 11px; }
+    
+    /* 인라인 에디터 인풋 필드 고도화 */
+    .edit-title, .edit-res, .edit-vol {
+      width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text);
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+    }
+    .edit-title { text-align: left; font-weight: 500; }
+    .edit-res, .edit-vol { text-align: center; }
+    
+    .edit-title:hover, .edit-res:hover, .edit-vol:hover {
+      border-color: var(--border);
+      background: var(--input-bg);
+    }
+    .edit-title:focus, .edit-res:focus, .edit-vol:focus {
+      outline: none;
+      border-color: #0d6efd;
+      background: var(--input-bg);
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+    }
+    
+    /* 타입 선택기 커스텀 배지 스타일 */
+    select.edit-type {
+      appearance: none;
+      -webkit-appearance: none;
+      font-weight: bold;
+      text-align: center;
+      text-align-last: center;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      width: 100%;
+      min-width: 80px;
+      transition: all 0.2s ease;
+    }
+    select.edit-type:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2);
+    }
+    select.edit-type[data-type="exclude"] { background: #ffe3e3; color: #e03131; }
+    body.dark-mode select.edit-type[data-type="exclude"] { background: #2b1d1d; color: #ff8787; }
+    
+    select.edit-type[data-type="incomplete"] { background: #fff4e6; color: #d9480f; }
+    body.dark-mode select.edit-type[data-type="incomplete"] { background: #2b221a; color: #ffd8a8; }
+    
+    select.edit-type[data-type="complete"] { background: #e7f5ff; color: #0c85e9; }
+    body.dark-mode select.edit-type[data-type="complete"] { background: #1a242f; color: #a5d8ff; }
     
     .flex-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
     .batch-control { 
       margin-top: 15px; padding: 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);
       display: flex; justify-content: space-between; align-items: center; font-size: 13px;
     }
+    .batch-control {flex-direction: row;align-items: flex-start;gap: 10px;display: flex;flex-direction: row;}
+    .batch-control > div { width: 100% !important; display: flex; flex-direction: column; gap: 5px; }
+    .batch-control > div > strong {}
+    .batch-control > div > div{display:flex;gap:5px}
+    .batch-control > div > div > select{min-width:100px;max-width:50%}
     
     .panel-box {
       background: var(--panel); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 15px;
@@ -132,7 +209,6 @@
     .release-body li.sub-li { list-style-type: circle; color: var(--text-muted); font-size: 12px; margin-top: 4px; margin-bottom: 4px;}
     .release-body strong { color: #20c997; background: rgba(32, 201, 151, 0.1); padding: 0 4px; border-radius: 3px; }
 
-/* 페이지네이션 버튼 스타일 추가 */
     .pagination-container { display: flex; justify-content: center; gap: 5px; margin-top: 15px; margin-bottom: 20px; }
     .page-btn {
       background: var(--panel); border: 1px solid var(--border);
@@ -143,251 +219,376 @@
     .page-btn.active { background: #0d6efd; color: white; border-color: #0d6efd; pointer-events: none; }
     .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     
-    /* 슬라이드 패널 전용 스타일 (옵션창 크기 유지 및 2줄 레이아웃 적용) */
-    body.side-panel-mode { min-width: 120px; width: 100%; padding: 0px; }
-    body.side-panel-mode .container { padding: 10px; border-radius: 0; box-shadow: none; border: none; }
+    /* 슬라이드 패널 전용 스타일 (카드형 프리미엄 그리드 레이아웃) */
+    body.side-panel-mode { min-width: 320px; width: 100%; padding: 10px; box-sizing: border-box;}
+    body.side-panel-mode .container { padding: 0px; border-radius: 0; box-shadow: none; border: none; background: transparent; }
     body.side-panel-mode .header-row { flex-direction: column; align-items: flex-start; gap: 10px; }
     body.side-panel-mode .header-row > div { flex-wrap: wrap; gap: 5px; margin-left: 0; width: 100%; justify-content: space-between; }
     body.side-panel-mode .theme-switch-wrapper { margin-left: 0; }
     body.side-panel-mode .tabs { flex-wrap: wrap; gap: 2px; }
     body.side-panel-mode .tab-btn { flex: 1 1 45%; font-size: 12px; padding: 6px; text-align: center; border-radius: 4px 4px 0 0; }
     body.side-panel-mode #statsDashboard { flex-wrap: wrap; gap: 4px; }
-    body.side-panel-mode #statsDashboard > div { flex: 1 1 45%; margin-bottom: 2px; padding: 4px; }
+    body.side-panel-mode #statsDashboard > div { flex: 1 1 45%; margin-bottom: 2px; padding: 6px; }
     body.side-panel-mode .batch-control { flex-direction: column; align-items: flex-start; gap: 10px; }
-    body.side-panel-mode .batch-control > div { width: 100% !important; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+    body.side-panel-mode .batch-control > div { width: 100% !important; display: flex; flex-direction: column; gap: 5px; }
+    body.side-panel-mode .batch-control > div > strong {}
+    body.side-panel-mode .batch-control > div > div{display:flex}
     body.side-panel-mode .batch-control select, body.side-panel-mode .batch-control input { width: 100% !important; margin-left: 0 !important; }
     
-    body.side-panel-mode table { display: block; width: 100% !important; }
-    body.side-panel-mode thead, body.side-panel-mode tbody { display: block; width: 100% !important; }
-    body.side-panel-mode tr { 
+    body.side-panel-mode table { display: block; width: 100% !important; border: none; background: transparent; }
+    body.side-panel-mode thead { display: none !important; }
+    body.side-panel-mode tbody { display: block; width: 100%; }
+    
+    body.side-panel-mode tbody tr { 
         display: grid !important; 
-        grid-template-columns: 65px 1.1fr 0.9fr 70px 80px; 
-        grid-template-rows: auto auto; 
-        border-bottom: 1px solid var(--border); 
-        padding: 8px 0; 
+        /* 3열 레이아웃을 85px(타입), 1fr(제목), 115px(권수/관리)로 조정하여 공간 확보 */
+        grid-template-columns: 85px 1fr 115px !important; 
+        grid-template-rows: auto auto auto; 
+        background: var(--panel);
+        border: 1px solid var(--border); 
+        border-radius: 12px;
+        margin-bottom: 12px;
+        padding: 12px; 
         width: 100%;
         box-sizing: border-box;
+        gap: 8px 4px;
     }
-    body.side-panel-mode th, body.side-panel-mode td { 
+    
+    body.side-panel-mode tbody tr:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        border-color: #0d6efd;
+    }
+    body.side-panel-mode td { 
         border: none !important; 
-        padding: 2px !important; 
-        text-align: center; 
+        padding: 0 !important; 
+        text-align: left; 
         vertical-align: middle;
-        box-sizing: border-box;
-        width: 100% !important;
+        background: transparent !important;
+        width: auto !important;
+        height: auto !important;
     }
-    body.side-panel-mode table td input,
-    body.side-panel-mode table td select{height:30px}
+    body.side-panel-mode td:first-child, body.side-panel-mode td:last-child { border-radius: 0; }
     
-    body.side-panel-mode th:nth-child(1), body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; } 
-    body.side-panel-mode th:nth-child(3), body.side-panel-mode td:nth-child(3) { grid-row: 1; grid-column: 2; } 
-    body.side-panel-mode th:nth-child(4), body.side-panel-mode td:nth-child(4) { grid-row: 1; grid-column: 3; } 
-    body.side-panel-mode th:nth-child(5), body.side-panel-mode td:nth-child(5) { grid-row: 1; grid-column: 4; font-size: 11px; display: flex; align-items: center; justify-content: center; } 
-    body.side-panel-mode th:nth-child(6), body.side-panel-mode td:nth-child(6) { grid-row: 1; grid-column: 5; display: flex; gap: 2px; justify-content: center; align-items: center; } 
+    /* 1행 배치: 타입 배지, 날짜, 관리 버튼 */
+    body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; display: flex; align-items: center; } 
+    body.side-panel-mode td:nth-child(5) { 
+        grid-row: 1; grid-column: 2; 
+        display: block !important; 
+        line-height: 24px;
+        color: var(--text-muted); 
+        font-size: 11px; 
+        padding-left: 8px !important; 
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    } 
+    body.side-panel-mode td:nth-child(6) { grid-row: 1; grid-column: 3; display: flex; gap: 4px; justify-content: flex-end; align-items: center; } 
+    body.side-panel-mode td:nth-child(6) button { padding: 4px 8px; font-size: 11px; }
     
-    body.side-panel-mode th:nth-child(2), body.side-panel-mode td:nth-child(2) { 
+    /* 2행 배치: 도서 제목 (강조된 컴포넌트 박스 형태) */
+    body.side-panel-mode td:nth-child(2) { 
         grid-row: 2; 
-        grid-column: 1 / span 5; 
-        text-align: left !important; 
-        padding-top: 6px !important;
+        grid-column: 1 / span 3; 
+        background: rgba(127,127,127,0.05); 
+        padding: 2px !important;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        transition: border-color 0.2s;
     }
-    body.side-panel-mode th:nth-child(2) {
-        font-weight: bold;
-        background: rgba(127,127,127,0.05);
-        padding: 4px 6px !important;
-        border-radius: 4px;
+    body.side-panel-mode td:nth-child(2):focus-within {
+        border-color: rgba(13, 110, 253, 0.3);
+        background: var(--input-bg);
     }
-
+    body.side-panel-mode td:nth-child(2) input {
+        font-size: 13px;
+        font-weight: 600;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 6px 10px;
+        background: #cccccc30 !important;
+    }
+    
+    /* 3행 배치: 해상도 및 권수 입력 필드 */
+    body.side-panel-mode td:nth-child(3), body.side-panel-mode td:nth-child(4) {
+        display: flex !important;
+        align-items: center;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 2px 8px !important;
+        box-sizing: border-box;
+        background: #cccccc30 !important;
+    }
+    body.side-panel-mode td:nth-child(3) { grid-row: 3; grid-column: 1 / span 2; }
+    body.side-panel-mode td:nth-child(4) { grid-row: 3; grid-column: 3; }
+    
+    body.side-panel-mode td:nth-child(3):before { content: "📺"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    body.side-panel-mode td:nth-child(4):before { content: "📑"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    
+    body.side-panel-mode td:nth-child(3) input, body.side-panel-mode td:nth-child(4) input {
+        border: none !important;
+        background: transparent !important;
+        padding: 4px 0 !important;
+        font-size: 12px;
+        font-weight: 500;
+        box-shadow: none !important;
+        text-align: left;
+    }
     
     body.side-panel-mode .panel-box { padding: 10px; }
     body.side-panel-mode .flex-row { flex-direction: column; align-items: stretch; gap: 8px; }
     body.side-panel-mode .flex-row input { width: 100%; }
+
+    /* 신규 추가: 누락 권수 관리 팝오버 및 배지 스타일 */
+    .missing-badge { font-size: 10px; background: #ffe3e3; color: #e03131; padding: 2px 6px; border-radius: 4px; margin-left: 4px; cursor: pointer; border: 1px solid #ffb8b8; white-space: nowrap; font-weight: bold; }
+    body.dark-mode .missing-badge { background: #2b1d1d; color: #ff8787; border-color: #4a2a2a; }
+    .missing-badge.empty { background: transparent; color: var(--text-muted); border: 1px dashed var(--border); }
+    
+    #missingPopover { position: absolute; display: none; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 10000; width: 240px; box-sizing: border-box; }
+    #missingPopover .popover-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; color: var(--text); }
+    #missingPopover .vol-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; max-height: 200px; overflow-y: auto; padding-right: 4px; }
+    #missingPopover .vol-item { text-align: center; padding: 6px 0; font-size: 11px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; user-select: none; color: var(--text); font-weight: 500; transition: all 0.1s; }
+    #missingPopover .vol-item:hover { border-color: #0d6efd; }
+    #missingPopover .vol-item.missing { background: #ffe3e3; color: #e03131; border-color: #ffa8a8; text-decoration: line-through; opacity: 0.8; }
+    body.dark-mode #missingPopover .vol-item.missing { background: #2b1d1d; color: #ff8787; border-color: #4a2a2a; }
+
+    .sub-options{}
+    .sub-options label{font-size: 14px;cursor: pointer;display: flex;align-items: center;gap: 0px;margin-bottom: 10px;color: var(--text);flex-wrap: wrap;}
+    .sub-options label>input{width: 16px;height: 16px;margin: 0;cursor: pointer;margin-right: 10px;}
+    .sub-options label>b{}
+    .sub-options label>span{width:100%;color:var(--text-muted);font-size: 12px;font-weight: normal;display: block;margin-left: 24px;width: 100%;}
+
+    details[open] .toggle-icon {
+        transform: rotate(90deg);
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header-row">
-      <h2>⚙️ 도서 목록 매칭 매니저</h2>
-      <div style="display: flex; align-items: center;">
-        <span style="font-size: 13px; color: var(--text-muted);">현재 버전: <b id="current-version">v1.0</b></span>
-        
-        <div class="theme-switch-wrapper">
-          <label class="theme-switch" title="다크 모드 온/오프 (기본: 시스템 테마)">
-            <input type="checkbox" id="themeToggle">
-            <span class="slider"></span>
-          </label>
+    <div class="container">
+        <div class="header-row">
+            <h2>⚙️ 도서 목록 매칭 매니저</h2>
+            <div style="display: flex;align-items: center;justify-content: flex-end;align-content: center;flex-direction: row;">
+          
+            <div class="theme-switch-wrapper">
+                <label class="theme-switch" title="다크 모드 온/오프 (기본: 시스템 테마)">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <span style="font-size: 13px; color: var(--text-muted);">현재 버전: <b id="current-version">v1.0</b></span>
+
+            <button id="manual-check-btn" style="margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
+            <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
+            <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
+            </div>
         </div>
 
-        <button id="manual-check-btn" style="margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
-        <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
-        <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
-      </div>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" data-target="tab-books">📚 도서 목록 관리</button>
-      <button class="tab-btn" data-target="tab-settings">🌐 사이트 및 설정</button>
-      <button class="tab-btn" data-target="tab-backup">💾 데이터 백업</button>
-      <button class="tab-btn" data-target="tab-history">📜 업데이트 내역</button>
-    </div>
-
-    <div id="tab-books" class="tab-content active">
-      <div id="statsDashboard" style="display: flex; gap: 8px; margin-bottom: 15px; text-align: center;">
-          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">전체 수집</div>
-              <div style="font-size: 18px; font-weight: 900; color: #0d6efd;" id="stat-total">0</div>
-          </div>
-          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">완결 도서</div>
-              <div style="font-size: 18px; font-weight: 900; color: #4dabf7;" id="stat-complete">0</div>
-          </div>
-          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">미완결 도서</div>
-              <div style="font-size: 18px; font-weight: 900; color: #ff922b;" id="stat-incomplete">0</div>
-          </div>
-          <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
-              <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">제외 도서</div>
-              <div style="font-size: 18px; font-weight: 900; color: #ff6b6b;" id="stat-exclude">0</div>
-          </div>
-      </div>
-
-      <div class="panel-box" style="background: var(--bg);">
-        <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
-        <select id="bulkTypeSelect" style="width: 100%; margin-bottom: 8px; border-color: var(--border); font-weight: bold; color: var(--input-text); font-size: 13px;">
-            <option value="exclude">🚫 '제외' 타입으로 일괄 저장 (기본값)</option>
-            <option value="incomplete">⏳ '미완' 타입으로 일괄 저장</option>
-            <option value="complete">✅ '완결' 타입으로 일괄 저장</option>
-        </select>
-        <textarea id="bulkInput" rows="3" placeholder="제목 권수 해상도 (여러 줄 입력 가능)&#10;예: 원피스 13권 1500px" style="font-size: 13px;"></textarea>
-        
-        <div id="bulkPreview" style="margin-top:8px; font-size:12px; color:var(--text-muted); background:var(--panel); padding:8px 12px; border-radius:4px; border:1px solid var(--border); display:none;"></div>
-        
-        <button id="saveBtn" style="width:100%; margin-top: 8px; background: #20c997; font-size: 14px;">목록에 일괄 추가하기</button>
-      </div>
-
-      <div class="batch-control">
-          <div>
-              <strong style="color: var(--text);">선택된 타입 변경:</strong>
-              <select id="batchTypeSelect" style="width: auto; margin-left: 5px; display: inline-block;">
-                  <option value="exclude">제외</option>
-                  <option value="incomplete">미완</option>
-                  <option value="complete">완결</option>
-              </select>
-              <button id="batchUpdateBtn" style="margin-left: 5px; background: #6c757d; padding: 4px 12px;">일괄 적용</button>
-          </div>
-          <div style="display: flex; gap: 10px; width: 45%;">
-              <select id="sortSelect" style="width: 40%;">
-                  <option value="id_desc">최신 등록순</option>
-                  <option value="id_asc">오래된 등록순</option>
-                  <option value="title_asc">제목 가나다순</option>
-                  <option value="title_desc">제목 역순</option>
-              </select>
-              <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 60%; border-color: #0d6efd;">
-          </div>
-      </div>
-      
-      <div id="listCountDisplay" style="margin-top: 15px; margin-bottom: 8px; font-weight: bold; color: var(--text-muted); font-size: 13px;"></div>
-
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 75px;">타입</th>
-            <th>도서 제목</th>
-            <th style="width: 80px;">해상도</th>
-            <th style="width: 60px;">권수</th>
-            <th style="width: 80px;">등록일</th>
-            <th style="width: 110px;">관리</th>
-          </tr>
-        </thead>
-        <tbody id="listBody"></tbody>
-      </table>
-
-      <div id="paginationContainer" class="pagination-container"></div>
-    </div>
-
-    <div id="tab-settings" class="tab-content">
-      <div class="panel-box">
-        <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">확장프로그램이 작동할 사이트를 관리합니다. 낯선 사이트는 상세페이지에서 <b>[우클릭 ➡️ 요소를 상세페이지 제목으로 등록]</b> 기능을 사용하면 훨씬 정확하게 등록됩니다.</p>
-        <div class="flex-row">
-          <input type="text" id="siteInput" placeholder="직접 추가 (예: domain.com)">
-          <button id="addSiteBtn">수동 추가</button>
+        <div class="tabs">
+            <button class="tab-btn active" data-target="tab-books">📚 도서 목록 관리</button>
+            <button class="tab-btn" data-target="tab-settings">🌐 사이트 및 설정</button>
+            <button class="tab-btn" data-target="tab-backup">💾 데이터 백업</button>
+            <button class="tab-btn" data-target="tab-history">📜 업데이트 내역</button>
         </div>
-        <div id="siteList" style="margin-top: 10px; display: flex; flex-wrap: wrap;"></div>
-      </div>
 
-      <div class="panel-box">
-        <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
-        <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
-          웹사이트 제목에서 <b>무조건 삭제하고 싶은 단어(작가명, 스캔팀 등)</b>를 등록하세요. <br>
-          <span style="color:#e83e8c;">💡 예시:</span> '신카이 마코토'를 등록하면 👉 "별의 목소리 신카이 마코토"가 "별의 목소리"로 자동 정제됩니다. (주의: 일반 명사를 등록하면 정상적인 책 제목도 잘릴 수 있습니다.)
-        </p>
-        <div class="flex-row">
-          <input type="text" id="filterInput" placeholder="삭제할 텍스트 정확히 입력 (예: 오다 에이치로)">
-          <button id="addFilterBtn" style="background:#dc3545;">금지어 추가</button>
+        <div id="tab-books" class="tab-content active">
+        <div id="statsDashboard" style="display: flex; gap: 8px; margin-bottom: 15px; text-align: center;">
+            <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">전체 수집</div>
+                <div style="font-size: 18px; font-weight: 900; color: #0d6efd;" id="stat-total">0</div>
+            </div>
+            <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">완결 도서</div>
+                <div style="font-size: 18px; font-weight: 900; color: #4dabf7;" id="stat-complete">0</div>
+            </div>
+            <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">미완결 도서</div>
+                <div style="font-size: 18px; font-weight: 900; color: #ff922b;" id="stat-incomplete">0</div>
+            </div>
+            <div style="flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); font-weight:bold;">제외 도서</div>
+                <div style="font-size: 18px; font-weight: 900; color: #ff6b6b;" id="stat-exclude">0</div>
+            </div>
         </div>
-        <div id="filterList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
-      </div>
 
-      <div class="panel-box">
-        <h4 style="font-size: 14px;">⚙️ 확장 기능 설정</h4>
-        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--text);">
-            <input type="checkbox" id="autoFolderCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
-            <b>자동 폴더 생성 다운로드</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(바로다운로드 시 책 제목으로 폴더를 자동 생성합니다)</span>
-        </label>
-        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--text);">
-            <input type="checkbox" id="showDownloadUICheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
-            <b>다운로드 현황판 표시</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(화면 좌측 하단에 실시간 진행률 팝업 노출)</span>
-        </label>
-        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text);">
-            <input type="checkbox" id="autoConfirmCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;" checked>
-            <b>확인창(Confirm) 자동 스킵</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(포인트 차감 등 반복되는 귀찮은 알림창 무시)</span>
-        </label>
-        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text);">
-            <input type="checkbox" id="focusLeftTabCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
-            <b>활성 탭 종료 시 왼쪽 탭 포커스</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(크롬 기본값인 '오른쪽 탭' 대신 '왼쪽 탭'으로 이동합니다)</span>
-        </label>
-        <label style="font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); margin-top: 10px;">
-            <input type="checkbox" id="openSlidePanelCheckbox" style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
-            <b>슬라이드 패널로 열기</b> <span style="color:var(--text-muted); font-size: 12px; font-weight: normal;">(체크 시 확장프로그램 아이콘 클릭 시 우측 사이드 패널로 열립니다)</span>
-        </label>
-      </div>
+        <div class="panel-box" style="background: var(--bg);">
+            <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
+            <select id="bulkTypeSelect" style="width: 100%; margin-bottom: 8px; border-color: var(--border); font-weight: bold; color: var(--input-text); font-size: 13px;">
+                <option value="exclude">🚫 '제외' 타입으로 일괄 저장 (기본값)</option>
+                <option value="incomplete">⏳ '미완' 타입으로 일괄 저장</option>
+                <option value="complete">✅ '완결' 타입으로 일괄 저장</option>
+            </select>
+            <textarea id="bulkInput" rows="3" placeholder="제목 권수 해상도 (여러 줄 입력 가능)&#10;예: 원피스 13권 1500px" style="font-size: 13px;"></textarea>
+            
+            <div id="bulkPreview" style="margin-top:8px; font-size:12px; color:var(--text-muted); background:var(--panel); padding:8px 12px; border-radius:4px; border:1px solid var(--border); display:none;"></div>
+            
+            <button id="saveBtn" style="width:100%; margin-top: 8px; background: #20c997; font-size: 14px;">목록에 일괄 추가하기</button>
+        </div>
+
+            <div class="batch-control">
+                <div>
+                    <strong style="color: var(--text);">검색된 결과 타입 일괄 변경:</strong>
+                    <div>
+                        <select id="batchTypeSelect" style="width: auto; margin-left: 5px; display: inline-block;">
+                            <option value="exclude">제외</option>
+                            <option value="incomplete">미완</option>
+                            <option value="complete">완결</option>
+                        </select>
+                        <button id="batchUpdateBtn" style="margin-left: 5px; background: #6c757d; padding: 4px 12px;">일괄 적용</button>
+                    </div>
+                </div>
+                <div>
+                    <strong style="color: var(--text);">검색:</strong>
+                    <div>
+                        <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 60%; border-color: #0d6efd;">
+                        <select id="sortSelect" style="width: 40%;">
+                            <option value="id_desc">최신 등록순</option>
+                            <option value="id_asc">오래된 등록순</option>
+                            <option value="title_asc">제목 가나다순</option>
+                            <option value="title_desc">제목 역순</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        
+        <div id="listCountDisplay" style="margin-top: 15px; margin-bottom: 8px; font-weight: bold; color: var(--text-muted); font-size: 13px;"></div>
+
+        <table>
+            <thead>
+            <tr>
+                <th style="width: 75px;">타입</th>
+                <th>도서 제목</th>
+                <th style="width: 80px;">해상도</th>
+                <th style="width: 60px;">권수</th>
+                <th style="width: 80px;">등록일</th>
+                <th style="width: 110px;">관리</th>
+            </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+        </table>
+
+        <div id="paginationContainer" class="pagination-container"></div>
+        </div>
+
+        <div id="tab-settings" class="tab-content">
+        <div class="panel-box">
+            <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">확장프로그램이 작동할 사이트를 관리합니다. 낯선 사이트는 상세페이지에서 <b>[우클릭 ➡️ 요소를 상세페이지 제목으로 등록]</b> 기능을 사용하면 훨씬 정확하게 등록됩니다.</p>
+            <div class="flex-row">
+            <input type="text" id="siteInput" placeholder="직접 추가 (예: domain.com)">
+            <button id="addSiteBtn">수동 추가</button>
+            </div>
+            <div id="siteList" style="margin-top: 10px; display: flex; flex-wrap: wrap;"></div>
+        </div>
+
+        <div class="panel-box">
+            <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
+            웹사이트 제목에서 <b>무조건 삭제하고 싶은 단어(작가명, 스캔팀 등)</b>를 등록하세요. <br>
+            <span style="color:#e83e8c;">💡 예시:</span> '신카이 마코토'를 등록하면 👉 "별의 목소리 신카이 마코토"가 "별의 목소리"로 자동 정제됩니다. (주의: 일반 명사를 등록하면 정상적인 책 제목도 잘릴 수 있습니다.)
+            </p>
+            <div class="flex-row">
+            <input type="text" id="filterInput" placeholder="삭제할 텍스트 정확히 입력 (예: 오다 에이치로)">
+            <button id="addFilterBtn" style="background:#dc3545;">금지어 추가</button>
+            </div>
+            <div id="filterList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
+        </div>
+
+        <div class="panel-box sub-options">
+            <h4 style="font-size: 14px;">⚙️ 확장 기능 설정</h4>
+            <label>
+                <input type="checkbox" id="autoFolderCheckbox" checked>
+                <b>자동 폴더 생성 다운로드</b> 
+                <span>바로다운로드 시 책 제목으로 폴더를 자동 생성합니다</span>
+            </label>
+            <label>
+                <input type="checkbox" id="showDownloadUICheckbox" checked>
+                <b>다운로드 현황판 표시</b> 
+                <span>화면 좌측 하단에 실시간 진행률 팝업 노출</span>
+            </label>
+            <label>
+                <input type="checkbox" id="autoConfirmCheckbox" checked>
+                <b>확인창(Confirm) 자동 스킵</b> 
+                <span>포인트 차감 등 반복되는 귀찮은 알림창 무시</span>
+            </label>
+            <label>
+                <input type="checkbox" id="focusLeftTabCheckbox">
+                <b>활성 탭 종료 시 왼쪽 탭 포커스</b> 
+                <span>크롬 기본값인 '오른쪽 탭' 대신 '왼쪽 탭'으로 이동합니다</span>
+            </label>
+            <label>
+                <input type="checkbox" id="openSlidePanelCheckbox">
+                <b>슬라이드 패널로 열기</b> 
+                <span>체크 시 확장프로그램 아이콘 클릭 시 우측 사이드 패널로 열립니다</span>
+            </label>
+
+            <label>
+                <input type="checkbox" id="connectEverythingCheckbox">
+                <b>에브리띵 연결</b> 
+                <span>
+                    <div style="">
+                    체크 시 게시물 상세페이지에서 에브리띵 검색 기능을 활성화합니다.<br>
+                    
+                        <details style="margin-top: 12px; max-width: 550px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; box-sizing: border-box;">
+                            <summary style="padding: 12px 14px; font-size: 13px; font-weight: bold; color: var(--text); cursor: pointer; user-select: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
+                                <span>[Everything 연동 방법 확인하기]</span>
+                                <span class="toggle-icon" style="font-size: 10px; transition: transform 0.2s; color: var(--text-muted);">▶</span>
+                            </summary>
+                            <div style="padding: 14px; border-top: 1px solid var(--border); background: var(--panel);">
+                                <ol style="margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--text-muted);">
+                                    <li>에브리띵 공식 사이트에서 프로그램을 다운로드 및 설치합니다. (URL: <a href="https://www.voidtools.com/ko-kr/" target="_blank" style="color: #0d6efd; text-decoration: none; font-weight: bold;">voidtools.com</a>)</li>
+                                    <li>Everything 프로그램을 실행합니다.</li>
+                                    <li>상단 메뉴에서 <b>[도구] &gt; [설정] &gt; [일반]</b>으로 이동한 뒤, <b>'es: URL 연결(P)'</b> 항목을 체크하고 [확인]을 클릭합니다.
+                                        <img src="/images/everything01.png" style="max-width: 100%; height: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; display: block;" alt="Everything 설정 가이드">
+                                    </li>
+                                    <li>본 확장프로그램 설정에서 <b>'에브리띵 연결'</b> 옵션을 체크합니다.</li>
+                                    <li>게시물 상세페이지에서 '에브리띵검색' 버튼 클릭 시, 최초 1회에 한해 Everything 프로그램과의 연결 허용 여부를 묻는 브라우저 팝업이 발생합니다. 이때 <b>'항상 허용'</b>을 선택하시면 이후부터 클릭 즉시 추출된 책 제목으로 에브리띵 검색이 자동 실행됩니다.
+                                        <img src="/images/everything02.png" style="max-width: 100%; height: auto; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; display: block;" alt="연결 허용 가이드">
+                                    </li>
+                                </ol>
+                            </div>
+                        </details>
+                    </div>
+                </span>
+            </label>
+        </div>
     </div>
 
     <div id="tab-backup" class="tab-content">
-      <div class="panel-box" style="text-align: center; padding: 30px 20px;">
+        <div class="panel-box" style="text-align: center; padding: 30px 20px;">
         <h4 style="border:none; margin-bottom: 5px; font-size: 16px;">💾 데이터 안전하게 보관하기</h4>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 25px;">소중하게 모은 도서 데이터를 파일로 저장하거나, 기존 데이터를 복구합니다.</p>
         
         <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px;">
-          <button id="exportBtn" style="background: #17a2b8; padding: 10px 25px; font-size: 14px;">⬇️ 내 PC로 데이터 백업</button>
-          <button id="importBtn" style="background: #fd7e14; padding: 10px 25px; font-size: 14px;">⬆️ 기존 데이터 복구</button>
-          <input type="file" id="fileInput" style="display:none" accept=".json">
+            <button id="exportBtn" style="background: #17a2b8; padding: 10px 25px; font-size: 14px;">⬇️ 내 PC로 데이터 백업</button>
+            <button id="importBtn" style="background: #fd7e14; padding: 10px 25px; font-size: 14px;">⬆️ 기존 데이터 복구</button>
+            <input type="file" id="fileInput" style="display:none" accept=".json">
         </div>
         
         <div style="background: var(--bg); display: inline-block; padding: 8px 15px; border-radius: 15px; font-size: 13px; color: var(--text-muted); border: 1px solid var(--border);">
-          <b id="lastBackupTime">최근 백업 기록: 없음</b>
+            <b id="lastBackupTime">최근 백업 기록: 없음</b>
         </div>
-      </div>
+        </div>
     </div>
 
     <div id="tab-history" class="tab-content">
-      <div class="panel-box" style="border:none; padding: 0;">
+        <div class="panel-box" style="border:none; padding: 0;">
         <div id="releaseHistoryContainer">
-          <div style="text-align: center; color: var(--text-muted); padding: 30px;">
+            <div style="text-align: center; color: var(--text-muted); padding: 30px;">
             ⏳ GitHub에서 업데이트 기록을 불러오는 중입니다...
-          </div>
+            </div>
         </div>
-      </div>
+        </div>
     </div>
     
-  </div>
+</div>
 
-  <button id="undoBtn" style="position: fixed; bottom: 30px; right: 30px; display: none; padding: 10px 18px; font-size: 14px; font-weight: 900; background: #ffc107; color: #000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-radius: 30px; z-index: 9999; animation: fadeIn 0.3s;">
-      ⏪ 방금 전 작업 취소하기
-  </button>
+<button id="undoBtn" style="position: fixed; bottom: 30px; right: 30px; display: none; padding: 10px 18px; font-size: 14px; font-weight: 900; background: #ffc107; color: #000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-radius: 30px; z-index: 9999; animation: fadeIn 0.3s;">
+    ⏪ 방금 전 작업 취소하기
+</button>
 
-  <script src="common.js"></script>
-  <script src="options.js"></script>
+<script src="common.js"></script>
+<script src="options.js"></script>
 </body>
 </html>

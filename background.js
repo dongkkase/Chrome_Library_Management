@@ -110,6 +110,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return true;
       }
 
+      if (message.type === "everything_search") {
+          chrome.tabs.create({ url: "es:" + encodeURIComponent(message.cleanTitle) }).catch(() => {});
+          return true;
+      }
+
       console.log(message.type);
       if (message.type === "ridi_preview") {
           (async () => {

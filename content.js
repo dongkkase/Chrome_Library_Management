@@ -41,6 +41,35 @@ const PRE_DEFINED_SITES = [
         body { padding-bottom: 120px !important; }
     `
   },
+{ 
+    url: "127.0.0.1", 
+    selector: "#data_list",
+    thumbSelector: "img", 
+    excludeThumbSelector: ".thumbnail",
+    allowedDLs: ["giga", "gofile", "transfer"],
+    autoConfirmKeywords: ["포인트", "열람"], 
+    
+    getHighResUrlAsync: async (thumb) => {
+        const link = thumb.closest('a');
+        if (!link || !link.href) return "";
+        if (thumb.dataset.cachedHighRes) return thumb.dataset.cachedHighRes;
+
+        try {
+            const res = await fetch(link.href);
+            const html = await res.text();
+            // 최적화: 무거운 DOMParser 대신 정규표현식을 사용하여 추출 속도 대폭 향상
+            const match = html.match(/class=["'][^"']*view-content[^"']*["'][\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+            if (match && match[1]) {
+                const absoluteUrl = new URL(match[1], link.href).href;
+                thumb.dataset.cachedHighRes = absoluteUrl; 
+                return absoluteUrl;
+            }
+        } catch (error) {
+            console.log("고화질 썸네일 추출 실패:", error);
+        }
+        return "";
+    },
+  },
 {
     url: "ridibooks.com", selector: ".infinite-scroll-component", allowedDLs: []
 },
@@ -80,9 +109,11 @@ let lastRightClickedElement = null;
 
 let isDownloadUIEnabled = true; 
 let titleProcessingCache = new Map(); 
+let isEverythingEnabled = false;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
+    isEverythingEnabled = !!data.connectEverything;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -305,6 +336,10 @@ function showToast(book, isDelete = false) {
   let details = [];
   if (book.resolution && !isDelete) details.push(book.resolution);
   if (book.lastVol && !isDelete) details.push(book.lastVol + '권');
+  // 누락 정보 추가 로직
+  if (book.missingVols && book.missingVols.length > 0 && !isDelete) {
+      details.push('누락:' + book.missingVols.join(','));
+  }
   const detailStr = details.length > 0 ? ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.join(' | ') + ')</span>' : '';
 
   toast.innerHTML = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + book.title + detailStr;
@@ -530,7 +565,6 @@ function injectDirectDownloadButtons(allowedDLs) {
 }
 
 function removeBadge(link) {
-    // :scope > 를 추가하여 엄한 자식 요소의 뱃지를 건드리지 않게 방어
     if (link.style.textDecoration || link.querySelector(':scope > .book-badge')) {
         link.style.removeProperty("text-decoration");
         link.style.removeProperty("color");
@@ -543,6 +577,121 @@ function removeBadge(link) {
         const badge = link.querySelector(':scope > .book-badge');
         if (badge) badge.remove();
     }
+}
+
+// [전면 수정] 상세페이지 누락관리 팝오버 말풍선 디자인 및 애니메이션 적용 로직
+let contentVolPopover = null;
+
+function openMissingPopoverContent(targetNoSpace, badgeElement) {
+    if (!contentVolPopover) {
+        contentVolPopover = document.createElement('div');
+        contentVolPopover.id = 'bm-missing-popover';
+        document.body.appendChild(contentVolPopover);
+        
+        // 말풍선 삼각형 및 애니메이션 효과를 위한 스타일 동적 주입 (최초 1회)
+        if (!document.getElementById('bm-popover-style')) {
+            const style = document.createElement('style');
+            style.id = 'bm-popover-style';
+            style.innerHTML = `
+                @keyframes bmPopIn {
+                    0% { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
+                    60% { opacity: 1; transform: translate(-50%, 5px) scale(1.03); }
+                    100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+                }
+                #bm-missing-popover {
+                    animation: bmPopIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+                    transform-origin: top center; /* 푱! 효과 시 기준점을 상단 중앙으로 설정 */
+                }
+                /* 말풍선 삼각형 꼬리 - 테두리 부분 */
+                #bm-missing-popover::after {
+                    content: ''; position: absolute; bottom: 100%; left: 50%;
+                    transform: translateX(-50%); border: 10px solid transparent;
+                    border-bottom-color: #dee2e6; /* 테두리 색상 */
+                }
+                /* 말풍선 삼각형 꼬리 - 내부 배경 부분 */
+                #bm-missing-popover::before {
+                    content: ''; position: absolute; bottom: 100%; left: 50%;
+                    transform: translateX(-50%); border: 9px solid transparent;
+                    border-bottom-color: #fff; /* 내부 배경 색상 */
+                    z-index: 1; /* 테두리보다 위에 배치 */
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.addEventListener('click', (e) => {
+            if (contentVolPopover && !contentVolPopover.contains(e.target) && !e.target.closest('button')) {
+                contentVolPopover.style.display = 'none';
+            }
+        });
+    }
+
+    chrome.storage.local.get({ bookList: [] }, (data) => {
+        const list = data.bookList;
+        const dbBook = list.find(b => {
+            const noSpace = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+            return noSpace === targetNoSpace;
+        });
+
+        if (!dbBook) {
+            showInfoToast('도서 데이터가 아직 저장되지 않았습니다. 잠시 후 다시 시도해주세요.', true);
+            return;
+        }
+
+        const lastVol = parseInt(dbBook.lastVol, 10);
+        if (isNaN(lastVol) || lastVol <= 0) {
+            showInfoToast('권수를 먼저 옵션창에서 숫자로 저장한 뒤에 이용해주세요.', true);
+            return;
+        }
+
+        let missingVols = dbBook.missingVols || [];
+
+        contentVolPopover.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:bold; border-bottom:1px solid #dee2e6; padding-bottom:8px; margin-bottom:8px; color:#333;">
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${dbBook.title} (총 ${lastVol}권)</span>
+                <button id="bmClosePopoverBtn" style="background:transparent; color:#333; padding:0; margin-left:5px; font-size:16px; border:none; cursor:pointer;">✕</button>
+            </div>
+            <div style="font-size:11px; color:#6c757d; margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
+            <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:5px; max-height:200px; overflow-y:auto; padding-right:4px; box-sizing:border-box;">
+                ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
+                    <div class="bm-vol-item ${missingVols.includes(v) ? 'missing' : ''}" data-vol="${v}" style="text-align:center; padding:6px 0; font-size:12px; background:${missingVols.includes(v) ? '#ffe3e3' : '#f8f9fa'}; border:1px solid ${missingVols.includes(v) ? '#ffa8a8' : '#dee2e6'}; border-radius:4px; cursor:pointer; user-select:none; color:${missingVols.includes(v) ? '#e03131' : '#333'}; font-weight:500; transition:all 0.1s; ${missingVols.includes(v) ? 'text-decoration:line-through; opacity:0.8;' : ''}">${v}</div>
+                `).join('')}
+            </div>
+        `;
+
+        // 애니메이션이 적용되도록 하기 위해 display:none 상태에서 즉시 스타일 적용 후 block 처리
+        contentVolPopover.style.cssText = "position:absolute; display:none; background:#fff; border:1px solid #dee2e6; border-radius:10px; padding:15px; box-shadow:0 6px 18px rgba(0,0,0,0.2); z-index:9999999; width:250px; box-sizing:border-box;";
+
+        const rect = badgeElement.getBoundingClientRect();
+        // 버튼의 중앙 하단에 말풍선이 오도록 좌표 계산
+        const topPos = rect.bottom + window.scrollY + 12; // 삼각형 높이를 고려해 여백 부여
+        const leftPos = rect.left + (rect.width / 2) + window.scrollX;
+
+        contentVolPopover.style.top = `${topPos}px`;
+        contentVolPopover.style.left = `${leftPos}px`;
+        contentVolPopover.style.transform = `translateX(-50%)`; // 수평 중앙 정렬 고정
+        contentVolPopover.style.display = 'block';
+
+        document.getElementById('bmClosePopoverBtn').onclick = () => contentVolPopover.style.display = 'none';
+        
+        contentVolPopover.querySelectorAll('.bm-vol-item').forEach(item => {
+            item.onclick = (e) => {
+                const vol = parseInt(e.target.dataset.vol, 10);
+                if (e.target.classList.contains('missing')) {
+                    e.target.classList.remove('missing');
+                    e.target.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; cursor:pointer; user-select:none; color:#333; font-weight:500; transition:all 0.1s;";
+                    missingVols = missingVols.filter(v => v !== vol);
+                } else {
+                    e.target.classList.add('missing');
+                    e.target.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#ffe3e3; border:1px solid #ffa8a8; border-radius:4px; cursor:pointer; user-select:none; color:#e03131; font-weight:500; transition:all 0.1s; text-decoration:line-through; opacity:0.8;";
+                    missingVols.push(vol);
+                }
+                
+                const updatedList = list.map(b => b.id === dbBook.id ? { ...b, missingVols } : b);
+                chrome.storage.local.set({ bookList: updatedList }); 
+            };
+        });
+    });
 }
 
 function createQuickActions(linkData, hasBook) {
@@ -558,8 +707,10 @@ function createQuickActions(linkData, hasBook) {
         { label: '미완', color: '#ff922b', action: 'incomplete' },
         { label: '완결', color: '#4dabf7', action: 'complete' },
         { label: '삭제', color: '#868e96', action: 'delete', display: hasBook }, 
+        { label: '누락관리', color: '#f06595', action: 'missing_vol', display: hasBook },
         { label: '구글검색', color: '#20c997', action: 'search' },
         { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
+        { label: '에브리띵검색', color: '#495057', action: 'everything_search', display: true }
     ];
 
     buttons.forEach(btnInfo => {
@@ -591,7 +742,31 @@ function createQuickActions(linkData, hasBook) {
                     return;
                 }
 
-                if (btnInfo.action === 'search' || btnInfo.action === 'ridi_preview') {
+                if (btnInfo.action === 'everything_search') {
+                    if (!isEverythingEnabled) {
+                        showInfoToast("⚠️ [사이트 및 설정] 탭에서 '에브리띵 연결' 옵션을 먼저 체크해주세요.", true);
+                        return;
+                    }
+                    const cleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    let iframe = document.getElementById('bm-everything-iframe');
+                    if (!iframe) {
+                        iframe = document.createElement('iframe');
+                        iframe.id = 'bm-everything-iframe';
+                        iframe.style.display = 'none';
+                        document.body.appendChild(iframe);
+                    }
+                    iframe.src = "es:" + encodeURIComponent(cleanTitle);
+                    return;
+                }
+
+                if (btnInfo.action === 'missing_vol') {
+                    const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+                    openMissingPopoverContent(targetNoSpace, btn);
+                    return;
+                }
+
+                if (btnInfo.action === 'search' || btnInfo.action === 'ridi_preview' || btnInfo.action === 'everything_search') {
                     if (btnInfo.action === 'ridi_preview') {
                         const originalText = btn.textContent;
                         btn.textContent = '⏳';
@@ -744,6 +919,13 @@ function applyStyleToSingleLink(link) {
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
 
+        // 누락 뱃지 생성 로직
+        let missingHtml = '';
+        if (book.missingVols && book.missingVols.length > 0) {
+            let mStr = book.missingVols.join(',');
+            missingHtml = '<span style="background:#7b1010; color:#fff; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px; margin-left:4px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,0.2);">누락:' + mStr + '</span>';
+        }
+
         link.style.removeProperty("background-color");
         link.style.removeProperty("padding");
         link.style.removeProperty("border-radius");
@@ -758,7 +940,7 @@ function applyStyleToSingleLink(link) {
           link.style.setProperty("font-weight", "normal", "important");
           link.style.setProperty("opacity", "0.5", "important");
           link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span><span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
           badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -769,7 +951,7 @@ function applyStyleToSingleLink(link) {
           link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -782,12 +964,12 @@ function applyStyleToSingleLink(link) {
               link.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               link.style.setProperty("color", "#0056b3", "important"); 
               link.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span><span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
@@ -900,6 +1082,13 @@ function applyStyleToDetailElement(el) {
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
 
+        // 누락 뱃지 생성 로직
+        let missingHtml = '';
+        if (book.missingVols && book.missingVols.length > 0) {
+            let mStr = book.missingVols.join(',');
+            missingHtml = '<span style="background:#7b1010; color:#fff; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px; margin-left:5px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,0.2);">누락:' + mStr + '</span>';
+        }
+
         el.style.removeProperty("background-color");
         el.style.removeProperty("padding");
         el.style.removeProperty("border-radius");
@@ -912,7 +1101,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("text-decoration", "line-through", "important");
           el.style.setProperty("color", "#aaaaaa", "important");
           el.style.setProperty("opacity", "0.5", "important");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span><span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
           badgeStyle = "font-size:11px; font-weight:bold; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; text-decoration:none !important; opacity:1 !important;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -921,7 +1110,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("font-weight", "800", "important");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -932,12 +1121,12 @@ function applyStyleToDetailElement(el) {
               el.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               el.style.setProperty("color", "#0056b3", "important"); 
               el.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span><span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:11px; background:#f0f7ff; border:1px solid #007bff; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
@@ -1055,17 +1244,12 @@ function applyStyles() {
 function generateOptimalSelector(el) {
     if (!el) return '';
     if (el.nodeType === 3) el = el.parentElement; 
-    if (el.id) return el.tagName.toLowerCase() + '#' + el.id;
     const classes = Array.from(el.classList).filter(c => !['hover','active','focus'].includes(c));
     if (classes.length > 0) return el.tagName.toLowerCase() + '.' + classes.join('.');
-    if (el.parentElement) {
-        const pClasses = Array.from(el.parentElement.classList).filter(c => !['hover','active','focus'].includes(c));
-        if (pClasses.length > 0) return el.parentElement.tagName.toLowerCase() + '.' + pClasses.join('.') + ' > ' + el.tagName.toLowerCase();
-    }
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1264,7 +1448,7 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
               initDataCache(data);
               document.querySelectorAll(globalTargetSelector).forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -1303,15 +1487,11 @@ try {
 } catch(e) {}
 
 chrome.storage.local.get({ autoConfirm: true }, (data) => {
-    // console.log('auto confirm 1');
     if (data.autoConfirm) {
-        // console.log('auto confirm 2');
         const currentHostname = window.location.hostname;
         const activeConfig = PRE_DEFINED_SITES.find(site => currentHostname.includes(site.url));
         if (activeConfig && activeConfig.autoConfirmKeywords && activeConfig.autoConfirmKeywords.length > 0) {
-            // console.log('auto confirm 3');
             try {
-                // console.log('auto confirm 4');
                 chrome.runtime.sendMessage({ action: "INJECT_BYPASS_SCRIPT", keywords: activeConfig.autoConfirmKeywords }).catch(()=>{});
             } catch (err) {}
         }
@@ -1323,7 +1503,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1335,8 +1515,32 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
             initDataCache(data);
+            debouncedApplyStyles();
+        });
+    }
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local') {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+            initDataCache(data);
+
+            // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
+            document.querySelectorAll(globalTargetSelector).forEach(el => {
+                if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
+                else if (el.querySelectorAll) {
+                    el.querySelectorAll('a').forEach(a => { if (a._bmData) a._bmData.raw = null; });
+                }
+            });
+
+            if (globalDetailSelector) {
+                document.querySelectorAll(globalDetailSelector).forEach(el => {
+                    if (el._bmDetailData) el._bmDetailData.raw = null;
+                });
+            }
+
             debouncedApplyStyles();
         });
     }

@@ -3,3 +3,4 @@ libmanagement.zip
 build.ps1
 .gitignore
 *.bak
+demo_site/

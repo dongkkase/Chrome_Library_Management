@@ -109,16 +109,25 @@ function renderList(filter = "", resetPage = false) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>
-            <select class="edit-type" data-id="${book.id}" style="padding: 4px;">
+            <select class="edit-type" data-id="${book.id}" data-type="${book.type}" style="padding: 4px;">
               <option value="exclude" ${book.type==='exclude'?'selected':''}>제외</option>
               <option value="incomplete" ${book.type==='incomplete'?'selected':''}>미완</option>
               <option value="complete" ${book.type==='complete'?'selected':''}>완결</option>
             </select>
           </td>
           <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
-          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}"></td>
-          <td><input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}"></td>
-          <td style="color:var(--text-muted); font-size:11px;">${formatDisplayDate(book.date)}</td>
+          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}" placeholder="해상도" style="width:65px"></td>
+          
+          <td style="position:relative; vertical-align:middle; padding:0;">
+            <div style="display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:100%;">
+              <input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:35px; margin:0; padding:4px;">
+              ${(book.missingVols && book.missingVols.length > 0) 
+                  ? `<span class="missing-badge" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">${book.missingVols.length}누락</span>` 
+                  : `<span class="missing-badge empty" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">+누락</span>`}
+            </div>
+          </td>
+          
+          <td style="color:var(--text-muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${formatDisplayDate(book.date)}</td>
           <td>
               <button class="btn-save" data-id="${book.id}">수정</button>
               <button class="btn-del" data-id="${book.id}">삭제</button>
@@ -648,6 +657,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 라이브 타입 변경 색상 반영을 위한 이벤트 리스너
+    if (listBody) {
+        listBody.addEventListener('change', (e) => {
+            if (e.target.classList.contains('edit-type')) {
+                e.target.setAttribute('data-type', e.target.value);
+            }
+        });
+    }
+
     const addSiteBtn = document.getElementById('addSiteBtn');
     if (addSiteBtn) {
       addSiteBtn.onclick = () => {
@@ -723,14 +741,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const folderCheckbox = document.getElementById('autoFolderCheckbox'); 
     const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox');
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
+    const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
 
-    // 옵션값 로드 (focusLeftTab 추가)
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
-        if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab; // 로드 로직 추가
+        if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab;
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
+        if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
     });
     
     // 옵션값 변경 시 저장 로직
@@ -758,7 +777,63 @@ document.addEventListener('DOMContentLoaded', () => {
     // 슬라이드 패널 저장 로직 수정 (레이스 컨디션 방지 및 백그라운드 이관)
     if (slidePanelCheckbox) {
         slidePanelCheckbox.addEventListener('change', (e) => {
-            chrome.storage.local.set({ openSlidePanel: e.target.checked });
+            const isSlide = e.target.checked;
+            chrome.storage.local.set({ openSlidePanel: isSlide }, () => {
+                if (isSlide) {
+                    chrome.windows.getCurrent({ populate: false }, (currentWindow) => {
+                        if (chrome.sidePanel && chrome.sidePanel.open) {
+                            chrome.sidePanel.open({ windowId: currentWindow.id })
+                                .then(() => {
+                                    window.close();
+                                })
+                                .catch((err) => {
+                                    console.error(err);
+                                    window.close();
+                                });
+                        } else {
+                            window.close();
+                        }
+                    });
+                } else {
+                    // 확장 프로그램 아이콘을 프로그래밍 방식으로 강제 클릭(트리거)하여 원래의 팝업 말풍선을 엽니다.
+                    if (chrome.action && chrome.action.openPopup) {
+                        chrome.action.setPopup({ popup: "options.html" }, () => {
+                            chrome.action.openPopup()
+                                .then(() => {
+                                    window.close();
+                                })
+                                .catch((err) => {
+                                    console.error("Popup trigger failed:", err);
+                                    // API 지원이 안 되거나 권한 문제 시 기존 단독 창 모드로 대체
+                                    chrome.windows.create({
+                                        url: "options.html",
+                                        type: "popup",
+                                        width: 760,
+                                        height: 850
+                                    }, () => {
+                                        window.close();
+                                    });
+                                });
+                        });
+                    } else {
+                        // 하위 버전 크롬 호환용 폴백
+                        chrome.windows.create({
+                            url: "options.html",
+                            type: "popup",
+                            width: 760,
+                            height: 850
+                        }, () => {
+                            window.close();
+                        });
+                    }
+                }
+            });
+        });
+    }
+
+    if (connectEverythingCheckbox) {
+        connectEverythingCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ connectEverything: e.target.checked });
         });
     }
 });
@@ -849,4 +924,105 @@ function initVersionCheck() {
       checkVersion(true);
     });
   }
+}
+
+
+// ============================================================================
+// [신규 추가] 실시간 데이터 동기화 리스너
+// 우클릭 메뉴 등 외부(백그라운드)에서 데이터가 변경되었을 때, 
+// 열려있는 슬라이드 패널(또는 옵션창)의 리스트를 즉시 새로고침합니다.
+// ============================================================================
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.bookList) {
+        const searchInput = document.getElementById('searchInput');
+        const filter = searchInput ? searchInput.value : '';
+        
+        // 검색어가 유지된 상태로 현재 페이지 위치에서 리스트를 다시 그립니다.
+        renderList(filter, false);
+    }
+});
+
+
+// 누락 권수 관리 팝오버 초기화 및 이벤트 리스너 추가
+let volPopover = document.getElementById('missingPopover');
+if (!volPopover) {
+    volPopover = document.createElement('div');
+    volPopover.id = 'missingPopover';
+    document.body.appendChild(volPopover);
+    
+    // 팝오버 외부 클릭 시 닫기
+    document.addEventListener('click', (e) => {
+        if (!volPopover.contains(e.target) && !e.target.closest('.missing-badge')) {
+            volPopover.style.display = 'none';
+        }
+    });
+}
+
+// 리스트 내의 누락 배지 클릭 감지
+if (listBody) {
+    listBody.addEventListener('click', (e) => {
+        const badge = e.target.closest('.missing-badge');
+        if (badge) {
+            const id = parseFloat(badge.dataset.id);
+            openMissingPopover(id, badge);
+        }
+    });
+}
+
+function openMissingPopover(bookId, badgeElement) {
+    chrome.storage.local.get({ bookList: [] }, (data) => {
+        const list = data.bookList;
+        const book = list.find(b => b.id === bookId);
+        if (!book) return;
+
+        const lastVol = parseInt(book.lastVol, 10);
+        if (isNaN(lastVol) || lastVol <= 0) {
+            alert('권수를 먼저 숫자로 입력하고 [수정] 버튼으로 저장한 뒤에 이용해주세요.');
+            return;
+        }
+
+        let missingVols = book.missingVols || [];
+
+        // 팝오버 내부 HTML 구성 (입력된 최대 권수까지 번호표 렌더링)
+        volPopover.innerHTML = `
+            <div class="popover-header">
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${book.title} (총 ${lastVol}권)</span>
+                <button id="closePopoverBtn" style="background:transparent; color:var(--text); padding:0; margin-left:5px; font-size:14px; box-shadow:none; cursor:pointer;">✕</button>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
+            <div class="vol-grid">
+                ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
+                    <div class="vol-item ${missingVols.includes(v) ? 'missing' : ''}" data-vol="${v}">${v}</div>
+                `).join('')}
+            </div>
+        `;
+
+        // 클릭된 배지 위치를 계산하여 팝오버 띄우기
+        const rect = badgeElement.getBoundingClientRect();
+        volPopover.style.display = 'block';
+        volPopover.style.top = `${rect.bottom + window.scrollY + 8}px`;
+        let leftPos = rect.left + window.scrollX - 180;
+        if (leftPos < 10) leftPos = 10; // 화면 왼쪽 벗어남 방지
+        volPopover.style.left = `${leftPos}px`;
+
+        document.getElementById('closePopoverBtn').onclick = () => volPopover.style.display = 'none';
+        
+        // 개별 번호 클릭 시 토글 및 자동 저장
+        volPopover.querySelectorAll('.vol-item').forEach(item => {
+            item.onclick = (e) => {
+                const vol = parseInt(e.target.dataset.vol, 10);
+                if (e.target.classList.contains('missing')) {
+                    e.target.classList.remove('missing');
+                    missingVols = missingVols.filter(v => v !== vol);
+                } else {
+                    e.target.classList.add('missing');
+                    missingVols.push(vol);
+                }
+                
+                // 변경된 배열을 저장소에 업데이트 (저장 즉시 onChanged 이벤트로 인해 리스트 배지가 업데이트됨)
+                const updatedList = list.map(b => b.id === bookId ? { ...b, missingVols } : b);
+                chrome.storage.local.set({ bookList: updatedList }); 
+            };
+        });
+    });
 }
