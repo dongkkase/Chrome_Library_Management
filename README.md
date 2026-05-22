@@ -32,76 +32,73 @@
 
 
 
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/before_after1.png?v=3'/>
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/before_after2.png?v=3'/>
+<br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/before_after1.png?v=3'/>
+<br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/before_after2.png?v=3'/>
 
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1.png?v=3'/>
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1_2.png?v=3'/>
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1_3.png?v=3'/>
+<br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1.png?v=3'/>
+<br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1_2.png?v=3'/>
+<br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/1_3.png?v=3'/>
 
 --- 
 
-- **최신화, 고해상도, 누락 체크**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/2.png?v=3'/>
+- **최신화, 고해상도, 누락 체크** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/2.png?v=3'/>
 
-- **제외, 미완, 완결, 삭제 처리시 알람 표기**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/3.png?v=3'/>
+- **제외, 미완, 완결, 삭제 처리시 알람 표기** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/3.png?v=3'/>
 
-- **누락 권 관리**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/16.png?v=3'/>
+- **누락 권 관리** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/16.png?v=3'/>
 
-- **바로 다운로드 기능**
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/10.png?v=3'/>
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/11.png?v=3'/>
+- **바로 다운로드 기능** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/10.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/11.png?v=3'/>
 
-- **썸네일 미리보기 기능**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/12.png?v=3'/>
+- **썸네일 미리보기 기능** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/12.png?v=3'/>
 
-- **타 사이트에서도 사용 가능**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13.png?v=3'/>
-사이트 상세페이지에서 책 제목 우 클릭하여 '이 요소를 상세페이지 제목으로 등록' 메뉴 클릭(사이트당 최초 1회 등록)
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_2.png?v=3'/>
+- **타 사이트에서도 사용 가능** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13.png?v=3'/>
+  사이트 상세페이지에서 책 제목 우 클릭하여 '이 요소를 상세페이지 제목으로 등록' 메뉴 클릭(사이트당 최초 1회 등록)
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_2.png?v=3'/>
 
-- **기본 퀵 등록 버튼**
-<img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_3.png?v=3'/>
-
-  - **제외 등록시**
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_4.png?v=3'/>
-
-  - **미완 등록시**
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_5.png?v=3'/>
-
-  - **완결 등록시**
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_6.png?v=3'/>
+- **기본 퀵 등록 버튼** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_3.png?v=3'/>
+  - **제외 등록시** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_4.png?v=3'/>
+  - **미완 등록시** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_5.png?v=3'/>
+  - **완결 등록시** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/13_6.png?v=3'/>
 
 ---
 
 ### 주요 사용 방법
 
 - 기능을 적용할 사이트 도메인을 입력해주세요.
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/4.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/4.png?v=3'/>
 - 필터링 관리
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/15.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/15.png?v=3'/>
 - 직접 입력(여러줄 입력하여 일괄 등록 가능)
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/5.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/5.png?v=3'/>
 - 링크 오른쪽 클릭하여 추가 (단축키: 키보드 1key + 1 or 2key 조합하여 사용 가능)
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/6.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/6.png?v=3'/>
 - 링크가 아니여도, 책 제목을 드래그한 뒤 오른쪽 클릭하여 추가 가능
-  <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/7.png?v=3'/>
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/7.png?v=3'/>
 
 ---
 
 ### 단점
 - **과도한 매칭**: 유사도 기준을 80%로 설정했기 때문에, 시리즈물이 아닌데 제목이 매우 유사한 전혀 다른 책이 제외/미완 처리될 가능성이 있습니다  
     (문 스바루와 스바루는 1글자 밖에 차이 나지 않아서 같은 제목으로 매칭되버리는 문제)  
-    <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/8.png?v=3'/>
-    <img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/9.png?v=3'/>
+    <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/8.png?v=3'/>
+    <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/9.png?v=3'/>
 - **매칭 실패**: 제목 자체가 완전히 다른 별칭으로 등록되어 있거나(예: 원어 제목 vs 번역 제목), 정규표현식으로 제거되지 않는 특수한 기기호가 포함된 경우 매칭에 실패할 수 있습니다.
     - 제목의 패턴이 깔끔하지 않을수록 매칭실패율은 올라갑니다.
  
 ---
 
-### ⚠️ 제목 판별이 안 되는(매칭 안 되는) 대표적인 5가지 경우
+### 제목 판별이 안 되는(매칭 안 되는) 대표적인 5가지 경우
 - 일본어(한자, 히라가나) 또는 기타 외국어로만 적힌 제목
   - 원인: 프로그램은 비교의 정확도를 높이기 위해 제목에서 **'한글, 영어, 숫자'**만 남기고 나머지는 모두 지워버립니다. (/[^a-zA-Z0-9가-힣\s]/g 정규식)
   - 결과: 만약 게시글 제목이 進撃の巨人 (진격의 거인) 처럼 한자/일본어로만 되어있다면, 필터링 후 글자가 아예 증발해버려 "제목 없음"으로 인식되고 매칭이 불가능해집니다.
