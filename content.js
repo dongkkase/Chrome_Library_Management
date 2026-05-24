@@ -110,10 +110,12 @@ let lastRightClickedElement = null;
 let isDownloadUIEnabled = true; 
 let titleProcessingCache = new Map(); 
 let isEverythingEnabled = false;
+let isShowListQuickBtn = false;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
     isEverythingEnabled = !!data.connectEverything;
+    isShowListQuickBtn = !!data.showListQuickBtn;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -992,6 +994,39 @@ function applyStyleToSingleLink(link) {
     } else if (existingBadge) {
         existingBadge.remove();
     }
+
+    // 리스트 퀵 버튼 항상 렌더링 (뱃지가 있을 때만)
+    if (isShowListQuickBtn && newBadgeHTML) {
+        let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
+        let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+        
+        const siteBodyNoSpace = link._bmData.siteBodyNoSpace;
+        const matchBook = exactMatchCache[siteBodyNoSpace] || (similarityCache[siteBodyNoSpace] && similarityCache[siteBodyNoSpace].book);
+        const hasBook = !!matchBook;
+
+        if (!existingActions || existingActions.dataset.hasBook !== String(hasBook)) {
+            if (existingBr) existingBr.remove();
+            if (existingActions) existingActions.remove();
+
+            const br = document.createElement('br');
+            br.className = 'bm-badge-br list-br';
+            link.appendChild(br);
+
+            const actions = createQuickActions(link._bmData, hasBook);
+            actions.classList.add('list-actions');
+            actions.dataset.hasBook = String(hasBook);
+            actions.style.marginLeft = "0";
+            actions.style.marginTop = "4px";
+            actions.style.display = "inline-flex"; 
+            link.appendChild(actions);
+        }
+    } else {
+        // 옵션이 꺼져있거나 뱃지가 없을 때 퀵버튼 제거
+        let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
+        let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+        if (existingBr) existingBr.remove();
+        if (existingActions) existingActions.remove();
+    }
 }
 
 function applyStyleToDetailElement(el) {
@@ -1249,7 +1284,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1503,7 +1538,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1515,7 +1550,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1524,7 +1559,7 @@ window.addEventListener("focus", () => {
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
             initDataCache(data);
 
             // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도

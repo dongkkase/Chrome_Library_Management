@@ -742,14 +742,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox');
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
     const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
+    const showListQuickBtnCheckbox = document.getElementById('showListQuickBtnCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
         if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab;
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
         if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
+        if (showListQuickBtnCheckbox) showListQuickBtnCheckbox.checked = data.showListQuickBtn;
     });
     
     // 옵션값 변경 시 저장 로직
@@ -834,6 +836,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (connectEverythingCheckbox) {
         connectEverythingCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ connectEverything: e.target.checked });
+        });
+    }
+    if (showListQuickBtnCheckbox) {
+        showListQuickBtnCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ showListQuickBtn: e.target.checked });
         });
     }
 });
