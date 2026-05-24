@@ -302,12 +302,14 @@ let isDownloadUIEnabled = true;
 let titleProcessingCache = new Map(); 
 let isEverythingEnabled = false;
 let isShowListQuickBtn = false;
+let isCustomThemeEnabled = false;
 let isAllowedBoard = true;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
     isEverythingEnabled = !!data.connectEverything;
     isShowListQuickBtn = !!data.showListQuickBtn;
+    isCustomThemeEnabled = !!data.useCustomTheme;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -1482,15 +1484,19 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
-        const fixStyle = document.createElement('style');
+        let fixStyle = document.getElementById('bm-custom-style');
+        if (!fixStyle) {
+            fixStyle = document.createElement('style');
+            fixStyle.id = 'bm-custom-style';
+            document.head.appendChild(fixStyle);
+        }
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-        if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
+        if (globalCustomCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalCustomCss;
         fixStyle.textContent = styleContent;
-        document.head.appendChild(fixStyle);
 
         applyStyles();
         
@@ -1736,7 +1742,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1748,7 +1754,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1757,8 +1763,16 @@ window.addEventListener("focus", () => {
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
             initDataCache(data);
+
+            // 실시간 테마 토글 적용/해제
+            let fixStyle = document.getElementById('bm-custom-style');
+            if (fixStyle) {
+                let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
+                if (globalCustomCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalCustomCss;
+                fixStyle.textContent = styleContent;
+            }
 
             // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
             document.querySelectorAll(globalTargetSelector).forEach(el => {

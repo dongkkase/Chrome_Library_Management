@@ -743,8 +743,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
     const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
     const showListQuickBtnCheckbox = document.getElementById('showListQuickBtnCheckbox');
+    const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -752,6 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
         if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
         if (showListQuickBtnCheckbox) showListQuickBtnCheckbox.checked = data.showListQuickBtn;
+        if (customThemeCheckbox) customThemeCheckbox.checked = data.useCustomTheme;
     });
     
     // 옵션값 변경 시 저장 로직
@@ -841,6 +843,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (showListQuickBtnCheckbox) {
         showListQuickBtnCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ showListQuickBtn: e.target.checked });
+        });
+    }
+    if (customThemeCheckbox) {
+        customThemeCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ useCustomTheme: e.target.checked });
         });
     }
 });
