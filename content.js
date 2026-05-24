@@ -7,6 +7,7 @@ const PRE_DEFINED_SITES = [
     excludeThumbSelector: ".board-thumbnail",
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
+    boardFilter: /bo_table=D2002/i,
     
     getHighResUrlAsync: async (thumb) => {
         const link = thumb.closest('a');
@@ -39,6 +40,88 @@ const PRE_DEFINED_SITES = [
             backdrop-filter: blur(5px) !important;
         }
         body { padding-bottom: 120px !important; }
+        
+        /* Tcafe 리스트 카드 스타일 레이아웃 (Grid) */
+        #fboardlist table.list-pc, 
+        #fboardlist table.list-pc tbody {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+            gap: 16px !important;
+            border: none !important;
+            background: transparent !important;
+        }
+        #fboardlist table.list-pc thead { display: none !important; }
+        
+        #fboardlist table.list-pc tr.bg0,
+        #fboardlist table.list-pc tr.bg1 {
+            display: flex !important;
+            flex-direction: column !important;
+            background: #ffffff !important;
+            border: 1px solid #e9ecef !important;
+            border-radius: 12px !important;
+            padding: 16px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04) !important;
+            transition: all 0.2s ease-in-out !important;
+            height: auto !important;
+            align-items: flex-start !important;
+        }
+        #fboardlist table.list-pc tr.bg0:hover,
+        #fboardlist table.list-pc tr.bg1:hover {
+            transform: translateY(-4px) !important;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
+            border-color: #80bdff !important;
+        }
+        #fboardlist table.list-pc td {
+            display: block !important;
+            border: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+            text-align: left !important;
+        }
+        #fboardlist table td.list-subject {
+            flex-grow: 1 !important;
+            margin-bottom: 12px !important;
+        }
+        #fboardlist table td.list-subject > a {
+            display: block !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            line-height: 1.5 !important;
+            color: #212529 !important;
+            white-space: normal !important;
+            word-break: keep-all !important;
+        }
+        #fboardlist table td:nth-child(1),
+        #fboardlist table th:nth-child(4), #fboardlist table td:nth-child(4),
+        #fboardlist table th:nth-child(6), #fboardlist table td:nth-child(6),
+        #fboardlist table th:nth-child(7), #fboardlist table td:nth-child(7) {
+            display: none !important;
+        }
+        /* 작성자 및 날짜 등 메타 정보 하단 배치 */
+        #fboardlist table td.list-details,
+        #fboardlist table td:nth-child(3) {
+            font-size: 12px !important;
+            color: #868e96 !important;
+            margin-top: auto !important;
+            padding-top: 10px !important;
+            border-top: 1px dashed #f1f3f5 !important;
+            width: 100% !important;
+        }
+        
+        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
+        .bm-quick-actions.list-actions {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            margin-top: 8px !important;
+            width: 100% !important;
+        }
+        .bm-quick-actions.list-actions button {
+            margin: 0 !important;
+            flex-shrink: 0 !important;
+            font-weight: 400 !important;
+            opacity: 0.7;
+        }
     `
   },
 { 
@@ -75,15 +158,123 @@ const PRE_DEFINED_SITES = [
 },
 {
     url: "enterjoy.day", 
-    selector: ".list-board", 
+    selector: "#fboardlist", 
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["열람하시겠습니까"], 
+    boardFilter: /bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)/i,
+    customCss: `
+        /* 게시판 리스트를 모던한 카드 그리드 형태로 변경 */
+        #fboardlist > ul, #fboardlist .board-list, #fboardlist > div,
+        #fboardlist table, #fboardlist table tbody {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+            gap: 16px !important;
+            padding: 0 !important;
+            border: none !important;
+            background: transparent !important;
+        }
+        #fboardlist table thead { display: none !important; }
+        #fboardlist .list-item, 
+        #fboardlist li,
+        #fboardlist table tbody tr {
+            display: flex !important;
+            flex-direction: column !important;
+            background: #ffffff !important;
+            border: 1px solid #e9ecef !important;
+            border-radius: 12px !important;
+            padding: 16px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04) !important;
+            transition: all 0.2s ease-in-out !important;
+            border-bottom: 1px solid #e9ecef !important;
+            width: auto !important;
+            align-items: flex-start !important;
+        }
+        #fboardlist .list-item:hover, 
+        #fboardlist li:hover,
+        #fboardlist table tbody tr:hover {
+            transform: translateY(-4px) !important;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
+            border-color: #80bdff !important;
+            z-index: 10;
+        }
+        #fboardlist table td {
+            display: block !important;
+            border: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+            text-align: left !important;
+        }
+        #fboardlist .wr-subject,
+        #fboardlist table td.td_subject,
+        #fboardlist table td.list-subject {
+            flex-grow: 1 !important;
+            margin-bottom: 12px !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        #fboardlist .wr-subject a,
+        #fboardlist table td.td_subject a,
+        #fboardlist table td.list-subject a {
+            display: block !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            line-height: 1.5 !important;
+            color: #212529 !important;
+            word-break: keep-all !important;
+            text-decoration: none !important;
+        }
+        #fboardlist .wr-subject a:hover,
+        #fboardlist table td.td_subject a:hover {
+            color: #0d6efd !important;
+        }
+        /* 작성자, 날짜 영역 하단 배치 */
+        #fboardlist .wr-name, 
+        #fboardlist .wr-date,
+        #fboardlist table td.td_name,
+        #fboardlist table td.td_datetime {
+            display: inline-block !important;
+            font-size: 12px !important;
+            color: #868e96 !important;
+            margin-top: 8px !important;
+        }
+        #fboardlist .wr-name,
+        #fboardlist table td.td_name { margin-right: 10px !important; }
+        
+        /* 기존 리스트 헤더 및 불필요 항목 숨김 */
+        #fboardlist .list-header,
+        .list-item .wr-good,
+        .list-item .wr-hit,
+        .list-item .wr-num,
+        #fboardlist table td.td_num,
+        #fboardlist table td.td_m_id,
+        #fboardlist table td.td_hit,
+        #fboardlist table td.td_good {
+            display: none !important;
+        }
+        
+        /* 뱃지 및 퀵 버튼 여백 조정 */
+        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
+        .bm-quick-actions.list-actions { margin-top: 8px !important; justify-content: flex-start !important; }
+    `,
 }, 
 { 
     url: "hellkaiv.net", 
     selector: "#gall_ul", 
     autoConfirmKeywords: ["링크", "발급"], 
-    allowedDLs: ["giga", "gofile", "hk"] 
+    allowedDLs: ["giga", "gofile", "hk"],
+    customCss: `
+        .bm-quick-actions.list-actions {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            margin-top: 6px !important;
+            width: 100% !important;
+        }
+        .bm-quick-actions.list-actions button {
+            margin: 0 !important;
+            flex-shrink: 0 !important;
+        }
+    `,
 },
 { 
     url: "amazon.co.jp", 
@@ -111,6 +302,7 @@ let isDownloadUIEnabled = true;
 let titleProcessingCache = new Map(); 
 let isEverythingEnabled = false;
 let isShowListQuickBtn = false;
+let isAllowedBoard = true;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
@@ -130,14 +322,17 @@ function initDataCache(data) {
         globalAllowedDLs = config.allowedDLs || [];
         globalTargetSelector = config.selector || 'a'; 
         globalCustomCss = config.customCss || '';
+        isAllowedBoard = config.boardFilter ? config.boardFilter.test(window.location.href) : true;
     } else if (matchedUserSite) {
         isTargetSite = true;
         globalAllowedDLs = ["giga", "gofile"]; 
         globalTargetSelector = 'a'; 
         globalCustomCss = matchedUserSite.customCss || '';
+        isAllowedBoard = true;
     } else {
         isTargetSite = false;
         globalAllowedDLs = [];
+        isAllowedBoard = true;
     }
 
     globalDetailSelector = (matchedUserSite && typeof matchedUserSite === 'object' && matchedUserSite.detailSelector) 
@@ -995,8 +1190,9 @@ function applyStyleToSingleLink(link) {
         existingBadge.remove();
     }
 
-    // 리스트 퀵 버튼 항상 렌더링 (뱃지가 있을 때만)
-    if (isShowListQuickBtn && newBadgeHTML) {
+    // 리스트 퀵 버튼 렌더링 (데이터가 없어도 표기하되, 작성자명 등 오작동 요소는 필터링)
+    const isLikelyTitle = !!newBadgeHTML || siteRes > 0 || siteVol > 0 || siteBodyOriginal.length > 3;
+    if (isShowListQuickBtn && isLikelyTitle && isAllowedBoard) {
         let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
         let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
         
@@ -1021,7 +1217,7 @@ function applyStyleToSingleLink(link) {
             link.appendChild(actions);
         }
     } else {
-        // 옵션이 꺼져있거나 뱃지가 없을 때 퀵버튼 제거
+        // 옵션이 꺼져있거나, 잘못된 요소로 판단되었을 때 퀵버튼 제거
         let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
         let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
         if (existingBr) existingBr.remove();
@@ -1176,8 +1372,8 @@ function applyStyleToDetailElement(el) {
 
     const needsBadgeUpdate = newBadgeHTML && (!existingBadge || existingBadge.dataset.html !== newBadgeHTML);
     const needsBadgeRemoval = !newBadgeHTML && existingBadge;
-    const needsActionsUpdate = !existingActions || existingActions.dataset.hasBook !== String(!!book);
-    const needsBr = !existingBr;
+    const needsActionsUpdate = isAllowedBoard ? (!existingActions || existingActions.dataset.hasBook !== String(!!book)) : !!existingActions;
+    const needsBr = isAllowedBoard ? !existingBr : !!existingBr;
 
     // 변경 사항이 하나라도 있을 때만 기존 요소를 뜯어내고 다시 그립니다
     if (needsBadgeUpdate || needsBadgeRemoval || needsActionsUpdate || needsBr) {
@@ -1194,15 +1390,17 @@ function applyStyleToDetailElement(el) {
             el.appendChild(badge);
         }
 
-        const br = document.createElement('br');
-        br.className = 'bm-badge-br';
-        el.appendChild(br);
+        if (isAllowedBoard) {
+            const br = document.createElement('br');
+            br.className = 'bm-badge-br';
+            el.appendChild(br);
 
-        const actions = createQuickActions(el._bmDetailData, !!book);
-        actions.dataset.hasBook = !!book;
-        actions.style.marginLeft = "0";
-        actions.style.marginTop = "5px";
-        el.appendChild(actions);
+            const actions = createQuickActions(el._bmDetailData, !!book);
+            actions.dataset.hasBook = !!book;
+            actions.style.marginLeft = "0";
+            actions.style.marginTop = "5px";
+            el.appendChild(actions);
+        }
     }
 
     const hostname = window.location.hostname;
@@ -1290,7 +1488,7 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true,
     if (isTargetSite) {
         const fixStyle = document.createElement('style');
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-        if (globalCustomCss) styleContent += "\n" + globalCustomCss;
+        if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
         fixStyle.textContent = styleContent;
         document.head.appendChild(fixStyle);
 
