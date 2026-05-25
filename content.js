@@ -40,88 +40,27 @@ const PRE_DEFINED_SITES = [
             backdrop-filter: blur(5px) !important;
         }
         body { padding-bottom: 120px !important; }
-        
-        /* Tcafe 리스트 카드 스타일 레이아웃 (Grid) */
-        #fboardlist table.list-pc, 
-        #fboardlist table.list-pc tbody {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
-            gap: 16px !important;
-            border: none !important;
-            background: transparent !important;
-        }
-        #fboardlist table.list-pc thead { display: none !important; }
-        
-        #fboardlist table.list-pc tr.bg0,
-        #fboardlist table.list-pc tr.bg1 {
-            display: flex !important;
-            flex-direction: column !important;
-            background: #ffffff !important;
-            border: 1px solid #e9ecef !important;
-            border-radius: 12px !important;
-            padding: 16px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.04) !important;
-            transition: all 0.2s ease-in-out !important;
-            height: auto !important;
-            align-items: flex-start !important;
-        }
-        #fboardlist table.list-pc tr.bg0:hover,
-        #fboardlist table.list-pc tr.bg1:hover {
-            transform: translateY(-4px) !important;
-            box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
-            border-color: #80bdff !important;
-        }
-        #fboardlist table.list-pc td {
-            display: block !important;
-            border: none !important;
-            padding: 0 !important;
-            width: 100% !important;
-            text-align: left !important;
-        }
-        #fboardlist table td.list-subject {
-            flex-grow: 1 !important;
-            margin-bottom: 12px !important;
-        }
-        #fboardlist table td.list-subject > a {
-            display: block !important;
-            font-size: 15px !important;
-            font-weight: 700 !important;
-            line-height: 1.5 !important;
-            color: #212529 !important;
-            white-space: normal !important;
-            word-break: keep-all !important;
-        }
-        #fboardlist table td:nth-child(1),
+        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
+        .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 5px !important; width: auto !important; }
+        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
+
+        #fboardlist table th:nth-child(1),#fboardlist table td:nth-child(1),
         #fboardlist table th:nth-child(4), #fboardlist table td:nth-child(4),
         #fboardlist table th:nth-child(6), #fboardlist table td:nth-child(6),
         #fboardlist table th:nth-child(7), #fboardlist table td:nth-child(7) {
             display: none !important;
         }
-        /* 작성자 및 날짜 등 메타 정보 하단 배치 */
-        #fboardlist table td.list-details,
-        #fboardlist table td:nth-child(3) {
-            font-size: 12px !important;
-            color: #868e96 !important;
-            margin-top: auto !important;
-            padding-top: 10px !important;
-            border-top: 1px dashed #f1f3f5 !important;
-            width: 100% !important;
-        }
+
+
         
-        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
-        .bm-quick-actions.list-actions {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 4px !important;
-            margin-top: 8px !important;
-            width: 100% !important;
-        }
-        .bm-quick-actions.list-actions button {
-            margin: 0 !important;
-            flex-shrink: 0 !important;
-            font-weight: 400 !important;
-            opacity: 0.7;
-        }
+    `,
+    themeCss: `
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        .div-table.table > tbody > tr > td,
+        #fboardlist table  td{padding:12px 8px !important;border-bottom: 1px solid #ddd;}
+        table.list-pc .list-subject a,
+        #fboardlist .list-subject a{font-family: "Jua", sans-serif;}
+        #fboardlist .list-subject a button{font-weight:400 !important;}
     `
   },
 { 
@@ -158,15 +97,13 @@ const PRE_DEFINED_SITES = [
 },
 {
     url: "enterjoy.day", 
-    selector: "#fboardlist", 
+    selector: "#fboardlist .list-board", 
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["열람하시겠습니까"], 
     boardFilter: /bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)/i,
-    customCss: `
-        /* 게시판 리스트를 모던한 카드 그리드 형태로 변경 */
+    themeCss: `
         #fboardlist > ul, #fboardlist .board-list, #fboardlist > div,
         #fboardlist table, #fboardlist table tbody {
-            display: grid !important;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
             gap: 16px !important;
             padding: 0 !important;
@@ -174,8 +111,9 @@ const PRE_DEFINED_SITES = [
             background: transparent !important;
         }
         #fboardlist table thead { display: none !important; }
+        #fboardlist .list-board li{margin-bottom:5px}
         #fboardlist .list-item, 
-        #fboardlist li,
+        #fboardlist .list-board li,
         #fboardlist table tbody tr {
             display: flex !important;
             flex-direction: column !important;
@@ -190,7 +128,7 @@ const PRE_DEFINED_SITES = [
             align-items: flex-start !important;
         }
         #fboardlist .list-item:hover, 
-        #fboardlist li:hover,
+        #fboardlist .list-board li:hover,
         #fboardlist table tbody tr:hover {
             transform: translateY(-4px) !important;
             box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
@@ -254,12 +192,13 @@ const PRE_DEFINED_SITES = [
         
         /* 뱃지 및 퀵 버튼 여백 조정 */
         .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
-        .bm-quick-actions.list-actions { margin-top: 8px !important; justify-content: flex-start !important; }
+        .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 8px !important; width: auto !important; }
+        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
     `,
 }, 
 { 
     url: "hellkaiv.net", 
-    selector: "#gall_ul", 
+    selector: "#gall_ul .bo_tit", 
     autoConfirmKeywords: ["링크", "발급"], 
     allowedDLs: ["giga", "gofile", "hk"],
     customCss: `
@@ -288,6 +227,7 @@ let globalAllowedDLs = [];
 let globalTargetSelector = 'a';
 let globalDetailSelector = ''; 
 let globalCustomCss = '';
+let globalThemeCss = '';
 
 let isTargetSite = false;
 let exactMatchCache = {};
@@ -302,14 +242,18 @@ let isDownloadUIEnabled = true;
 let titleProcessingCache = new Map(); 
 let isEverythingEnabled = false;
 let isShowListQuickBtn = false;
+let isShowListQuickBtnHover = false;
 let isCustomThemeEnabled = false;
 let isAllowedBoard = true;
+let isSupportSingleCharEnabled = false;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
     isEverythingEnabled = !!data.connectEverything;
     isShowListQuickBtn = !!data.showListQuickBtn;
+    isShowListQuickBtnHover = !!data.showListQuickBtnHover;
     isCustomThemeEnabled = !!data.useCustomTheme;
+    isSupportSingleCharEnabled = !!data.supportSingleChar;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -324,12 +268,14 @@ function initDataCache(data) {
         globalAllowedDLs = config.allowedDLs || [];
         globalTargetSelector = config.selector || 'a'; 
         globalCustomCss = config.customCss || '';
+        globalThemeCss = config.themeCss || '';
         isAllowedBoard = config.boardFilter ? config.boardFilter.test(window.location.href) : true;
     } else if (matchedUserSite) {
         isTargetSite = true;
         globalAllowedDLs = ["giga", "gofile"]; 
         globalTargetSelector = 'a'; 
         globalCustomCss = matchedUserSite.customCss || '';
+        globalThemeCss = matchedUserSite.themeCss || '';
         isAllowedBoard = true;
     } else {
         isTargetSite = false;
@@ -567,7 +513,7 @@ function getBookTypeForTitle(titleStr) {
     
     let book = null;
     let maxScore = 0;
-    for (let i = 0; i < cachedBookList.length; i++) {
+    for (let i = cachedBookList.length - 1; i >= 0; i--) {
         const b = cachedBookList[i];
         if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
         
@@ -605,7 +551,11 @@ function injectDirectDownloadButtons(allowedDLs) {
                 temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
                 temp.querySelectorAll('.bm-quick-actions, .book-badge, button, .auto-dl-btn').forEach(e => e.remove());
                 let title = cleanSiteTitle(temp.textContent);
-                if (title && title.length > 1) return title;
+                let skip = false;
+                if (!title || title.length < 1) skip = true;
+                else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
+                else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
+                if (!skip) return title;
             }
         }
 
@@ -616,7 +566,11 @@ function injectDirectDownloadButtons(allowedDLs) {
             temp.querySelectorAll('.bm-quick-actions, .book-badge, .auto-dl-btn, button, .count').forEach(e => e.remove());
             let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
             let title = cleanSiteTitle(rawText);
-            if (title && title.length > 1) return title;
+            let skip = false;
+            if (!title || title.length < 1) skip = true;
+            else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
+            else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
+            if (!skip) return title;
         }
 
         let pageTitle = document.title.split(/[-|]/)[0]; 
@@ -898,7 +852,7 @@ function createQuickActions(linkData, hasBook) {
     container.className = 'bm-quick-actions';
     container.style.cssText = "display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle;";
 
-    const btnStyle = "padding: 2px 5px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; border: none; text-decoration: none; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s;";
+    const btnStyle = "padding: 2px 5px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; border: none; text-decoration: none; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s; flex-shrink: 0;";
     
     const buttons = [
         { label: '복사', color: '#845ef7', action: 'copy' },
@@ -1056,7 +1010,13 @@ function applyStyleToSingleLink(link) {
         const originalText = getPureLinkText(link);
         const pureTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : originalText;
         
-        if (pureTitle.length < 2 || /^[ㄱ-ㅎㅏ-ㅣ\s]+$/.test(pureTitle)) {
+        let skip = false;
+        if (pureTitle.length < 1) skip = true;
+        else if (!isSupportSingleCharEnabled && pureTitle.length < 2) skip = true;
+        else if (isSupportSingleCharEnabled && pureTitle.length === 1 && /^[a-zA-Z0-9]$/.test(pureTitle)) skip = true;
+        else if (/^[ㄱ-ㅎㅏ-ㅣ\s]+$/.test(pureTitle)) skip = true;
+        
+        if (skip) {
             link._bmData = { skip: true, raw: currentRawText };
         } else {
             const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
@@ -1095,7 +1055,7 @@ function applyStyleToSingleLink(link) {
         book = similarityCache[siteBodyNoSpace].book;
         maxScore = similarityCache[siteBodyNoSpace].maxScore;
     } else {
-        for (let i = 0; i < cachedBookList.length; i++) {
+        for (let i = cachedBookList.length - 1; i >= 0; i--) {
             const b = cachedBookList[i];
             if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
             
@@ -1139,7 +1099,7 @@ function applyStyleToSingleLink(link) {
           link.style.setProperty("font-weight", "normal", "important");
           link.style.setProperty("opacity", "0.5", "important");
           link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bdfont-size:10px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
           badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -1150,7 +1110,7 @@ function applyStyleToSingleLink(link) {
           link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -1163,12 +1123,12 @@ function applyStyleToSingleLink(link) {
               link.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               link.style.setProperty("color", "#0056b3", "important"); 
               link.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
@@ -1186,7 +1146,14 @@ function applyStyleToSingleLink(link) {
             badge.style.cssText = badgeStyle;
             badge.innerHTML = newBadgeHTML;
             badge.dataset.html = newBadgeHTML;
+
             link.appendChild(badge);
+            
+            // 기존에 있던 줄바꿈과 퀵버튼을 뱃지 뒤로 밀어내어 순서가 꼬이는 현상 완벽 해결
+            const existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
+            const existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+            if (existingBr) link.appendChild(existingBr);
+            if (existingActions) link.appendChild(existingActions);
         }
     } else if (existingBadge) {
         existingBadge.remove();
@@ -1237,7 +1204,13 @@ function applyStyleToDetailElement(el) {
         const originalText = getPureLinkText(el);
         const pureTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : originalText;
         
-        if (pureTitle.length < 2 || /^[ㄱ-ㅎㅏ-ㅣ\s]+$/.test(pureTitle)) {
+        let skip = false;
+        if (pureTitle.length < 1) skip = true;
+        else if (!isSupportSingleCharEnabled && pureTitle.length < 2) skip = true;
+        else if (isSupportSingleCharEnabled && pureTitle.length === 1 && /^[a-zA-Z0-9]$/.test(pureTitle)) skip = true;
+        else if (/^[ㄱ-ㅎㅏ-ㅣ\s]+$/.test(pureTitle)) skip = true;
+
+        if (skip) {
             el._bmDetailData = { skip: true, raw: currentRawText };
         } else {
             const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
@@ -1292,7 +1265,7 @@ function applyStyleToDetailElement(el) {
         book = similarityCache[siteBodyNoSpace].book;
         maxScore = similarityCache[siteBodyNoSpace].maxScore;
     } else {
-        for (let i = 0; i < cachedBookList.length; i++) {
+        for (let i = cachedBookList.length - 1; i >= 0; i--) {
             const b = cachedBookList[i];
             if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
             
@@ -1309,6 +1282,9 @@ function applyStyleToDetailElement(el) {
     let newBadgeHTML = '';
 
     if (book) {
+        // 매칭된 도서가 있다면 툴팁에 등록된 데이터의 책 제목을 표기합니다.
+        el.setAttribute("title", "등록된 책 제목: " + book.title);
+
         const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
         const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
         const displayScore = Math.round(maxScore);
@@ -1334,7 +1310,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("text-decoration", "line-through", "important");
           el.style.setProperty("color", "#aaaaaa", "important");
           el.style.setProperty("opacity", "0.5", "important");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bd;font-size:9px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bdfont-size:10px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
           badgeStyle = "font-size:11px; font-weight:bold; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; text-decoration:none !important; opacity:1 !important;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -1343,7 +1319,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("font-weight", "800", "important");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -1354,16 +1330,18 @@ function applyStyleToDetailElement(el) {
               el.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               el.style.setProperty("color", "#0056b3", "important"); 
               el.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96;font-size:9px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
               badgeStyle = "font-size:11px; background:#f0f7ff; border:1px solid #007bff; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
     } else {
+        // 매칭된 도서가 없다면 추출된 제목을 유지합니다.
+        el.setAttribute("title", "추출된 책 제목: " + el._bmDetailData.pureTitle);
         removeBadge(el); 
     }
 
@@ -1484,7 +1462,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1495,7 +1473,9 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true,
             document.head.appendChild(fixStyle);
         }
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-        if (globalCustomCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalCustomCss;
+        if (globalCustomCss) styleContent += "\n" + globalCustomCss;
+        if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
+        if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
         fixStyle.textContent = styleContent;
 
         applyStyles();
@@ -1687,7 +1667,7 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false }, (data) => {
+          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
               initDataCache(data);
               document.querySelectorAll(globalTargetSelector).forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -1742,7 +1722,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1754,7 +1734,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1763,7 +1743,7 @@ window.addEventListener("focus", () => {
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
 
             // 실시간 테마 토글 적용/해제
@@ -1771,6 +1751,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             if (fixStyle) {
                 let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
                 if (globalCustomCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalCustomCss;
+                if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
+                if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
                 fixStyle.textContent = styleContent;
             }
 

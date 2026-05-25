@@ -187,7 +187,7 @@
       display: flex; justify-content: space-between; align-items: center; font-size: 13px;
     }
     .batch-control {flex-direction: row;align-items: flex-start;gap: 10px;display: flex;flex-direction: row;}
-    .batch-control > div { width: 100% !important; display: flex; flex-direction: column; gap: 5px; }
+    .batch-control > div {width: 100% !important;display: flex;flex-direction: column;gap: 5px;flex-shrink: 1;}
     .batch-control > div > strong {}
     .batch-control > div > div{display:flex;gap:5px}
     .batch-control > div > div > select{min-width:100px;max-width:50%}
@@ -209,7 +209,7 @@
     .release-body li.sub-li { list-style-type: circle; color: var(--text-muted); font-size: 12px; margin-top: 4px; margin-bottom: 4px;}
     .release-body strong { color: #20c997; background: rgba(32, 201, 151, 0.1); padding: 0 4px; border-radius: 3px; }
 
-    .pagination-container { display: flex; justify-content: center; gap: 5px; margin-top: 15px; margin-bottom: 20px; }
+    .pagination-container { display: flex; justify-content: center; gap: 5px; margin-top: 15px; padding: 15px 0; margin-bottom: 0; position: sticky; bottom: 0; background: var(--panel); z-index: 100; border-top: 1px solid var(--border); box-shadow: 0 -4px 12px rgba(0,0,0,0.05); }
     .page-btn {
       background: var(--panel); border: 1px solid var(--border);
       padding: 5px 12px; border-radius: 4px; cursor: pointer; color: var(--text);
@@ -270,6 +270,25 @@
     }
     body.side-panel-mode td:first-child, body.side-panel-mode td:last-child { border-radius: 0; }
     
+    /* 중복 찾기 그룹 헤더 사이드패널 레이아웃 예외 처리 */
+    body.side-panel-mode tbody tr.group-header-tr {
+        display: block !important;
+        padding: 0 !important;
+        margin-bottom: 8px !important;
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    body.side-panel-mode tbody tr.group-header-tr:hover {
+        transform: none !important;
+    }
+    body.side-panel-mode tbody tr.group-header-tr td {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box;
+        border-radius: 8px !important;
+    }
+
     /* 1행 배치: 타입 배지, 날짜, 관리 버튼 */
     body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; display: flex; align-items: center; } 
     body.side-panel-mode td:nth-child(5) { 
@@ -370,7 +389,7 @@
         <div class="header-row">
             <h2>⚙️ 도서 목록 매칭 매니저</h2>
             <div style="display: flex;align-items: center;justify-content: flex-end;align-content: center;flex-direction: row;">
-          
+
             <div class="theme-switch-wrapper">
                 <label class="theme-switch" title="다크 모드 온/오프 (기본: 시스템 테마)">
                     <input type="checkbox" id="themeToggle">
@@ -382,6 +401,8 @@
             <button id="manual-check-btn" style="margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
             <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
             <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
+
+            <a href="https://github.com/dongkkase/Chrome_Library_Management/issues" target="_blank" style="margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🐞 버그 신고 및 건의</a>
             </div>
         </div>
 
@@ -440,9 +461,13 @@
                 </div>
                 <div>
                     <strong style="color: var(--text);">검색:</strong>
-                    <div>
-                        <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 60%; border-color: #0d6efd;">
-                        <select id="sortSelect" style="width: 40%;">
+                    <div style="display: flex; width: 100%; gap: 5px; align-items: center;">
+                        <button id="findDuplicatesBtn" style="background: #fd7e14; padding: 6px 12px; font-size: 12px;" title="공백과 기호를 무시하고 제목이 겹치는 항목을 검색합니다.">🔍 중복 찾기</button>
+                        <div style="position: relative; width: 100%;">
+                            <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 100%; border-color: #0d6efd; padding-right: 24px; box-sizing: border-box;">
+                            <span id="clearSearchBtn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px; font-weight: bold; display: none; line-height: 1;" title="검색어 지우기">&times;</span>
+                        </div>
+                        <select id="sortSelect" style="width: 40%; min-width: 110px; box-sizing: border-box;">
                             <option value="id_desc">최신 등록순</option>
                             <option value="id_asc">오래된 등록순</option>
                             <option value="title_asc">제목 가나다순</option>
@@ -555,12 +580,22 @@
             <label>
                 <input type="checkbox" id="showListQuickBtnCheckbox">
                 <b>리스트 퀵 버튼 표시</b> 
-                <span>게시물 목록의 뱃지 아래에 퀵 액션 버튼을 표시합니다 (마우스 오버 시에만 렌더링되어 성능 저하 없음)</span>
+                <span>게시물 목록의 뱃지 아래에 퀵 액션 버튼을 표시합니다</span>
+            </label>
+            <label style="margin-left: 24px; border-left: 2px solid var(--border); padding-left: 10px; margin-top: -5px;">
+                <input type="checkbox" id="showListQuickBtnHoverCheckbox">
+                <b>마우스 오버 시에만 표시 (퀵 버튼)</b> 
+                <span>마우스를 올렸을 때만 퀵 버튼을 표시하여 목록을 깔끔하게 유지합니다</span>
+            </label>
+            <label>
+                <input type="checkbox" id="supportSingleCharCheckbox">
+                <b>1글자 매칭 지원</b> 
+                <span>1글자 제목의 도서도 매칭합니다 (영어, 숫자는 제외)</span>
             </label>
             <label>
                 <input type="checkbox" id="useCustomThemeCheckbox">
                 <b>게시판 전용 테마 적용</b> 
-                <span>지원하는 게시판의 리스트를 모던한 카드형 디자인으로 변경합니다</span>
+                <span>지원하는 게시판 리스트의 디자인 일부를 변경합니다</span>
             </label>
         </div>
     </div>
@@ -580,6 +615,14 @@
             <b id="lastBackupTime">최근 백업 기록: 없음</b>
         </div>
         </div>
+
+        <div class="panel-box">
+            <h4 style="font-size: 14px;">⏱️ 타임머신 (자동 로컬 스냅샷)</h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">매일 브라우저를 처음 켤 때 자동으로 저장된 최근 7일간의 복원 지점입니다. 클릭 한 번으로 과거 상태로 되돌릴 수 있습니다.</p>
+            <ul id="snapshotList" style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px;">
+                <li style="font-size: 13px; color: var(--text-muted);">스냅샷을 불러오는 중...</li>
+            </ul>
+        </div>        
     </div>
 
     <div id="tab-history" class="tab-content">
@@ -590,6 +633,9 @@
             </div>
         </div>
         </div>
+        
+
+
     </div>
     
 </div>
@@ -598,6 +644,8 @@
     ⏪ 방금 전 작업 취소하기
 </button>
 
+<script src="dexie.min.js"></script>
+<script src="db.js"></script>
 <script src="common.js"></script>
 <script src="options.js"></script>
 </body>

@@ -2,7 +2,8 @@
 let globalFilters = [
     "__", "=", "❤️한방팩❤️", "[완결]", "직작 |", 
     "상/하권", "상,하권", "상-하권", "상~하", "상,하", "상/하", 
-    "(지원사격)", "지원사격)", "(지원)", "지원)", "지원]", "지원 -", "Web툰", "웹툰",
+    "[미완결]", "[미완]", "(미완결)", "(미완)",
+    "(지원사격)", "지원사격)", "(지원)", "지원)", "지원]", "지원 -", "Web툰", "(웹툰)", "( 웹툰)", " 웹툰)", "웹툰)", "웹툰",
     "(신작완결)", "19禁완)", "(완결)", "완결)", "완결]", "★★★★신작완결)", "(최신완결)", "최신완결)", 
     "Ebook 본",
     // "", "", "", "", "", "", "", "", "", "",
@@ -16,23 +17,23 @@ let globalCustomFilters = [
     "이즈키 케이고", "와카스키 키미노리", "카와다 히로시", "미즈키 시게루", "오오이시 마사루", "와나타베 준", "토아루 앙라코", "요시나가 후미", "이시다 이라", "모리 카오루",
     "코이케 카즈오", "강격옥", "고선영", "나카가키 토모에", "나나난 키리코", "시즈미 레이코", "시미즈 레이코", "오카다 유키오", "카와사키 미에코", "판판야",
     "이케자와 사토미", "장태산", "임재원", "라가와 마리모", "혼마리 우", "오오시마 타케시", "타카하시 루미코", "후지사키 류", "다카하시 루미코", "아다치 미츠루",
-    "아마즈메 류타", "카와시타 미즈키",
+    "아마즈메 류타", "카와시타 미즈키", "미우라 히로코",
     //  "", "", "", "", "", "", "", "",
 ];
 
 // 크롬 스토리지에서 필터링 단어를 비동기적으로 불러와 자체 캐싱해둡니다.
 // (content.js나 background.js를 수정하지 않고도 여기서 스스로 작동하도록 설계됨)
-if (typeof chrome !== 'undefined' && chrome.storage) {
-    chrome.storage.local.get({ filterWords: [] }, (data) => {
-        globalCustomFilters = Array.isArray(data.filterWords) ? data.filterWords : [];
-    });
-    // 옵션창에서 단어가 추가/삭제되면 즉시 캐시를 업데이트합니다.
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local' && changes.filterWords) {
-            globalCustomFilters = changes.filterWords.newValue || [];
-        }
-    });
-}
+// if (typeof chrome !== 'undefined' && chrome.storage) {
+//     chrome.storage.local.get({ filterWords: [] }, (data) => {
+//         globalCustomFilters = Array.isArray(data.filterWords) ? data.filterWords : [];
+//     });
+//     // 옵션창에서 단어가 추가/삭제되면 즉시 캐시를 업데이트합니다.
+//     chrome.storage.onChanged.addListener((changes, namespace) => {
+//         if (namespace === 'local' && changes.filterWords) {
+//             globalCustomFilters = changes.filterWords.newValue || [];
+//         }
+//     });
+// }
 
 function cleanSiteTitle(title) {
   if (!title) return "";

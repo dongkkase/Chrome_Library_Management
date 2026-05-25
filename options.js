@@ -1,5 +1,44 @@
 const listBody = document.getElementById('listBody');
 
+function showInfoToast(msg, isError = false) {
+  let container = document.getElementById('book-manager-info-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'book-manager-info-toast-container';
+    container.style.cssText = "position:fixed; bottom:20px; right:20px; z-index:999999; display:flex; flex-direction:column; gap:10px; pointer-events:none;";
+    document.body.appendChild(container);
+  }
+  
+  const toast = document.createElement('div');
+  const bgColor = isError ? '#dc3545' : '#17a2b8';
+  
+  toast.style.cssText = "background: " + bgColor + "; color: white; padding: 12px 35px 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(20px); transition: all 0.3s ease; white-space: nowrap; pointer-events: auto; position: relative;";
+  toast.innerHTML = msg;
+
+  const closeBtn = document.createElement('span');
+  closeBtn.innerHTML = "&times;";
+  closeBtn.style.cssText = "position: absolute; top: 8px; right: 12px; font-size: 20px; font-weight: normal; cursor: pointer; opacity: 0.6; line-height: 1;";
+  closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
+  closeBtn.onmouseout = () => closeBtn.style.opacity = '0.6';
+  closeBtn.onclick = () => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(20px)';
+      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
+  };
+  toast.appendChild(closeBtn);
+  container.appendChild(toast);
+
+  void toast.offsetWidth;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateX(0)';
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350); 
+  }, 3000);
+}
+
 function parseDateStr(str) {
     if (!str) return 0;
     let d = new Date(str).getTime();
@@ -69,8 +108,39 @@ function renderList(filter = "", resetPage = false) {
     document.getElementById('stat-incomplete').innerText = incompleteCount;
     document.getElementById('stat-exclude').innerText = excludeCount;
 
+    const isDuplicateSearch = filter === "#중복";
+    let duplicateIds = new Set();
+    
+    if (isDuplicateSearch) {
+        const titleMap = new Map();
+        list.forEach(b => {
+            if (!b || !b.title) return;
+            const normalized = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            if (normalized.length === 0) return;
+            if (titleMap.has(normalized)) {
+                titleMap.get(normalized).push(b.id);
+            } else {
+                titleMap.set(normalized, [b.id]);
+            }
+        });
+        
+        titleMap.forEach(ids => {
+            if (ids.length > 1) ids.forEach(id => duplicateIds.add(id));
+        });
+    }
+
     // 필터링 적용
-    const filteredList = list.filter(b => b && b.title && b.title.toLowerCase().includes(filter.toLowerCase()));
+    const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+    const filteredList = list.filter(b => {
+        if (!b || !b.title) return false;
+        if (isDuplicateSearch) return duplicateIds.has(b.id);
+        if (b.title.toLowerCase().includes(filter.toLowerCase())) return true;
+        if (normalizedFilter) {
+            const normalizedTitle = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+            return normalizedTitle.includes(normalizedFilter);
+        }
+        return false;
+    });
     
     // 전체 페이지 계산 및 현재 페이지 보정
     totalPages = Math.ceil(filteredList.length / itemsPerPage) || 1;
@@ -78,11 +148,23 @@ function renderList(filter = "", resetPage = false) {
 
     const countDisplay = document.getElementById('listCountDisplay');
     if (countDisplay) {
-        if (filter.trim() === "") {
+        if (isDuplicateSearch) {
+            countDisplay.innerHTML = `중복 의심 목록: 총 <span style="color:#fd7e14;">${filteredList.length}</span>건 (공백/기호 무시 시 동일한 항목 묶음)`;
+        } else if (filter.trim() === "") {
             countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
             countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         }
+    }
+
+    const findDuplicatesBtn = document.getElementById('findDuplicatesBtn');
+    if (findDuplicatesBtn) {
+        findDuplicatesBtn.onclick = () => {
+            if (searchInput) {
+                searchInput.value = '#중복';
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        };
     }
 
     // 정렬 로직 적용
@@ -96,7 +178,18 @@ function renderList(filter = "", resetPage = false) {
         case 'id_desc': 
         default: sortFn = (a, b) => (b.id || 0) - (a.id || 0); break;
     }
-    filteredList.sort(sortFn);
+    
+    if (isDuplicateSearch) {
+        filteredList.sort((a, b) => {
+            const normA = (a.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            const normB = (b.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            if (normA < normB) return -1;
+            if (normA > normB) return 1;
+            return sortFn(a, b);
+        });
+    } else {
+        filteredList.sort(sortFn);
+    }
 
     // 데이터 자르기 (Slice)
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -105,7 +198,20 @@ function renderList(filter = "", resetPage = false) {
 
     // 화면에 그리기
     const fragment = document.createDocumentFragment();
+    let prevNorm = null;
+
     pageItems.forEach(book => {
+        if (isDuplicateSearch) {
+            const normTitle = (book.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            if (normTitle !== prevNorm) {
+                prevNorm = normTitle;
+                const groupTr = document.createElement('tr');
+                groupTr.className = 'group-header-tr';
+                groupTr.innerHTML = `<td colspan="6" style="text-align: left; padding: 6px 12px; font-weight: bold; font-size: 12px; background-color: rgba(127, 127, 127, 0.1); color: var(--text); border-bottom: 2px solid #fd7e14; border-top: 2px solid var(--border);">📦 동일 항목 그룹: <span style="color:#fd7e14;">${normTitle}</span></td>`;
+                fragment.appendChild(groupTr);
+            }
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>
@@ -191,7 +297,7 @@ function saveWithUndo(newList, successMsg) {
     chrome.storage.local.get({ bookList: [] }, (data) => {
         chrome.storage.local.set({ backupList: data.bookList }, () => {
             chrome.storage.local.set({ bookList: newList }, () => {
-                if (successMsg) alert(successMsg);
+                if (successMsg) showInfoToast(successMsg);
                 // 수정/삭제 후 현재 페이지 유지 (false 전달)
                 renderList(document.getElementById('searchInput').value, false); 
                 
@@ -207,7 +313,7 @@ document.getElementById('undoBtn').onclick = () => {
     chrome.storage.local.get({ backupList: null }, (data) => {
         if (data.backupList) {
             chrome.storage.local.set({ bookList: data.backupList }, () => {
-                alert('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
+                showInfoToast('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
                 renderList(document.getElementById('searchInput').value, false);
                 document.getElementById('undoBtn').style.display = 'none';
             });
@@ -218,6 +324,7 @@ document.getElementById('undoBtn').onclick = () => {
 document.getElementById('batchUpdateBtn').onclick = () => {
     const targetType = document.getElementById('batchTypeSelect').value;
     const filter = document.getElementById('searchInput').value.toLowerCase();
+    const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').trim().replace(/\s+/g, '');
     
     let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
     if(!confirm(`현재 검색된 모든 항목을 [${typeNameKOR}] 타입으로 변경하시겠습니까?`)) return;
@@ -227,8 +334,17 @@ document.getElementById('batchUpdateBtn').onclick = () => {
         const today = new Date().toISOString(); 
 
         const updatedList = list.map(book => {
-            if (book && book.title && book.title.toLowerCase().includes(filter)) {
-                return { ...book, type: targetType, date: today };
+            if (book && book.title) {
+                const lowerTitle = book.title.toLowerCase();
+                const matchOriginal = lowerTitle.includes(filter);
+                let matchNormalized = false;
+                if (!matchOriginal && normalizedFilter) {
+                    const normalizedTitle = lowerTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').trim().replace(/\s+/g, '');
+                    matchNormalized = normalizedTitle.includes(normalizedFilter);
+                }
+                if (matchOriginal || matchNormalized) {
+                    return { ...book, type: targetType, date: today };
+                }
             }
             return book;
         });
@@ -306,9 +422,9 @@ document.getElementById('fileInput').onchange = (e) => {
                 if (Array.isArray(importedData.bookList)) {
                     saveWithUndo(importedData.bookList, '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.');
                 } else if (hasSettings) {
-                    alert('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
+                    showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
                 } else {
-                    alert('❌ 유효한 백업 데이터가 없습니다.');
+                    showInfoToast('❌ 유효한 백업 데이터가 없습니다.', true);
                 }
             } 
             // 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
@@ -316,15 +432,61 @@ document.getElementById('fileInput').onchange = (e) => {
                 saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
             } 
             else {
-                alert('❌ 올바른 백업 파일 형식이 아닙니다.');
+                showInfoToast('❌ 올바른 백업 파일 형식이 아닙니다.', true);
             }
         } catch (err) {
-            alert('❌ 파일을 읽는 중 오류가 발생했습니다. (JSON 파싱 에러)');
+            showInfoToast('❌ 파일을 읽는 중 오류가 발생했습니다. (JSON 파싱 에러)', true);
         }
         e.target.value = '';
     };
     reader.readAsText(file);
 };
+
+// ============================================================================
+// [신규 추가] 타임머신 스냅샷 렌더링 및 복원 로직
+// ============================================================================
+async function renderSnapshots() {
+    const container = document.getElementById('snapshotList');
+    if (!container) return;
+    try {
+        const snapshots = await db.snapshots.orderBy('timestamp').reverse().toArray();
+        if (snapshots.length === 0) {
+            container.innerHTML = '<li style="font-size: 13px; color: var(--text-muted);">저장된 스냅샷이 없습니다. (자동 백업은 1일 뒤부터 생성됩니다)</li>';
+            return;
+        }
+        container.innerHTML = snapshots.map(snap => {
+            const date = new Date(snap.timestamp);
+            const displayTime = `${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            const bookCount = snap.data && snap.data.bookList ? snap.data.bookList.length : 0;
+            return `
+                <li style="display:flex; justify-content:space-between; align-items:center; background:var(--input-bg); border:1px solid var(--border); padding:10px 15px; border-radius:6px;">
+                    <div>
+                        <strong style="color:var(--text); font-size:13px;">📅 ${snap.dateStr} 자동 백업</strong><br>
+                        <span style="color:var(--text-muted); font-size:11px;">저장 시간: ${displayTime} | 도서 데이터: ${bookCount}건</span>
+                    </div>
+                    <button class="btn-restore-snap" data-id="${snap.id}" style="background:#fd7e14; padding:5px 12px; font-size:12px; border:none;">이 시점으로 복원</button>
+                </li>`;
+        }).join('');
+        
+        document.querySelectorAll('.btn-restore-snap').forEach(btn => {
+            btn.onclick = async (e) => {
+                const id = parseInt(e.target.dataset.id, 10);
+                if (confirm('정말로 이 시점의 데이터로 되돌리시겠습니까?\n현재 저장된 모든 데이터는 해당 시점의 데이터로 덮어씌워집니다.')) {
+                    const snap = await db.snapshots.get(id);
+                    if (snap && snap.data) {
+                        let hasSettings = false;
+                        if (Array.isArray(snap.data.allowedSites)) { chrome.storage.local.set({ allowedSites: snap.data.allowedSites }, renderSites); hasSettings = true; }
+                        if (Array.isArray(snap.data.filterWords)) { chrome.storage.local.set({ filterWords: snap.data.filterWords }, renderFilters); hasSettings = true; }
+                        if (Array.isArray(snap.data.bookList)) { saveWithUndo(snap.data.bookList, '✅ 선택한 시점으로 복원이 완료되었습니다.'); } 
+                        else if (hasSettings) { showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.'); } 
+                    }
+                }
+            };
+        });
+    } catch (err) {
+        container.innerHTML = '<li style="font-size: 13px; color: #dc3545;">스냅샷을 불러오는 데 실패했습니다.</li>';
+    }
+}
 
 const bulkInput = document.getElementById('bulkInput');
 const bulkPreview = document.getElementById('bulkPreview');
@@ -393,7 +555,7 @@ document.getElementById('saveBtn').onclick = () => {
       const titleMap = new Map();
       currentList.forEach((book, idx) => {
           if (book && book.title) {
-              const normalized = book.title.replace(/\s+/g, '').toLowerCase();
+              const normalized = book.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
               titleMap.set(normalized, idx); // 제목을 키(Key)로, 인덱스를 값(Value)으로 저장
           }
       });
@@ -493,7 +655,7 @@ document.body.onclick = (e) => {
       const row = e.target.closest('tr');
       if (idx > -1) {
         const newTitle = row.querySelector('.edit-title').value.trim();
-        if (!newTitle) { alert('❌ 제목은 비워둘 수 없습니다!'); return; }
+        if (!newTitle) { showInfoToast('❌ 제목은 비워둘 수 없습니다!', true); return; }
 
         list[idx] = { 
             ...list[idx], 
@@ -616,6 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (targetId === 'tab-history') {
                 loadReleaseHistory();
+            } else if (targetId === 'tab-backup') {
+                renderSnapshots(); // 백업 탭 열릴 때 스냅샷 목록 갱신
             }
         });
     });
@@ -646,6 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderList('', true); 
         renderSites();
         renderFilters(); 
+        renderSnapshots();
 
         const timeSpan = document.getElementById('lastBackupTime');
         if (timeSpan) {
@@ -682,7 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderSites(); 
               });
             } else {
-              alert('이미 등록된 사이트입니다.');
+              showInfoToast('❌ 이미 등록된 사이트입니다.', true);
             }
           });
         }
@@ -704,7 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderFilters();
                         });
                     } else {
-                        alert('이미 등록된 금지어입니다.');
+                        showInfoToast('❌ 이미 등록된 금지어입니다.', true);
                     }
                 });
             }
@@ -712,14 +877,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
     let searchDebounceTimer;
     if (searchInput) {
+        if (clearSearchBtn) {
+            clearSearchBtn.style.display = searchInput.value ? 'block' : 'none';
+        }
         searchInput.oninput = (e) => {
+            if (clearSearchBtn) {
+                clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
+            }
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
                 // 검색어 입력 시 1페이지로 리셋 (true 전달)
                 renderList(e.target.value, true); 
             }, 300);
+        };
+    }
+
+    if (clearSearchBtn && searchInput) {
+        clearSearchBtn.onclick = () => {
+            searchInput.value = '';
+            clearSearchBtn.style.display = 'none';
+            renderList('', true);
         };
     }
 
@@ -743,9 +923,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
     const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
     const showListQuickBtnCheckbox = document.getElementById('showListQuickBtnCheckbox');
+    const showListQuickBtnHoverCheckbox = document.getElementById('showListQuickBtnHoverCheckbox');
     const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
+    const supportSingleCharCheckbox = document.getElementById('supportSingleCharCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false, useCustomTheme: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -753,13 +935,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
         if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
         if (showListQuickBtnCheckbox) showListQuickBtnCheckbox.checked = data.showListQuickBtn;
+        if (showListQuickBtnHoverCheckbox) showListQuickBtnHoverCheckbox.checked = data.showListQuickBtnHover;
         if (customThemeCheckbox) customThemeCheckbox.checked = data.useCustomTheme;
+        if (supportSingleCharCheckbox) supportSingleCharCheckbox.checked = data.supportSingleChar;
     });
     
     // 옵션값 변경 시 저장 로직
     if (uiCheckbox) {
         uiCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ showDownloadUI: e.target.checked });
+        });
+    }
+    if (supportSingleCharCheckbox) {
+        supportSingleCharCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ supportSingleChar: e.target.checked });
         });
     }
     if (confirmCheckbox) {
@@ -845,6 +1034,11 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({ showListQuickBtn: e.target.checked });
         });
     }
+    if (showListQuickBtnHoverCheckbox) {
+        showListQuickBtnHoverCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ showListQuickBtnHover: e.target.checked });
+        });
+    }
     if (customThemeCheckbox) {
         customThemeCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ useCustomTheme: e.target.checked });
@@ -919,6 +1113,10 @@ function initVersionCheck() {
             };
           }
           if (statusMsg) statusMsg.style.display = "none";
+          if (chrome.action && chrome.action.setBadgeText) {
+              chrome.action.setBadgeText({ text: "NEW" });
+              chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+          }
         } else {
           if (updateLink) updateLink.style.display = "none";
           if (isManual && statusMsg) {
@@ -926,6 +1124,7 @@ function initVersionCheck() {
             statusMsg.style.color = "#28a745";
             setTimeout(() => statusMsg.style.display = "none", 3000); 
           }
+          if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
         }
       }
     });
@@ -991,7 +1190,7 @@ function openMissingPopover(bookId, badgeElement) {
 
         const lastVol = parseInt(book.lastVol, 10);
         if (isNaN(lastVol) || lastVol <= 0) {
-            alert('권수를 먼저 숫자로 입력하고 [수정] 버튼으로 저장한 뒤에 이용해주세요.');
+            showInfoToast('❌ 권수를 먼저 숫자로 입력하고 [수정] 버튼으로 저장한 뒤에 이용해주세요.', true);
             return;
         }
 

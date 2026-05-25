@@ -1,4 +1,4 @@
-importScripts('common.js');
+importScripts('dexie.min.js', 'db.js', 'common.js');
 
 let lastRightClickedTitle = "";
 let downloadTitlesMap = {}; // 다운로드 ID와 폴더명(책 제목) 매핑
@@ -241,12 +241,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === "delete") {
           chrome.storage.local.get({ bookList: [] }, (data) => {
               let list = Array.isArray(data.bookList) ? data.bookList : [];
-              let targetTitleStr = message.cleanTitle.replace(/\s+/g, '').toLowerCase();
+              let targetTitleStr = message.cleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
 
               // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
               let existingIndex = -1;
               for (let i = list.length - 1; i >= 0; i--) {
-                  if ((list[i].title || "").replace(/\s+/g, '').toLowerCase() === targetTitleStr) {
+                  if ((list[i].title || "").replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') === targetTitleStr) {
                       existingIndex = i;
                       break;
                   }
@@ -893,6 +893,63 @@ function initSidePanelBehavior() {
     });
 }
 
+// ==============================================================================
+// 일일 로컬 스냅샷 (타임머신) 생성 로직 (최대 7일 보관)
+// ==============================================================================
+async function createDailySnapshot() {
+    try {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ko-KR');
+        
+        // 오늘 날짜의 스냅샷이 이미 있다면 패스
+        const existing = await db.snapshots.where('dateStr').equals(dateStr).first();
+        if (existing) return;
+        
+        chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [] }, async (data) => {
+            const snapshotData = { timestamp: now.getTime(), dateStr: dateStr, data: data };
+            await db.snapshots.add(snapshotData); // 스냅샷 저장
+            
+            // 7개를 초과하면 가장 오래된 것 삭제
+            const count = await db.snapshots.count();
+            if (count > 7) {
+                const oldest = await db.snapshots.orderBy('timestamp').limit(count - 7).toArray();
+                const oldestIds = oldest.map(s => s.id);
+                await db.snapshots.bulkDelete(oldestIds);
+            }
+        });
+    } catch (e) { console.error("Snapshot creation failed:", e); }
+}
+
+function checkUpdateInBackground() {
+    const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
+    const currentVersion = chrome.runtime.getManifest().version;
+    const now = Date.now();
+
+    chrome.storage.local.get(['lastVersionCheckTime', 'latestVersionInfo'], async (data) => {
+        const updateInterval = 12 * 60 * 60 * 1000; // 12시간 주기
+        let shouldFetch = !data.lastVersionCheckTime || (now - data.lastVersionCheckTime > updateInterval);
+
+        if (shouldFetch) {
+            try {
+                const response = await fetch(GITHUB_RAW_URL + "?t=" + now);
+                if (response.ok) {
+                    const latestData = await response.json();
+                    chrome.storage.local.set({ lastVersionCheckTime: now, latestVersionInfo: latestData });
+                    if (latestData && latestData.latest_version && latestData.latest_version !== currentVersion) {
+                        chrome.action.setBadgeText({ text: "NEW" });
+                        chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+                    } else {
+                        chrome.action.setBadgeText({ text: "" });
+                    }
+                }
+            } catch (e) {}
+        } else if (data.latestVersionInfo && data.latestVersionInfo.latest_version && data.latestVersionInfo.latest_version !== currentVersion) {
+            chrome.action.setBadgeText({ text: "NEW" });
+            chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+        }
+    });
+}
+
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.openSlidePanel) {
@@ -909,11 +966,23 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 chrome.runtime.onInstalled.addListener(() => {
     createIndependentMenus();
     initSidePanelBehavior();
+    checkUpdateInBackground();
+    createDailySnapshot();
+    chrome.alarms.create("updateCheckAlarm", { periodInMinutes: 720 });
 });
 
 chrome.runtime.onStartup.addListener(() => {
     createIndependentMenus();
     initSidePanelBehavior();
+    checkUpdateInBackground();
+    createDailySnapshot();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "updateCheckAlarm") {
+        checkUpdateInBackground();
+        createDailySnapshot();
+    }
 });
 
 let pendingTasks = [];
@@ -1021,7 +1090,7 @@ function processSaveQueue() {
         if (!bgListMapCache || bgListLength !== list.length) {
             bgListMapCache = new Map();
             for (let i = 0; i < list.length; i++) {
-                const t = (list[i].title || "").replace(/\s+/g, '').toLowerCase();
+                const t = (list[i].title || "").replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
                 bgListMapCache.set(t, i);
             }
             bgListLength = list.length;
@@ -1031,7 +1100,7 @@ function processSaveQueue() {
         let targetTabId = null;
 
         for (let task of tasks) {
-            const targetTitleStr = task.cleanTitle.replace(/\s+/g, '').toLowerCase();
+            const targetTitleStr = task.cleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
             let existingIndex = bgListMapCache.has(targetTitleStr) ? bgListMapCache.get(targetTitleStr) : -1;
 
             if (existingIndex > -1) {
