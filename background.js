@@ -111,130 +111,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (message.type === "everything_search") {
-          chrome.tabs.create({ url: "es:" + encodeURIComponent(message.cleanTitle) }).catch(() => {});
+          executeEverythingSearch(message.cleanTitle, tabId);
           return true;
       }
 
       console.log(message.type);
       if (message.type === "ridi_preview") {
-          (async () => {
-              // 1. 책 제목 앞뒤에 쌍따옴표를 붙여 구글 정확도 검색(Exact match)을 유도합니다.
-              const query = `site:https://ridibooks.com/books "${message.cleanTitle}"`;
-              const googleUrl = "https://www.google.com/search?q=" + encodeURIComponent(query);
-
-              console.log('googleUrl:', googleUrl);
-
-              // 매칭 실패 시 사용할 일반 구글 검색 주소
-              const fallbackGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(message.cleanTitle);
-              
-              try {
-                  // 2. 화면 이동 없이 백그라운드에서 구글 검색 결과를 가져옵니다.
-                  const res = await fetch(googleUrl);
-                  const html = await res.text();
-                  
-                  // 3. 정규식을 사용하여 a 태그 내부의 href 링크와 텍스트(제목)를 추출합니다.
-                  const aTagRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
-                  let matches = [];
-                  let m;
-                  while ((m = aTagRegex.exec(html)) !== null) {
-                      let href = m[1];
-                      let innerHtml = m[2];
-                      
-                      // 구글 리다이렉트 주소 형태 (/url?q=...) 처리
-                      if (href.startsWith('/url?q=')) {
-                          href = decodeURIComponent(href.split('&')[0].replace('/url?q=', ''));
-                      }
-                      
-                      // 리디북스 책 상세페이지 링크인 경우만 수집
-                      if (href.includes('ridibooks.com/books/')) {
-                          // 태그 제거 및 띄어쓰기 정제
-                          let text = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-                          matches.push({ url: href, title: text });
-                      }
-                  }
-
-                  // [버그 수정] 구글 대체 검색 및 오탈자 방어를 위한 고도화된 교차 검증 로직
-                  // 레벤슈타인 거리 알고리즘 (오탈자 및 띄어쓰기 뭉개짐 계산용)
-                  const getSimilarity = (a, b) => {
-                      if (!a) return b ? 0 : 1;
-                      if (!b) return 0;
-                      const matrix = [];
-                      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-                      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-                      for (let i = 1; i <= b.length; i++) {
-                          for (let j = 1; j <= a.length; j++) {
-                              if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
-                              else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
-                          }
-                      }
-                      let maxLen = Math.max(a.length, b.length);
-                      return maxLen === 0 ? 1 : (maxLen - matrix[b.length][a.length]) / maxLen;
-                  };
-
-                  // 원본 검색어에서도 혹시 모를 대괄호와 공백을 제거하여 비교 기준을 잡습니다.
-                  let targetBase = message.cleanTitle.replace(/^(\s*\[.*?\])+\s*/g, '').replace(/\s+/g, '');
-                  
-                  let validMatches = matches.filter(match => {
-                      let rTitle = match.title;
-                      
-                      // 1. 검색 결과 제목 앞의 [바닐라], [코믹] 등 대괄호 태그 덩어리들 감지
-                      let hasBracket = /^(\s*\[.*?\])+/.test(rTitle);
-                      
-                      // 2. 대괄호 완벽 제거 및 공백 무시
-                      let cleanRTitle = rTitle.replace(/^(\s*\[.*?\])+\s*/g, '').replace(/\s+/g, '');
-                      
-                      // 3. 대괄호 유무에 따라 비교할 문자열 길이 제한 (13자 or 30자)
-                      let limit = hasBracket ? 13 : 30;
-                      
-                      // 4. 결정된 길이만큼 텍스트 자르기 ('...' 잘림 현상 방어)
-                      let t1 = targetBase.substring(0, limit);
-                      let t2 = cleanRTitle.substring(0, limit);
-                      
-                      // 5. 오탈자 유사도 검사 (70% 이상 일치하면 같은 책으로 인정)
-                      let similarity = getSimilarity(t1, t2);
-                      
-                      // 추가 방어: 짧은 단어일 경우를 대비해 상호 포함 여부도 확인
-                      let isIncluded = (t1.length > 1 && t2.length > 1) && (t1.includes(t2) || t2.includes(t1));
-                      
-                      return similarity >= 0.70 || isIncluded;
-                  });
-
-                  // 4. 요구사항에 맞춘 우선순위 조건 판별
-                  let finalRidiUrl = null;
-                  if (validMatches.length > 0) {
-                      let p1 = validMatches.find(m => m.title.includes('1권 미리보기'));
-                      let p2 = validMatches.find(m => m.title.includes('- 만화 e북'));
-                      let p3 = validMatches.find(m => m.title.includes('- 만화 연재'));
-                      let p4 = validMatches.find(m => m.title.includes('바닐라'));
-                      let p5 = validMatches.find(m => m.title.includes('코믹'));
-                      
-                    console.log('p1:', p1);
-                    console.log('p2:', p1);
-                    console.log('p3:', p1);
-                    console.log('p4:', p1);
-                    console.log('p5:', p1);
-
-                      if (p1) finalRidiUrl = p1.url;
-                      else if (p2) finalRidiUrl = p2.url;
-                      else if (p3) finalRidiUrl = p3.url;
-                      else if (p4) finalRidiUrl = p4.url;
-                      else if (p5) finalRidiUrl = p5.url;
-                      else finalRidiUrl = validMatches[0].url;
-                  }
-
-                  console.log('finalRidiUrl: ',finalRidiUrl);
-
-                  // 5. 일치하는 결과가 있으면 리디북스로, 완전히 엉뚱한 결과뿐이라면 구글 검색 결과창 띄우기
-                  if (finalRidiUrl) {
-                      chrome.tabs.create({ url: finalRidiUrl }).catch(() => {});
-                  } else {
-                      chrome.tabs.create({ url: fallbackGoogleUrl }).catch(() => {});
-                  }
-              } catch (err) {
-                  // 네트워크 에러 등이 발생했을 때의 차선책 (구글 검색창 띄우기)
-                  chrome.tabs.create({ url: googleUrl }).catch(() => {});
-              }
-          })();
+          performRidiSearch(message.cleanTitle);
           return true;
       }
       
@@ -869,6 +752,100 @@ else if (message.action === "DOWNLOAD_TRANSFERIT") {
 
 });
 
+async function performRidiSearch(cleanTitle) {
+    // 1. 책 제목 앞뒤에 쌍따옴표를 붙여 구글 정확도 검색(Exact match)을 유도합니다.
+    const query = `site:https://ridibooks.com/books "${cleanTitle}"`;
+    const googleUrl = "https://www.google.com/search?q=" + encodeURIComponent(query);
+
+    console.log('googleUrl:', googleUrl);
+
+    // 매칭 실패 시 사용할 일반 구글 검색 주소
+    const fallbackGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(cleanTitle);
+    
+    try {
+        // 2. 화면 이동 없이 백그라운드에서 구글 검색 결과를 가져옵니다.
+        const res = await fetch(googleUrl);
+        const html = await res.text();
+        
+        // 3. 정규식을 사용하여 a 태그 내부의 href 링크와 텍스트(제목)를 추출합니다.
+        const aTagRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+        let matches = [];
+        let m;
+        while ((m = aTagRegex.exec(html)) !== null) {
+            let href = m[1];
+            let innerHtml = m[2];
+            
+            // 구글 리다이렉트 주소 형태 (/url?q=...) 처리
+            if (href.startsWith('/url?q=')) {
+                href = decodeURIComponent(href.split('&')[0].replace('/url?q=', ''));
+            }
+            
+            // 리디북스 책 상세페이지 링크인 경우만 수집
+            if (href.includes('ridibooks.com/books/')) {
+                // 태그 제거 및 띄어쓰기 정제
+                let text = innerHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                matches.push({ url: href, title: text });
+            }
+        }
+
+        // [버그 수정] 구글 대체 검색 및 오탈자 방어를 위한 고도화된 교차 검증 로직
+        // 레벤슈타인 거리 알고리즘 (오탈자 및 띄어쓰기 뭉개짐 계산용)
+        const getSimilarity = (a, b) => {
+            if (!a) return b ? 0 : 1;
+            if (!b) return 0;
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+                    else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+                }
+            }
+            let maxLen = Math.max(a.length, b.length);
+            return maxLen === 0 ? 1 : (maxLen - matrix[b.length][a.length]) / maxLen;
+        };
+
+        // 원본 검색어에서도 혹시 모를 대괄호와 공백을 제거하여 비교 기준을 잡습니다.
+        let targetBase = cleanTitle.replace(/^(\s*\[.*?\])+\s*/g, '').replace(/\s+/g, '');
+        
+        let validMatches = matches.filter(match => {
+            let rTitle = match.title;
+            let hasBracket = /^(\s*\[.*?\])+/.test(rTitle);
+            let cleanRTitle = rTitle.replace(/^(\s*\[.*?\])+\s*/g, '').replace(/\s+/g, '');
+            let limit = hasBracket ? 13 : 30;
+            let t1 = targetBase.substring(0, limit);
+            let t2 = cleanRTitle.substring(0, limit);
+            let similarity = getSimilarity(t1, t2);
+            let isIncluded = (t1.length > 1 && t2.length > 1) && (t1.includes(t2) || t2.includes(t1));
+            return similarity >= 0.70 || isIncluded;
+        });
+
+        let finalRidiUrl = null;
+        if (validMatches.length > 0) {
+            let p1 = validMatches.find(m => m.title.includes('1권 미리보기'));
+            let p2 = validMatches.find(m => m.title.includes('- 만화 e북'));
+            let p3 = validMatches.find(m => m.title.includes('- 만화 연재'));
+            let p4 = validMatches.find(m => m.title.includes('바닐라'));
+            let p5 = validMatches.find(m => m.title.includes('코믹'));
+            if (p1) finalRidiUrl = p1.url;
+            else if (p2) finalRidiUrl = p2.url;
+            else if (p3) finalRidiUrl = p3.url;
+            else if (p4) finalRidiUrl = p4.url;
+            else if (p5) finalRidiUrl = p5.url;
+            else finalRidiUrl = validMatches[0].url;
+        }
+
+        if (finalRidiUrl) {
+            chrome.tabs.create({ url: finalRidiUrl }).catch(() => {});
+        } else {
+            chrome.tabs.create({ url: fallbackGoogleUrl }).catch(() => {});
+        }
+    } catch (err) {
+        chrome.tabs.create({ url: googleUrl }).catch(() => {});
+    }
+}
+
 function createIndependentMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: "addExclude", title: "1. 제외 추가", contexts: ["link", "selection"] });
@@ -876,6 +853,8 @@ function createIndependentMenus() {
     chrome.contextMenus.create({ id: "addComplete", title: "3. 완결 추가", contexts: ["link", "selection"] });
     chrome.contextMenus.create({ id: "deleteBook", title: "4. 삭제 처리", contexts: ["link", "selection"] });
     chrome.contextMenus.create({ id: "searchBook", title: "5. 검색", contexts: ["link", "selection"] });
+    chrome.contextMenus.create({ id: "searchRidi", title: "6. 리디검색", contexts: ["link", "selection"] });
+    chrome.contextMenus.create({ id: "searchEverything", title: "7. 애브리띵검색", contexts: ["link", "selection"] });
     
     chrome.contextMenus.create({ id: "separator", type: "separator", contexts: ["all"] });
     chrome.contextMenus.create({ id: "registerDetailSelector", title: "🎯 이 요소를 상세페이지 제목으로 등록 (버튼 표시)", contexts: ["all"] });
@@ -1018,6 +997,16 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       return;
   }
 
+  if (menuId === "searchRidi") {
+      performRidiSearch(cleanTitle);
+      return;
+  }
+
+  if (menuId === "searchEverything") {
+      executeEverythingSearch(cleanTitle, tab ? tab.id : null);
+      return;
+  }
+
   if (menuId === "deleteBook") {
       chrome.storage.local.get({ bookList: [] }, (data) => {
           let list = Array.isArray(data.bookList) ? data.bookList : [];
@@ -1071,6 +1060,29 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(processSaveQueue, 10);
 });
+
+function executeEverythingSearch(cleanTitle, tabId) {
+    if (tabId) {
+        chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: (title) => {
+                let iframe = document.getElementById('bm-everything-iframe');
+                if (!iframe) {
+                    iframe = document.createElement('iframe');
+                    iframe.id = 'bm-everything-iframe';
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+                }
+                iframe.src = "es:" + encodeURIComponent(title);
+            },
+            args: [cleanTitle]
+        }).catch(() => {
+            chrome.tabs.create({ url: "es:" + encodeURIComponent(cleanTitle) }).catch(() => {});
+        });
+    } else {
+        chrome.tabs.create({ url: "es:" + encodeURIComponent(cleanTitle) }).catch(() => {});
+    }
+}
 
 function processSaveQueue() {
     if (pendingTasks.length === 0) return;

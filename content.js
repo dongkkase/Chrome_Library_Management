@@ -1750,7 +1750,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             let fixStyle = document.getElementById('bm-custom-style');
             if (fixStyle) {
                 let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-                if (globalCustomCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalCustomCss;
+                if (globalCustomCss) styleContent += "\n" + globalCustomCss;
                 if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
                 if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
                 fixStyle.textContent = styleContent;

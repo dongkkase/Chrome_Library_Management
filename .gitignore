@@ -4,3 +4,4 @@ build.ps1
 .gitignore
 *.bak
 demo_site/
+memo.md

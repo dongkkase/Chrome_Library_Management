@@ -541,8 +541,10 @@ document.getElementById('saveBtn').onclick = () => {
   // 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
   const btn = document.getElementById('saveBtn');
   const originalBtnText = btn.innerText;
-  btn.innerText = "⏳ 6만건 처리 중... (잠시만 기다려주세요)";
+  btn.innerText = "⏳ 처리 중... (잠시만 기다려주세요)";
   btn.style.pointerEvents = 'none';
+
+  chrome.storage.local.set({ lastBulkType: targetType });
 
   // UI 텍스트가 바뀔 틈을 주기 위해 setTimeout으로 비동기 실행
   setTimeout(() => {
@@ -803,9 +805,17 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({ darkMode: isDark });
     });
 
-    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc' }, (data) => {
+    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc', lastBulkType: 'exclude' }, (data) => {
         const sortSelect = document.getElementById('sortSelect');
         if (sortSelect) sortSelect.value = data.sortOption;
+        
+        const bulkTypeSelect = document.getElementById('bulkTypeSelect');
+        if (bulkTypeSelect) {
+            bulkTypeSelect.value = data.lastBulkType;
+            bulkTypeSelect.addEventListener('change', (e) => {
+                chrome.storage.local.set({ lastBulkType: e.target.value });
+            });
+        }
 
         renderList('', true); 
         renderSites();
