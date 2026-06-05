@@ -544,18 +544,22 @@ function injectDirectDownloadButtons(allowedDLs) {
     const targetRegex = new RegExp(regexStr, "i");
 
     function extractTargetBookTitle(element) {
+        let hasTranslation = false;
+
         if (typeof globalDetailSelector !== 'undefined' && globalDetailSelector) {
             const detailEl = document.querySelector(globalDetailSelector);
             if (detailEl) {
                 const temp = document.createElement('div');
                 temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
                 temp.querySelectorAll('.bm-quick-actions, .book-badge, button, .auto-dl-btn').forEach(e => e.remove());
-                let title = cleanSiteTitle(temp.textContent);
+                let rawText = temp.textContent;
+                if (rawText.includes('번역')) hasTranslation = true;
+                let title = cleanSiteTitle(rawText);
                 let skip = false;
                 if (!title || title.length < 1) skip = true;
                 else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
                 else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
-                if (!skip) return title;
+                if (!skip) return { title: title, hasTranslation: hasTranslation };
             }
         }
 
@@ -565,16 +569,18 @@ function injectDirectDownloadButtons(allowedDLs) {
             temp.innerHTML = container.innerHTML.replace(/<img[^>]*>/gi, '');
             temp.querySelectorAll('.bm-quick-actions, .book-badge, .auto-dl-btn, button, .count').forEach(e => e.remove());
             let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
+            if (rawText.includes('번역')) hasTranslation = true;
             let title = cleanSiteTitle(rawText);
             let skip = false;
             if (!title || title.length < 1) skip = true;
             else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
             else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
-            if (!skip) return title;
+            if (!skip) return { title: title, hasTranslation: hasTranslation };
         }
 
         let pageTitle = document.title.split(/[-|]/)[0]; 
-        return cleanSiteTitle(pageTitle) || "알수없는제목";
+        if (pageTitle.includes('번역')) hasTranslation = true;
+        return { title: cleanSiteTitle(pageTitle) || "알수없는제목", hasTranslation: hasTranslation };
     }
 
     function extractPassword(element) {
@@ -597,7 +603,7 @@ function injectDirectDownloadButtons(allowedDLs) {
         return "";
     }
 
-    function createButton(insertAfterElement, url, pw, targetType, bookTitle) {
+    function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTranslation) {
         if (insertAfterElement.nextElementSibling && insertAfterElement.nextElementSibling.classList.contains('auto-dl-btn')) return;
         
         const autoBtn = document.createElement('a');
@@ -631,8 +637,9 @@ function injectDirectDownloadButtons(allowedDLs) {
             
             try {
                 let finalTitle = bookTitle;
+                if (hasTranslation) finalTitle += "(번역)";
                 let bType = getBookTypeForTitle(bookTitle);
-                if (bType === 'incomplete') finalTitle = "(미완)" + bookTitle;
+                if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
                 chrome.runtime.sendMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle }).catch(()=>{});
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
@@ -669,8 +676,8 @@ function injectDirectDownloadButtons(allowedDLs) {
 
             if(targetType){
                 let pw = extractPassword(link);
-                let titleStr = extractTargetBookTitle(link);
-                createButton(link, url, pw, targetType, titleStr);
+                let extracted = extractTargetBookTitle(link);
+                createButton(link, url, pw, targetType, extracted.title, extracted.hasTranslation);
             }
         }
     });
@@ -710,8 +717,8 @@ function injectDirectDownloadButtons(allowedDLs) {
 
             if(targetType){
                 let pw = extractPassword(btn);
-                let titleStr = extractTargetBookTitle(btn);
-                createButton(btn, url, pw, targetType, titleStr);
+                let extracted = extractTargetBookTitle(btn);
+                createButton(btn, url, pw, targetType, extracted.title, extracted.hasTranslation);
             }
         }
     });
