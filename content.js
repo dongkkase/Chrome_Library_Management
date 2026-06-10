@@ -1425,6 +1425,38 @@ function applyStyles() {
   
   if (globalAllowedDLs.length > 0) injectDirectDownloadButtons(globalAllowedDLs);
 
+  // tcafe21.com 보드 필터 적용 대상인 경우 4번째 td(작성자)를 5번째 td(날짜) 위로 이동
+  const hostname = window.location.hostname;
+  if ((hostname.includes("tcafe") || hostname.includes("tcafed")) && isAllowedBoard) {
+      document.querySelectorAll('#fboardlist table tbody tr').forEach(tr => {
+          const td4 = tr.querySelector('td:nth-child(4)');
+          const td5 = tr.querySelector('td:nth-child(5)');
+          const td6 = tr.querySelector('td:nth-child(6)');
+          const td7 = tr.querySelector('td:nth-child(7)');
+          
+          if (td4 && td5 && !tr.dataset.authorMoved) {
+              const authorDiv = document.createElement('div');
+              const authorText = td4.textContent.trim();
+              console.log('작성자명:', authorText); // 작성자명 로그 추가
+              if (authorText === '익명') {
+                  authorDiv.innerHTML = '';
+              } else if (authorText === '운영자') {
+                  authorDiv.innerHTML = '';
+              } else {
+                  const views = td6 ? td6.textContent.trim() : '0';
+                  const recs = td7 ? td7.textContent.trim() : '0';
+                  authorDiv.innerHTML = `${td4.innerHTML} / ${views} / ${recs}`;
+              }
+              
+              authorDiv.style.fontSize = "11px";
+              authorDiv.style.color = "#868e96";
+              authorDiv.style.marginBottom = "2px";
+              td5.insertBefore(authorDiv, td5.firstChild);
+              tr.dataset.authorMoved = "true"; // 중복 이동 방지
+          }
+      });
+  }
+
   if (globalDetailSelector) {
       const detailEls = document.querySelectorAll(globalDetailSelector);
       for(let i=0; i<detailEls.length; i++) applyStyleToDetailElement(detailEls[i]);
