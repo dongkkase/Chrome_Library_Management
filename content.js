@@ -7,7 +7,7 @@ const PRE_DEFINED_SITES = [
     excludeThumbSelector: ".board-thumbnail",
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
-    boardFilter: /bo_table=D2002/i,
+    boardFilter: /[?&]bo_table=D2002(?:&|#|$)/i,
     
     getHighResUrlAsync: async (thumb) => {
         const link = thumb.closest('a');
@@ -100,7 +100,7 @@ const PRE_DEFINED_SITES = [
     selector: "#fboardlist .list-board", 
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["열람하시겠습니까"], 
-    boardFilter: /bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)/i,
+    boardFilter: /[?&]bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)/i,
     themeCss: `
         #fboardlist > ul, #fboardlist .board-list, #fboardlist > div,
         #fboardlist table, #fboardlist table tbody {
@@ -1480,7 +1480,7 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true,
             document.head.appendChild(fixStyle);
         }
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-        if (globalCustomCss) styleContent += "\n" + globalCustomCss;
+        if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
         if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
         if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
         fixStyle.textContent = styleContent;
@@ -1757,7 +1757,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             let fixStyle = document.getElementById('bm-custom-style');
             if (fixStyle) {
                 let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-                if (globalCustomCss) styleContent += "\n" + globalCustomCss;
+                if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
                 if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
                 if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
                 fixStyle.textContent = styleContent;
