@@ -101,6 +101,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.downloads.show(message.downloadId);
       return true;
   }
+  
+  else if (message.action === "OPEN_OPTIONS_FOR_COMMENTS") {
+      chrome.storage.local.get({ openSlidePanel: false }, (data) => {
+          const optionsUrl = chrome.runtime.getURL("options.html");
+          const targetUrl = optionsUrl + "?focus=hideUselessComments";
+          
+          const openPopup = () => {
+              chrome.tabs.query({url: optionsUrl + "*"}, function(tabs) {
+                  const mainOptionsTab = tabs.find(tab => !tab.url.includes("#sidepanel"));
+                  if (mainOptionsTab) {
+                      chrome.windows.update(mainOptionsTab.windowId, { focused: true }).catch(()=>{});
+                      chrome.tabs.update(mainOptionsTab.id, {active: true, url: targetUrl}).catch(()=>{});
+                  } else {
+                      chrome.storage.local.set({ pendingFocus: 'hideUselessComments' }, () => {
+                          if (chrome.action && chrome.action.openPopup) {
+                              chrome.action.openPopup().catch(() => {
+                                  // 비동기 처리로 인해 사용자 제스처(클릭)가 유실되어 팝업 열기가 실패하면, 폴백으로 윈도우 창을 엽니다.
+                                  chrome.windows.create({ url: targetUrl, type: "popup", width: 760, height: 850 });
+                              });
+                          } else {
+                              chrome.windows.create({ url: targetUrl, type: "popup", width: 760, height: 850 });
+                          }
+                      });
+                  }
+              });
+          };
+
+          if (data.openSlidePanel) {
+              const windowId = sender.tab ? sender.tab.windowId : null;
+              if (windowId && chrome.sidePanel && chrome.sidePanel.open) {
+                  chrome.storage.local.set({ pendingFocus: 'hideUselessComments' });
+                  chrome.sidePanel.open({ windowId: windowId }).then(() => {
+                      chrome.runtime.sendMessage({ action: "FOCUS_USELESS_COMMENTS" }).catch(()=>{});
+                  }).catch(() => openPopup());
+              } else {
+                  openPopup();
+              }
+          } else {
+              openPopup();
+          }
+      });
+      return true;
+  }
 
   else if (message.action === "QUICK_ACTION") {
       const tabId = sender.tab ? sender.tab.id : null;
@@ -1238,7 +1281,7 @@ const dynamicFolderListener = (item, suggest) => {
     if (title) {
         chrome.storage.local.get({ autoFolder: true }, (data) => {
             if (data.autoFolder !== false) {
-                let safeTitle = title.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+                let safeTitle = title.replace(/[\\/:*?"<>|.]/g, ' ').replace(/\s+/g, ' ').trim();
                 if (safeTitle) {
                     suggest({ filename: safeTitle + "/" + item.filename, conflictAction: "uniquify" });
                     return;

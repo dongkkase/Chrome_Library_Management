@@ -931,18 +931,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const folderCheckbox = document.getElementById('autoFolderCheckbox'); 
     const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox');
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
+    const hideUselessCommentsCheckbox = document.getElementById('hideUselessCommentsCheckbox');
     const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
     const showListQuickBtnCheckbox = document.getElementById('showListQuickBtnCheckbox');
     const showListQuickBtnHoverCheckbox = document.getElementById('showListQuickBtnHoverCheckbox');
     const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
     const supportSingleCharCheckbox = document.getElementById('supportSingleCharCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
         if (focusLeftCheckbox) focusLeftCheckbox.checked = data.focusLeftTab;
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
+        if (hideUselessCommentsCheckbox) hideUselessCommentsCheckbox.checked = data.hideUselessComments;
         if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
         if (showListQuickBtnCheckbox) showListQuickBtnCheckbox.checked = data.showListQuickBtn;
         if (showListQuickBtnHoverCheckbox) showListQuickBtnHoverCheckbox.checked = data.showListQuickBtnHover;
@@ -969,6 +971,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (folderCheckbox) {
         folderCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ autoFolder: e.target.checked });
+        });
+    }
+    if (hideUselessCommentsCheckbox) {
+        hideUselessCommentsCheckbox.addEventListener('change', (e) => {
+            chrome.storage.local.set({ hideUselessComments: e.target.checked });
         });
     }
     // 왼쪽 탭 포커스 저장 로직 추가
@@ -1054,6 +1061,48 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({ useCustomTheme: e.target.checked });
         });
     }
+
+    // [신규 추가] '보기' 버튼 클릭을 통해 접근 시 포커스 애니메이션 처리
+    function focusUselessCommentsOption() {
+        const tabBtn = document.querySelector('.tab-btn[data-target="tab-settings"]');
+        if (tabBtn) tabBtn.click();
+        
+        setTimeout(() => {
+            const targetLabel = document.getElementById('hideUselessCommentsContainer');
+            if (targetLabel) {
+                targetLabel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                let blinkCount = 0;
+                targetLabel.style.transition = 'background-color 0.3s ease';
+                const blinkInterval = setInterval(() => {
+                    targetLabel.style.backgroundColor = blinkCount % 2 === 0 ? 'rgba(255, 193, 7, 0.4)' : 'transparent';
+                    targetLabel.style.borderRadius = '8px';
+                    targetLabel.style.padding = '5px';
+                    blinkCount++;
+                    if (blinkCount > 6) {
+                        clearInterval(blinkInterval);
+                        targetLabel.style.backgroundColor = 'transparent';
+                    }
+                }, 300);
+            }
+        }, 300);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('focus') === 'hideUselessComments') focusUselessCommentsOption();
+
+    chrome.storage.local.get(['pendingFocus'], (data) => {
+        if (data.pendingFocus === 'hideUselessComments') {
+            focusUselessCommentsOption();
+            chrome.storage.local.remove('pendingFocus');
+        }
+    });
+
+    chrome.runtime.onMessage.addListener((msg) => {
+        if (msg.action === "FOCUS_USELESS_COMMENTS") {
+            focusUselessCommentsOption();
+            chrome.storage.local.remove('pendingFocus');
+        }
+    });
 });
 
 function initVersionCheck() {

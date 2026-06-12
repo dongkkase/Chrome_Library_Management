@@ -18,7 +18,7 @@ const defaultCustomFilters = [
     "코이케 카즈오", "강격옥", "고선영", "나카가키 토모에", "나나난 키리코", "시즈미 레이코", "시미즈 레이코", "오카다 유키오", "카와사키 미에코", "판판야",
     "이케자와 사토미", "장태산", "임재원", "라가와 마리모", "혼마리 우", "오오시마 타케시", "타카하시 루미코", "후지사키 류", "다카하시 루미코", "아다치 미츠루",
     "아마즈메 류타", "카와시타 미즈키", "미우라 히로코", "니헤이 츠토무", "환댕", "데즈카 오사무", "테즈카 오사무", "무라오 미오",
-    "츠치다 세이키", "오바타 후미오", "이시카와 유고", "아카이시 미치요"
+    "츠치다 세이키", "오바타 후미오", "이시카와 유고", "아카이시 미치요", "미츠보시 타마"
 ];
 
 let globalCustomFilters = [...defaultCustomFilters];
@@ -37,6 +37,22 @@ if (typeof chrome !== 'undefined' && chrome.storage) {
             globalCustomFilters = [...defaultCustomFilters, ...userFilters];
         }
     });
+}
+
+// [신규 추가] 의미 없는 댓글 판별 키워드 및 함수
+const uselessCommentKeywords = [
+    "감사합니다", "고맙습니다", "감사", "수고", "잘볼게요", "잘볼께요", 
+    "잘보겠습니다", "ㄱㅅ", "ㄳ", "감사요", "감솨", "수고하셨습니다", "수고하세요",
+    "잘봤습니다", "잘봤어요", "감사합니당", '소중한 자료 감사합니다', '잘받겟습니다', '잘받았습니다',
+    '확인했습니다', '확인', '학인했어요'
+];
+
+function isUselessComment(text) {
+    if (!text) return false;
+    let cleanText = text.replace(/<[^>]+>/g, '').replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, '');
+    if (cleanText.length === 0 || cleanText.length > 20) return false; // 너무 길면 정상 댓글로 간주
+    
+    return uselessCommentKeywords.some(kw => cleanText.includes(kw.replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, '')));
 }
 
 function cleanSiteTitle(title) {

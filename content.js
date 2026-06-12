@@ -8,6 +8,8 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002(?:&|#|$)/i,
+    commentSelector: ".media-content",
+    commentWrapperSelector: ".media",
     
     getHighResUrlAsync: async (thumb) => {
         const link = thumb.closest('a');
@@ -56,11 +58,29 @@ const PRE_DEFINED_SITES = [
     `,
     themeCss: `
         @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        
         .div-table.table > tbody > tr > td,
         #fboardlist table  td{padding:12px 8px !important;border-bottom: 1px solid #ddd;}
         table.list-pc .list-subject a,
         #fboardlist .list-subject a{font-family: "Jua", sans-serif;}
         #fboardlist .list-subject a button{font-weight:400 !important;}
+
+        .view-content{font-family: "Jua" !important, sans-serif !important;}
+        .view-img img,
+        .view-content img{display:block;width:98%;max-width:calc(400px - 1.1%);float:left;margin-right:1%;border-radius:15px;box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.1);border: 1px solid rgba(0, 0, 0, 0.11);}
+        .view-content a{display:contents}
+        .view-content:after{content:"";display:block;clear:both}
+
+        @media screen and (max-width: 1000px) {
+            .view-img img,
+            .view-content img{max-width:calc(50% - 1.1%);}
+        }
+
+
+        @media screen and (max-width: 480px) {
+           .view-img img,
+            .view-content img{max-width:calc(100% - 1.1%);}
+        }
     `
   },
 { 
@@ -101,6 +121,8 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["열람하시겠습니까"], 
     boardFilter: /[?&]bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)/i,
+    commentSelector: ".media-content",
+    commentWrapperSelector: ".media",
     themeCss: `
         #fboardlist > ul, #fboardlist .board-list, #fboardlist > div,
         #fboardlist table, #fboardlist table tbody {
@@ -246,6 +268,7 @@ let isShowListQuickBtnHover = false;
 let isCustomThemeEnabled = false;
 let isAllowedBoard = true;
 let isSupportSingleCharEnabled = false;
+let isHideUselessCommentsEnabled = true;
 
 function initDataCache(data) {
     isDownloadUIEnabled = data.showDownloadUI !== false; 
@@ -254,6 +277,7 @@ function initDataCache(data) {
     isShowListQuickBtnHover = !!data.showListQuickBtnHover;
     isCustomThemeEnabled = !!data.useCustomTheme;
     isSupportSingleCharEnabled = !!data.supportSingleChar;
+    isHideUselessCommentsEnabled = data.hideUselessComments !== false;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -334,6 +358,71 @@ function getOrCreateHoverContainer() {
     document.body.appendChild(container);
   }
   return container;
+}
+
+let uselessCommentCount = 0;
+
+function processUselessComments() {
+    if (!isHideUselessCommentsEnabled || !isTargetSite) return;
+    if (!isTargetSite) return;
+
+    const hostname = window.location.hostname;
+    const config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
+    if (!config || !config.commentSelector) return;
+
+    // 옵션이 꺼졌을 때, 이미 숨겨진 댓글들을 다시 보여주고 카운트 초기화
+    if (!isHideUselessCommentsEnabled) {
+        document.querySelectorAll('[data-bm-hidden]').forEach(el => {
+            el.style.display = '';
+            el.removeAttribute('data-bm-hidden');
+        });
+        uselessCommentCount = 0;
+        return;
+    }
+
+    let newlyHidden = 0;
+    document.querySelectorAll(config.commentSelector).forEach(el => {
+        if (el.dataset.bmHidden) return;
+        
+        const text = el.textContent.trim();
+        if (isUselessComment(text)) {
+            let wrapper = config.commentWrapperSelector ? el.closest(config.commentWrapperSelector) : el;
+            if (wrapper && wrapper.style.display !== 'none') {
+                wrapper.style.display = 'none';
+                wrapper.dataset.bmHidden = 'true';
+                el.dataset.bmHidden = 'true';
+                newlyHidden++;
+                uselessCommentCount++;
+            }
+        }
+    });
+
+    if (newlyHidden > 0) {
+        const msg = `의미없는 댓글 <b>${uselessCommentCount}</b>개를 숨김처리했습니다. 해당 댓글들을 다시 보시겠습니까? ` +
+                    `<button class="bm-useless-show-btn" style="background:#20c997; color:#fff; border:none; border-radius:4px; padding:3px 8px; margin-left:8px; font-weight:bold; cursor:pointer;">[보기]</button>` +
+                    `<button class="bm-useless-opt-btn" style="background:#ffc107; color:#000; border:none; border-radius:4px; padding:3px 8px; margin-left:4px; font-weight:bold; cursor:pointer;">[설정]</button>`;
+        showInfoToast(msg);
+
+        setTimeout(() => {
+            document.querySelectorAll('.bm-useless-opt-btn').forEach(btn => {
+                btn.onclick = () => chrome.runtime.sendMessage({ action: "OPEN_OPTIONS_FOR_COMMENTS" }).catch(()=>{});
+            });
+            document.querySelectorAll('.bm-useless-show-btn').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('[data-bm-hidden="true"]').forEach(el => {
+                        el.style.display = '';
+                        el.dataset.bmHidden = 'revealed'; // 다시 숨김 처리되는 것을 방지
+                    });
+                    const toastDiv = btn.closest('div');
+                    if (toastDiv) {
+                        toastDiv.style.opacity = '0';
+                        toastDiv.style.transform = 'translateX(20px)';
+                        setTimeout(() => { if (toastDiv.parentNode) toastDiv.remove(); }, 300);
+                    }
+                };
+            });
+        }, 100);
+    }
 }
 
 function getPureLinkText(link) {
@@ -1480,6 +1569,8 @@ function applyStyles() {
   allLinks = [...new Set(allLinks)];
   if (applyStylesFrame) cancelAnimationFrame(applyStylesFrame);
 
+  processUselessComments();
+
   let index = 0;
   const maxOpsPerFrame = 30000;
   let currentBookCount = Math.max(1, cachedBookList.length);
@@ -1501,7 +1592,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1761,7 +1852,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1773,7 +1864,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1782,7 +1873,7 @@ window.addEventListener("focus", () => {
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
             initDataCache(data);
 
             // 실시간 테마 토글 적용/해제
