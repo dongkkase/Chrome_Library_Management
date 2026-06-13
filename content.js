@@ -7,7 +7,7 @@ const PRE_DEFINED_SITES = [
     excludeThumbSelector: ".board-thumbnail",
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
-    boardFilter: /[?&]bo_table=D2002(?:&|#|$)/i,
+    boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
     commentSelector: ".media-content",
     commentWrapperSelector: ".media",
     
@@ -46,12 +46,7 @@ const PRE_DEFINED_SITES = [
         .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 5px !important; width: auto !important; }
         .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
 
-        #fboardlist table th:nth-child(1),#fboardlist table td:nth-child(1),
-        #fboardlist table th:nth-child(4), #fboardlist table td:nth-child(4),
-        #fboardlist table th:nth-child(6), #fboardlist table td:nth-child(6),
-        #fboardlist table th:nth-child(7), #fboardlist table td:nth-child(7) {
-            display: none !important;
-        }
+
 
 
         
@@ -59,6 +54,13 @@ const PRE_DEFINED_SITES = [
     themeCss: `
         @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
         
+        #fboardlist table th:nth-child(1),#fboardlist table td:nth-child(1),
+        #fboardlist table th:nth-child(4), #fboardlist table td:nth-child(4),
+        #fboardlist table th:nth-child(6), #fboardlist table td:nth-child(6),
+        #fboardlist table th:nth-child(7), #fboardlist table td:nth-child(7) {
+            display: none !important;
+        }
+            
         .div-table.table > tbody > tr > td,
         #fboardlist table  td{padding:12px 8px !important;border-bottom: 1px solid #ddd;}
         table.list-pc .list-subject a,
