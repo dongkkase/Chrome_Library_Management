@@ -602,6 +602,27 @@
                 <b>게시판 전용 테마 적용</b> 
                 <span>지원하는 게시판 리스트의 디자인 일부를 변경합니다</span>
             </label>
+            
+            <div style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px;">
+                <label style="margin-bottom: 5px;">
+                    <b>🙈 게시물 숨김 처리</b> 
+                    <span style="margin-left: 0; display: inline-block;">매칭된 도서의 타입에 따라 게시물 자체를 목록에서 보이지 않게 숨깁니다.</span>
+                </label>
+                <div style="display: flex; gap: 15px; margin-left: 24px;">
+                    <label style="font-size: 13px;"><input type="checkbox" id="hideExcludeCheckbox"> 제외</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="hideCompleteCheckbox"> 완결</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="hideIncompleteCheckbox"> 미완</label>
+                    <label style="font-size: 13px;"><input type="checkbox" id="hideNewCheckbox"> 신작</label>
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-muted); margin: 6px 0 12px 24px;">
+                    💡 단, <b>해상도/권수 업그레이드 및 누락 데이터가 있는 경우(제외 항목은 무관)</b>, 또는 <b>매칭률 95% 이하인 '제외' 항목</b>은 숨김을 무시하고 표시됩니다.
+                </div>
+                <label style="margin-top: 10px; border-top: 1px dotted var(--border); padding-top: 10px;">
+                    <input type="checkbox" id="hideQuickMenuCheckbox">
+                    <b>게시물 숨김 처리 퀵 메뉴 가리기</b> 
+                    <span>게시판 목록 우측 하단에 나타나는 '게시물 숨김 퀵 메뉴' 패널을 화면에서 완전히 가립니다</span>
+                </label>
+            </div>
         </div>
     </div>
 

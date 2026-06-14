@@ -222,7 +222,7 @@ function renderList(filter = "", resetPage = false) {
             </select>
           </td>
           <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
-          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}" placeholder="해상도" style="width:65px"></td>
+          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}" placeholder="해상도" style="width:100%"></td>
           
           <td style="position:relative; vertical-align:middle; padding:0;">
             <div style="display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:100%;">
@@ -937,8 +937,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const showListQuickBtnHoverCheckbox = document.getElementById('showListQuickBtnHoverCheckbox');
     const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
     const supportSingleCharCheckbox = document.getElementById('supportSingleCharCheckbox');
+    const hideExcludeCheckbox = document.getElementById('hideExcludeCheckbox');
+    const hideCompleteCheckbox = document.getElementById('hideCompleteCheckbox');
+    const hideIncompleteCheckbox = document.getElementById('hideIncompleteCheckbox');
+    const hideNewCheckbox = document.getElementById('hideNewCheckbox');
+    const hideQuickMenuCheckbox = document.getElementById('hideQuickMenuCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -950,6 +955,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (showListQuickBtnHoverCheckbox) showListQuickBtnHoverCheckbox.checked = data.showListQuickBtnHover;
         if (customThemeCheckbox) customThemeCheckbox.checked = data.useCustomTheme;
         if (supportSingleCharCheckbox) supportSingleCharCheckbox.checked = data.supportSingleChar;
+        if (hideExcludeCheckbox) hideExcludeCheckbox.checked = data.hideExclude;
+        if (hideCompleteCheckbox) hideCompleteCheckbox.checked = data.hideComplete;
+        if (hideIncompleteCheckbox) hideIncompleteCheckbox.checked = data.hideIncomplete;
+        if (hideNewCheckbox) hideNewCheckbox.checked = data.hideNew;
+        if (hideQuickMenuCheckbox) hideQuickMenuCheckbox.checked = data.hideQuickMenu;
     });
     
     // 옵션값 변경 시 저장 로직
@@ -1060,6 +1070,21 @@ document.addEventListener('DOMContentLoaded', () => {
         customThemeCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ useCustomTheme: e.target.checked });
         });
+    }
+    if (hideExcludeCheckbox) {
+        hideExcludeCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideExclude: e.target.checked }));
+    }
+    if (hideCompleteCheckbox) {
+        hideCompleteCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideComplete: e.target.checked }));
+    }
+    if (hideIncompleteCheckbox) {
+        hideIncompleteCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideIncomplete: e.target.checked }));
+    }
+    if (hideNewCheckbox) {
+        hideNewCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideNew: e.target.checked }));
+    }
+    if (hideQuickMenuCheckbox) {
+        hideQuickMenuCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideQuickMenu: e.target.checked }));
     }
 
     // [신규 추가] '보기' 버튼 클릭을 통해 접근 시 포커스 애니메이션 처리

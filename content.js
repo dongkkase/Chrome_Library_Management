@@ -2,9 +2,10 @@
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
-    selector: ".board-hot-posts, #fboardlist",
+    selector: ".board-hot-posts, #fboardlist .list-subject",
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
+    hideSelector: "tr",
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
@@ -115,11 +116,15 @@ const PRE_DEFINED_SITES = [
     },
   },
 {
-    url: "ridibooks.com", selector: ".infinite-scroll-component", allowedDLs: []
+    url: "ridibooks.com", 
+    selector: "section li div>a, .infinite-scroll-component__outerdiv div>a", 
+    hideSelector: "li, .rigrid-31l7gp", 
+    allowedDLs: []
 },
 {
     url: "enterjoy.day", 
     selector: "#fboardlist .list-board", 
+    hideSelector: ".list-item",
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["열람하시겠습니까"], 
     boardFilter: /[?&]bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)/i,
@@ -223,6 +228,7 @@ const PRE_DEFINED_SITES = [
 { 
     url: "hellkaiv.net", 
     selector: "#gall_ul .bo_tit", 
+    hideSelector: "li",
     autoConfirmKeywords: ["링크", "발급"], 
     allowedDLs: ["giga", "gofile", "hk"],
     customCss: `
@@ -242,14 +248,21 @@ const PRE_DEFINED_SITES = [
 { 
     url: "amazon.co.jp", 
     selector: ".a-carousel-card, div[data-asin], .s-result-item, #gridItemRoot, .a-cardui", 
+    hideSelector: ".a-carousel-card, div[data-asin], .s-result-item",
     allowedDLs: [] 
 },
-{ url: "example.com", selector: "#board_list", allowedDLs: [] }
+{ url: "example.com", selector: "#board_list", hideSelector: "li", allowedDLs: [] }
 ];
 
 let globalAllowedDLs = [];
 let globalTargetSelector = 'a';
 let globalDetailSelector = ''; 
+let globalHideSelector = '';
+let isHideExclude = false;
+let isHideComplete = false;
+let isHideIncomplete = false;
+let isHideNew = false;
+let isHideQuickMenu = false;
 let globalCustomCss = '';
 let globalThemeCss = '';
 
@@ -280,6 +293,11 @@ function initDataCache(data) {
     isCustomThemeEnabled = !!data.useCustomTheme;
     isSupportSingleCharEnabled = !!data.supportSingleChar;
     isHideUselessCommentsEnabled = data.hideUselessComments !== false;
+    isHideExclude = !!data.hideExclude;
+    isHideComplete = !!data.hideComplete;
+    isHideIncomplete = !!data.hideIncomplete;
+    isHideNew = !!data.hideNew;
+    isHideQuickMenu = !!data.hideQuickMenu;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
@@ -293,6 +311,7 @@ function initDataCache(data) {
         isTargetSite = true;
         globalAllowedDLs = config.allowedDLs || [];
         globalTargetSelector = config.selector || 'a'; 
+        globalHideSelector = config.hideSelector || 'tr, li, .list-item';
         globalCustomCss = config.customCss || '';
         globalThemeCss = config.themeCss || '';
         isAllowedBoard = config.boardFilter ? config.boardFilter.test(window.location.href) : true;
@@ -300,6 +319,7 @@ function initDataCache(data) {
         isTargetSite = true;
         globalAllowedDLs = ["giga", "gofile"]; 
         globalTargetSelector = 'a'; 
+        globalHideSelector = matchedUserSite.hideSelector || 'tr, li, .list-item';
         globalCustomCss = matchedUserSite.customCss || '';
         globalThemeCss = matchedUserSite.themeCss || '';
         isAllowedBoard = true;
@@ -334,6 +354,87 @@ function initDataCache(data) {
     });
 
     isDataLoaded = true;
+}
+
+function injectQuickHidePanel() {
+    if (!isTargetSite) return;
+    
+    if (isHideQuickMenu) {
+        let existingPanel = document.getElementById('bm-quick-hide-panel');
+        if (existingPanel) existingPanel.remove();
+        return;
+    }
+    
+    if (document.getElementById('bm-quick-hide-panel')) return;
+    if (!document.body) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+        .bm-toggle-switch { display: inline-block; width: 28px; height: 16px; position: relative; vertical-align: middle; margin-right: 4px; }
+        .bm-toggle-switch input { opacity: 0; width: 0; height: 0; margin: 0; }
+        .bm-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 16px; }
+        .bm-slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .bm-toggle-switch input:checked + .bm-slider { background-color: #20c997; }
+        .bm-toggle-switch input:checked + .bm-slider:before { transform: translateX(12px); }
+        .bm-qh-label { display: flex; align-items: center; cursor: pointer; font-size: 13px; color: #333; user-select: none; margin: 0; font-weight: normal; }
+        #bm-quick-hide-panel {
+            position: fixed; bottom: 20px; right: 20px; background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #dee2e6; border-radius: 8px; padding: 12px 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); z-index: 999999;
+            font-family: 'Malgun Gothic', sans-serif; backdrop-filter: blur(5px);
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        body.dark-mode #bm-quick-hide-panel { background: rgba(33, 37, 41, 0.95); border-color: #495057; }
+        body.dark-mode .bm-qh-label { color: #f8f9fa; }
+        body.dark-mode .bm-slider { background-color: #495057; }
+    `;
+    document.head.appendChild(style);
+
+    const panel = document.createElement('div');
+    panel.id = 'bm-quick-hide-panel';
+    panel.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold; border-bottom: 1px dashed #dee2e6; padding-bottom: 8px; color:var(--text, #333);">
+            <span style="display:flex; align-items:center; gap:5px;">🙈 게시물 숨김</span>
+            <span id="bm-qh-toggle-btn" style="cursor:pointer; font-size: 16px; line-height: 1; padding: 0 5px; color: #868e96; user-select: none;">−</span>
+        </div>
+        <div id="bm-qh-content" style="display: flex; gap: 12px; align-items: center;">
+            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-exclude" ${isHideExclude ? 'checked' : ''}><span class="bm-slider"></span></label> 제외</label>
+            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-complete" ${isHideComplete ? 'checked' : ''}><span class="bm-slider"></span></label> 완결</label>
+            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-incomplete" ${isHideIncomplete ? 'checked' : ''}><span class="bm-slider"></span></label> 미완</label>
+            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-new" ${isHideNew ? 'checked' : ''}><span class="bm-slider"></span></label> 신작</label>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    const toggleBtn = document.getElementById('bm-qh-toggle-btn');
+    const content = document.getElementById('bm-qh-content');
+    toggleBtn.onclick = () => {
+        if (content.style.display === 'none') { content.style.display = 'flex'; toggleBtn.textContent = '−'; } 
+        else { content.style.display = 'none'; toggleBtn.textContent = '+'; }
+    };
+
+    document.getElementById('bm-qh-exclude').addEventListener('change', e => chrome.storage.local.set({ hideExclude: e.target.checked }));
+    document.getElementById('bm-qh-complete').addEventListener('change', e => chrome.storage.local.set({ hideComplete: e.target.checked }));
+    document.getElementById('bm-qh-incomplete').addEventListener('change', e => chrome.storage.local.set({ hideIncomplete: e.target.checked }));
+    document.getElementById('bm-qh-new').addEventListener('change', e => chrome.storage.local.set({ hideNew: e.target.checked }));
+}
+
+function updateQuickHidePanel() {
+    if (isHideQuickMenu) {
+        let existingPanel = document.getElementById('bm-quick-hide-panel');
+        if (existingPanel) existingPanel.remove();
+        return;
+    } else {
+        injectQuickHidePanel();
+    }
+    const excludeCb = document.getElementById('bm-qh-exclude');
+    const completeCb = document.getElementById('bm-qh-complete');
+    const incompleteCb = document.getElementById('bm-qh-incomplete');
+    const newCb = document.getElementById('bm-qh-new');
+    if (excludeCb) excludeCb.checked = isHideExclude;
+    if (completeCb) completeCb.checked = isHideComplete;
+    if (incompleteCb) incompleteCb.checked = isHideIncomplete;
+    if (newCb) newCb.checked = isHideNew;
 }
 
 function getOrCreateHoverContainer() {
@@ -1139,6 +1240,7 @@ function applyStyleToSingleLink(link) {
 
     if (link._bmData.skip) {
         removeBadge(link);
+        link.dataset.bmShouldHide = "false";
         return;
     }
 
@@ -1168,6 +1270,8 @@ function applyStyleToSingleLink(link) {
     
     let badgeStyle = '';
     let newBadgeHTML = '';
+    
+    let shouldHide = false;
 
     if (book) {
         const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
@@ -1175,6 +1279,20 @@ function applyStyleToSingleLink(link) {
         const displayScore = Math.round(maxScore);
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
+
+        // '제외' 타입이더라도 매칭률이 95% 이하일 경우 숨김 무시
+        if (book.type === "exclude" && isHideExclude && maxScore > 95) shouldHide = true;
+        else if (book.type === "complete" && isHideComplete) shouldHide = true;
+        else if (book.type === "incomplete" && isHideIncomplete) shouldHide = true;
+        else if (book.type === "new" && isHideNew) shouldHide = true; // 신작(new) 대응
+
+        // 해상도/권수 업그레이드 및 누락 권수 예외 적용 (단, '제외' 항목은 업그레이드 여부와 무관하게 무조건 숨김)
+        if (book.type !== "exclude") {
+            const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
+            if (hasUpgrade || (book.missingVols && book.missingVols.length > 0)) {
+                shouldHide = false;
+            }
+        }
 
         // 누락 뱃지 생성 로직
         let missingHtml = '';
@@ -1232,6 +1350,7 @@ function applyStyleToSingleLink(link) {
         }
     } else {
         removeBadge(link);
+        if (isHideNew) shouldHide = true; // 어느 항목과도 매칭되지 않은 경우(미등록) 신작으로 간주하여 숨김 처리
     }
 
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
@@ -1289,6 +1408,24 @@ function applyStyleToSingleLink(link) {
         let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
         if (existingBr) existingBr.remove();
         if (existingActions) existingActions.remove();
+    }
+
+    // 게시물 숨김 처리 적용
+    if (globalHideSelector) {
+        const parentEl = link.closest(globalHideSelector);
+        if (parentEl) {
+            if (shouldHide) {
+                link.dataset.bmShouldHide = "true";
+                parentEl.style.setProperty("display", "none", "important");
+            } else {
+                link.dataset.bmShouldHide = "false";
+                // 동일 부모 요소 내에 숨김을 요구하는 다른 링크가 없을 때만 숨김 해제
+                const siblingHiders = parentEl.querySelectorAll('[data-bm-should-hide="true"]');
+                if (siblingHiders.length === 0 && parentEl.style.display === "none") {
+                    parentEl.style.removeProperty("display");
+                }
+            }
+        }
     }
 }
 
@@ -1594,10 +1731,20 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
+        const initPanel = () => {
+            injectQuickHidePanel();
+            updateQuickHidePanel();
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initPanel);
+        } else {
+            initPanel();
+        }
+
         let fixStyle = document.getElementById('bm-custom-style');
         if (!fixStyle) {
             fixStyle = document.createElement('style');
@@ -1799,7 +1946,7 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
               initDataCache(data);
               document.querySelectorAll(globalTargetSelector).forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -1854,7 +2001,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1866,7 +2013,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -1875,8 +2022,9 @@ window.addEventListener("focus", () => {
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false }, (data) => {
+        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
             initDataCache(data);
+            updateQuickHidePanel();
 
             // 실시간 테마 토글 적용/해제
             let fixStyle = document.getElementById('bm-custom-style');

@@ -68,7 +68,7 @@ function cleanSiteTitle(title) {
       
       sortedFilters.forEach(word => {
           const trimWord = word.trim();
-          if (['~', '-', '～', '〜', '〰', '∼', '–', '—'].includes(trimWord)) return;
+          if (['~', '-', '～', '〜', '〰', '∼', '–', '—', '_', '__'].includes(trimWord)) return;
 
           const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(safeWord, 'gi');
@@ -82,7 +82,7 @@ function cleanSiteTitle(title) {
       
       sortedFilters.forEach(word => {
           const trimWord = word.trim();
-          if (['~', '-', '～', '〜', '〰', '∼', '–', '—'].includes(trimWord)) return;
+          if (['~', '-', '～', '〜', '〰', '∼', '–', '—', '_', '__'].includes(trimWord)) return;
 
           const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const regex = new RegExp(safeWord, 'gi');
@@ -120,14 +120,14 @@ function cleanSiteTitle(title) {
     .replace(/지원\s사격|지원사격/g, '')
     .replace(/완결은\s무료/g, '')
     .replace(/\s외\s\d+편/g, '')
-    .replace(/\(19\+\)|19\+\)|19\)|19금|19\+|15\+\)|15\)|15금|15\+|N새글|고화질|저화질|무료|워터마크없음|워터마크|고화질판|저화질판|단권|연재본|화질보정|확인불가/g, '')
+    .replace(/\(19 웹툰\)|\(19\+\)|19\+\)|19\)|19금|19\+|15\+\)|15\)|15금|15\+|N새글|고화질|저화질|무료|워터마크없음|워터마크|고화질판|저화질판|단권|연재본|화질보정|확인불가/g, '')
     .replace(/스캔 단면|스캔단면|스캔 양면|스캔양면|스캔본|스캔판/g, '')
     .replace(/단편 만화|단편만화|단편집|단편|단행본/g, '')
     .replace(/권\~/gi, '')
     .replace(/[\[\(].*?[\]\)]/g, ' ') 
     .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
     .replace(/\d+\s*[\~\-～〜〰∼–—_,\/&・·･]\s*\d+/g, ' ') 
-    .replace(/[：:—\-\/～〜〰∼~・·･]/g, ' ') 
+    .replace(/[：:—\-\/～〜〰∼~・·･_]/g, ' ') 
     .replace(/\d+\s*(?:권|화)/g, ' ')
     .replace(/완결[!?.~]*/g, ' ')
     .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
