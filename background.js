@@ -217,6 +217,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let finalUrl = res.url;
 
         let hostMatch = finalUrl.match(/https?:\/\/([^\/]+)/);
+        console.log('hostMatch', hostMatch);
         let host = hostMatch ? hostMatch[1] : "94.gigafile.nu";
         let fileIdMatch = finalUrl.match(/[?&]file=([0-9]{4}-[0-9a-zA-Z]+)/) || finalUrl.match(/\/([0-9]{4}-[0-9a-zA-Z]+)(?:[?&\/]|$)/);
         let fileId = fileIdMatch ? fileIdMatch[1] : null;
@@ -1075,26 +1076,27 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       return;
   }
 
-  let type = "exclude";
-  if (menuId === "addIncomplete") type = "incomplete";
-  if (menuId === "addComplete") type = "complete";
+    let type = "exclude";
+    if (menuId === "addIncomplete") type = "incomplete";
+    if (menuId === "addComplete") type = "complete";
 
-  const resMatch = rawTitle.match(/\d{3,4}\s*p(?:x)?/gi);
-  const resolution = resMatch ? Array.from(new Set(resMatch)).map(s => {
-      let lower = s.toLowerCase();
-      return lower.endsWith('px') ? lower : lower + 'x';
-  }).join(',') : "";
-  let lastVol = "";
-  
-  const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_,\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
-  const volMatch = rawTitle.match(/(\d+)\s*(?:권|화)/);
-  const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
+    const resMatch = rawTitle.match(/\d{3,4}\s*p(?:x)?/gi);
+    const resolution = resMatch ? Array.from(new Set(resMatch)).map(s => {
+        let lower = s.toLowerCase();
+        return lower.endsWith('px') ? lower : lower + 'x';
+    }).join(',') : "";
+    let lastVol = "";
 
-  if (rangeMatch) lastVol = parseInt(rangeMatch[2], 10).toString();
-  else if (volMatch) lastVol = parseInt(volMatch[1], 10).toString();
-  else if (endNumMatch) lastVol = parseInt(endNumMatch[1], 10).toString();
+    // [수정] 21,000과 같은 숫자에서 쉼표를 범위로 오인하지 않도록 정규식에서 쉼표(,) 제거
+    const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
+    const volMatch = rawTitle.match(/(\d+)\s*(?:권|화)/);
+    const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
 
-  const dateString = new Date().toISOString(); 
+    if (rangeMatch) lastVol = parseInt(rangeMatch[2], 10).toString();
+    else if (volMatch) lastVol = parseInt(volMatch[1], 10).toString();
+    else if (endNumMatch) lastVol = parseInt(endNumMatch[1], 10).toString();
+
+    const dateString = new Date().toISOString();
 
   pendingTasks.push({
       cleanTitle, resolution, lastVol, type, dateString, tabId: tab?.id

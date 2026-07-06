@@ -117,7 +117,7 @@ const PRE_DEFINED_SITES = [
   },
 {
     url: "ridibooks.com", 
-    selector: "section li div>a, .infinite-scroll-component__outerdiv div>a", 
+    selector: "#books_contents h1, .infinite-scroll-component div>a", 
     hideSelector: "li, .rigrid-31l7gp", 
     allowedDLs: []
 },
@@ -723,7 +723,7 @@ function injectDirectDownloadButtons(allowedDLs) {
     if (!allowedDLs || allowedDLs.length === 0) return;
 
     let regexParts = [];
-    if (allowedDLs.includes('giga')) regexParts.push('gigafile\\.nu|xgf\\.nu');
+    if (allowedDLs.includes('giga')) regexParts.push('gigafile\\.(?:nu|jp)|xgf\\.nu');
     if (allowedDLs.includes('gofile')) regexParts.push('gofile\\.io');
     if (allowedDLs.includes('hk')) regexParts.push('hellkdis\\.net\\/s\\/|hellkaiv\\.net\\/s\\/');
     if (allowedDLs.includes('transfer')) regexParts.push('transfer\\.it\\/s\\/|transfer\\.it\\/t\\/'); 
