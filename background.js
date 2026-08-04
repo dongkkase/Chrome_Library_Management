@@ -5,6 +5,138 @@ let downloadTitlesMap = {}; // 다운로드 ID와 폴더명(책 제목) 매핑
 let urlToTitleMap = {};
 let gofileAuthLock = null;
 
+function ignoreLastError() {
+    void chrome.runtime.lastError;
+}
+
+function sendRuntimeMessage(message) {
+    try {
+        chrome.runtime.sendMessage(message, ignoreLastError);
+    } catch (e) {}
+}
+
+function sendTabMessage(tabId, message) {
+    if (!tabId) return;
+    try {
+        chrome.tabs.sendMessage(tabId, message, ignoreLastError);
+    } catch (e) {}
+}
+
+function runHellkdisAutoDownload(url, pw) {
+    chrome.tabs.create({ url: url, active: true }, function(tab) {
+        let listener = function(tabId, changeInfo, updatedTab) {
+            if (tabId === tab.id && changeInfo.status === 'complete') {
+                chrome.tabs.onUpdated.removeListener(listener);
+
+                chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: (password) => {
+                        const closeCurrentTab = () => {
+                            try {
+                                chrome.runtime.sendMessage({ action: "CLOSE_ME" }, () => {
+                                    void chrome.runtime.lastError;
+                                });
+                            } catch (e) {}
+                        };
+
+                        if (!document.getElementById('bm-macro-overlay')) {
+                            const overlay = document.createElement('div');
+                            overlay.id = 'bm-macro-overlay';
+                            overlay.style.cssText = `
+                                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                                background: rgba(0, 0, 0, 0.85); z-index: 2147483647;
+                                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                                color: white; font-family: 'Malgun Gothic', sans-serif; pointer-events: all;
+                            `;
+                            overlay.innerHTML = `
+                                <style>@keyframes bm-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                                <div style="width: 60px; height: 60px; border: 6px solid rgba(255,255,255,0.2); border-top: 6px solid #6f42c1; border-radius: 50%; animation: bm-spin 1s linear infinite; margin-bottom: 25px;"></div>
+                                <h2 style="margin: 0 0 15px 0; color: #fff; font-size: 26px; font-weight: bold; letter-spacing: -1px;">🚀 자동 다운로드 진행 중...</h2>
+                                <p style="margin: 0; color: #ced4da; font-size: 16px;">매크로가 안전하게 동작 중입니다. 마우스를 클릭하지 말고 잠시만 기다려주세요.</p>
+                                <p id="bm-macro-status" style="margin: 15px 0 0 0; color: #ffc107; font-size: 15px; font-weight: bold;">(다운로드가 서버에서 시작되면 창이 자동으로 닫힙니다)</p>
+                            `;
+                            document.body.appendChild(overlay);
+                        }
+
+                        const setNativeValue = (element, value) => {
+                            const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
+                            const prototype = Object.getPrototypeOf(element);
+                            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
+                            if (valueSetter && valueSetter !== prototypeValueSetter) {
+                                prototypeValueSetter.call(element, value);
+                            } else {
+                                valueSetter.call(element, value);
+                            }
+                            element.dispatchEvent(new Event('input', { bubbles: true }));
+                        };
+
+                        const getVisiblePwInput = () => {
+                            return Array.from(document.querySelectorAll('input[type="password"]')).find(el => {
+                                if (el.disabled) return false;
+                                const rect = el.getBoundingClientRect();
+                                return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden' && window.getComputedStyle(el).display !== 'none';
+                            });
+                        };
+
+                        let attempts = 0;
+                        let stage = 'INIT';
+
+                        const autoMacro = () => {
+                            if (stage === 'DONE') return;
+                            attempts++;
+
+                            let pwInput = getVisiblePwInput();
+                            let dlBtn = document.querySelector('#public-page-menu--primary, a[href*="/dav/files/"]');
+                            if (!dlBtn) {
+                                dlBtn = Array.from(document.querySelectorAll('a[role="button"], button')).find(el => (el.textContent||'').includes('다운로드'));
+                            }
+
+                            if (pwInput && password && stage === 'INIT') {
+                                setNativeValue(pwInput, password);
+
+                                let submitBtn = document.querySelector('button.icon-confirm, button[type="submit"], input[type="submit"], .button-vue--primary, button.primary');
+                                if (submitBtn) {
+                                    submitBtn.click();
+                                } else {
+                                    let form = pwInput.closest('form');
+                                    if(form) form.submit();
+                                    else pwInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', keyCode: 13, which: 13, bubbles: true}));
+                                }
+                                stage = 'PW_ENTERED';
+                                setTimeout(autoMacro, 1500);
+                                return;
+
+                            } else if (dlBtn && stage !== 'DL_CLICKED') {
+                                stage = 'DL_CLICKED';
+
+                                setTimeout(() => {
+                                    dlBtn.click();
+                                    let statusText = document.getElementById('bm-macro-status');
+                                    if (statusText) statusText.innerText = "✅ 다운로드 요청 완료! 곧 창이 닫힙니다...";
+
+                                    setTimeout(closeCurrentTab, 6000);
+                                }, 1000);
+
+                            } else if (attempts < 40 && stage !== 'DL_CLICKED') {
+                                setTimeout(autoMacro, 500);
+                            } else if (attempts >= 40 && stage !== 'DL_CLICKED') {
+                                let ov = document.getElementById('bm-macro-overlay');
+                                if (ov) {
+                                    ov.innerHTML = `<h2 style="color:#dc3545;">⚠️ 자동 다운로드 지연됨</h2><p>화면을 클릭하여 수동으로 다운로드를 진행해 주세요.</p>`;
+                                    setTimeout(() => ov.remove(), 2500);
+                                }
+                            }
+                        };
+                        setTimeout(autoMacro, 1000);
+                    },
+                    args: [pw || ""]
+                }).catch(err => console.log(err));
+            }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+    });
+}
+
 async function getGofileCredentials(forceRefresh = false) {
     let now = Date.now();
     let stored = await chrome.storage.local.get(['gfToken', 'gfWt', 'gfTime']);
@@ -133,7 +265,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               if (windowId && chrome.sidePanel && chrome.sidePanel.open) {
                   chrome.storage.local.set({ pendingFocus: 'hideUselessComments' });
                   chrome.sidePanel.open({ windowId: windowId }).then(() => {
-                      chrome.runtime.sendMessage({ action: "FOCUS_USELESS_COMMENTS" }).catch(()=>{});
+                      sendRuntimeMessage({ action: "FOCUS_USELESS_COMMENTS" });
                   }).catch(() => openPopup());
               } else {
                   openPopup();
@@ -184,10 +316,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   bgListMapCache = null; // [추가] 삭제 시 백그라운드 캐시 무효화
                   
                   chrome.storage.local.set({ bookList: list }, () => {
-                      if (tabId) chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
+                      sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
                   });
               } else {
-                  if (tabId) chrome.tabs.sendMessage(tabId, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true }).catch(() => {});
+                  sendTabMessage(tabId, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
               }
           });
           return true;
@@ -223,7 +355,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let fileId = fileIdMatch ? fileIdMatch[1] : null;
 
         if (!fileId) {
-          chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 파일 ID를 찾을 수 없습니다.", isError: true }).catch(() => {});
+          sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 파일 ID를 찾을 수 없습니다.", isError: true });
           return;
         }
 
@@ -255,7 +387,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         if (!targetDlUrl) {
-            chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 링크를 찾지 못했거나 기간이 만료되었습니다.", isError: true }).catch(() => {});
+            sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 링크를 찾지 못했거나 기간이 만료되었습니다.", isError: true });
             return;
         }
 
@@ -265,14 +397,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 downloadTitlesMap[downloadId] = message.title; 
             }
             if (chrome.runtime.lastError) {
-                chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true }).catch(() => {});
+                sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true });
             } else {
-                chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "✅ Gigafile 백그라운드 다운로드가 시작되었습니다!" }).catch(() => {});
+                sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "✅ Gigafile 백그라운드 다운로드가 시작되었습니다!" });
             }
         });
 
       } catch (error) {
-        chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 주소 해석 중 에러가 발생했습니다.", isError: true }).catch(() => {});
+        sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 주소 해석 중 에러가 발생했습니다.", isError: true });
       }
     })();
     return true; 
@@ -282,7 +414,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       let url = message.url;
       let pw = message.password || "";
       
-      chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "🚀 Gofile 보안 회피를 위해 새 탭에서 자동 다운로드를 진행합니다." }).catch(()=>{});
+      sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "🚀 Gofile 보안 회피를 위해 새 탭에서 자동 다운로드를 진행합니다." });
 
       chrome.tabs.create({ url: url, active: true }, function(tab) {
           let listener = function(tabId, changeInfo) {
@@ -419,7 +551,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                                                       
                                                       stage = 'DONE';
                                                       setTimeout(() => {
-                                                          chrome.runtime.sendMessage({ action: "CLOSE_ME" });
+                                                          try {
+                                                              chrome.runtime.sendMessage({ action: "CLOSE_ME" }, () => {
+                                                                  void chrome.runtime.lastError;
+                                                              });
+                                                          } catch (e) {}
                                                       }, 5000);
                                                   }
                                               }, 2500); 
@@ -520,128 +656,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     downloadTitlesMap[downloadId] = message.title;
                 }
                 if (chrome.runtime.lastError) {
-                    chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true }).catch(() => {});
+                    sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true });
                 } else {
-                    chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "✅ Hellkdis 백그라운드 다운로드가 시작되었습니다!" }).catch(() => {});
+                    sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "✅ Hellkdis 백그라운드 다운로드가 시작되었습니다!" });
                 }
             });
             
         } catch (error) {
-            chrome.tabs.sendMessage(sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "⚠️ 백그라운드 통신 실패. 새 탭을 열어 다운로드를 진행합니다.", isError: true }).catch(() => {});
-            chrome.runtime.sendMessage({ action: "OPEN_HELLKDIS_WITH_PW", url: message.url, password: message.password }).catch(() => {});
+            sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "⚠️ 백그라운드 통신 실패. 새 탭을 열어 다운로드를 진행합니다.", isError: true });
+            runHellkdisAutoDownload(message.url, message.password);
         }
     })();
     return true;
   }
   
   else if (message.action === "OPEN_HELLKDIS_WITH_PW") {
-      let url = message.url;
-      let pw = message.password;
-      
-      chrome.tabs.create({ url: url, active: true }, function(tab) {
-          let listener = function(tabId, changeInfo, updatedTab) {
-              if (tabId === tab.id && changeInfo.status === 'complete') {
-                  chrome.tabs.onUpdated.removeListener(listener);
-                  
-                  chrome.scripting.executeScript({
-                      target: { tabId: tab.id },
-                      func: (password) => {
-                          if (!document.getElementById('bm-macro-overlay')) {
-                              const overlay = document.createElement('div');
-                              overlay.id = 'bm-macro-overlay';
-                              overlay.style.cssText = `
-                                  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                                  background: rgba(0, 0, 0, 0.85); z-index: 2147483647;
-                                  display: flex; flex-direction: column; align-items: center; justify-content: center;
-                                  color: white; font-family: 'Malgun Gothic', sans-serif; pointer-events: all;
-                              `;
-                              overlay.innerHTML = `
-                                  <style>@keyframes bm-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-                                  <div style="width: 60px; height: 60px; border: 6px solid rgba(255,255,255,0.2); border-top: 6px solid #6f42c1; border-radius: 50%; animation: bm-spin 1s linear infinite; margin-bottom: 25px;"></div>
-                                  <h2 style="margin: 0 0 15px 0; color: #fff; font-size: 26px; font-weight: bold; letter-spacing: -1px;">🚀 자동 다운로드 진행 중...</h2>
-                                  <p style="margin: 0; color: #ced4da; font-size: 16px;">매크로가 안전하게 동작 중입니다. 마우스를 클릭하지 말고 잠시만 기다려주세요.</p>
-                                  <p id="bm-macro-status" style="margin: 15px 0 0 0; color: #ffc107; font-size: 15px; font-weight: bold;">(다운로드가 서버에서 시작되면 창이 자동으로 닫힙니다)</p>
-                              `;
-                              document.body.appendChild(overlay);
-                          }
-
-                          const setNativeValue = (element, value) => {
-                              const valueSetter = Object.getOwnPropertyDescriptor(element, 'value').set;
-                              const prototype = Object.getPrototypeOf(element);
-                              const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value').set;
-                              if (valueSetter && valueSetter !== prototypeValueSetter) {
-                                  prototypeValueSetter.call(element, value);
-                              } else {
-                                  valueSetter.call(element, value);
-                              }
-                              element.dispatchEvent(new Event('input', { bubbles: true }));
-                          };
-
-                          const getVisiblePwInput = () => {
-                              return Array.from(document.querySelectorAll('input[type="password"]')).find(el => {
-                                  if (el.disabled) return false;
-                                  const rect = el.getBoundingClientRect();
-                                  return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden' && window.getComputedStyle(el).display !== 'none';
-                              });
-                          };
-
-                          let attempts = 0;
-                          let stage = 'INIT';
-                          
-                          const autoMacro = () => {
-                              if (stage === 'DONE') return;
-                              attempts++;
-                              
-                              let pwInput = getVisiblePwInput();
-                              let dlBtn = document.querySelector('#public-page-menu--primary, a[href*="/dav/files/"]');
-                              if (!dlBtn) {
-                                  dlBtn = Array.from(document.querySelectorAll('a[role="button"], button')).find(el => (el.textContent||'').includes('다운로드'));
-                              }
-
-                              if (pwInput && password && stage === 'INIT') {
-                                  setNativeValue(pwInput, password);
-                                  
-                                  let submitBtn = document.querySelector('button.icon-confirm, button[type="submit"], input[type="submit"], .button-vue--primary, button.primary');
-                                  if (submitBtn) {
-                                      submitBtn.click();
-                                  } else {
-                                      let form = pwInput.closest('form');
-                                      if(form) form.submit();
-                                      else pwInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', keyCode: 13, which: 13, bubbles: true}));
-                                  }
-                                  stage = 'PW_ENTERED';
-                                  setTimeout(autoMacro, 1500);
-                                  return;
-                                  
-                              } else if (dlBtn && stage !== 'DL_CLICKED') {
-                                  stage = 'DL_CLICKED';
-                                  
-                                  setTimeout(() => {
-                                      dlBtn.click();
-                                      let statusText = document.getElementById('bm-macro-status');
-                                      if (statusText) statusText.innerText = "✅ 다운로드 요청 완료! 곧 창이 닫힙니다...";
-                                      
-                                      setTimeout(() => { chrome.runtime.sendMessage({ action: "CLOSE_ME" }); }, 6000);
-                                  }, 1000);
-                                  
-                              } else if (attempts < 40 && stage !== 'DL_CLICKED') {
-                                  setTimeout(autoMacro, 500);
-                              } else if (attempts >= 40 && stage !== 'DL_CLICKED') {
-                                  let ov = document.getElementById('bm-macro-overlay');
-                                  if (ov) {
-                                      ov.innerHTML = `<h2 style="color:#dc3545;">⚠️ 자동 다운로드 지연됨</h2><p>화면을 클릭하여 수동으로 다운로드를 진행해 주세요.</p>`;
-                                      setTimeout(() => ov.remove(), 2500);
-                                  }
-                              }
-                          };
-                          setTimeout(autoMacro, 1000);
-                      },
-                      args: [pw || ""]
-                  }).catch(err => console.log(err));
-              }
-          };
-          chrome.tabs.onUpdated.addListener(listener);
-      });
+      runHellkdisAutoDownload(message.url, message.password);
       return true;
   }
 
@@ -651,10 +681,10 @@ else if (message.action === "DOWNLOAD_TRANSFERIT") {
           try {
               const transferUrl = message.url;
               
-              chrome.tabs.sendMessage(sender.tab.id, { 
-                  action: "SHOW_INFO_TOAST", 
-                  msg: "🚀 Transfer.it 백그라운드 다운로드를 준비합니다..." 
-              }).catch(() => {});
+              sendTabMessage(sender.tab && sender.tab.id, {
+                  action: "SHOW_INFO_TOAST",
+                  msg: "🚀 Transfer.it 백그라운드 다운로드를 준비합니다..."
+              });
 
               // 1. 화면 포커스를 뺏지 않고(active: false) 뒤쪽에 조용히 탭 열기
               chrome.tabs.create({ url: transferUrl, active: false }, (tab) => {
@@ -749,9 +779,9 @@ else if (message.action === "DOWNLOAD_TRANSFERIT") {
                           myDownloadId = item.id;
                           if (message.title) downloadTitlesMap[item.id] = message.title; 
                           
-                          chrome.tabs.sendMessage(sender.tab.id, { 
-                              action: "SHOW_INFO_TOAST", msg: "✅ Transfer.it 다운로드가 시작되었습니다! (탭 자동 종료)" 
-                          }).catch(() => {});
+                          sendTabMessage(sender.tab && sender.tab.id, {
+                              action: "SHOW_INFO_TOAST", msg: "✅ Transfer.it 다운로드가 시작되었습니다! (탭 자동 종료)"
+                          });
                           
                           chrome.downloads.onCreated.removeListener(onCreatedListener);
 
@@ -784,9 +814,9 @@ else if (message.action === "DOWNLOAD_TRANSFERIT") {
 
           } catch (error) {
               console.error("[Transfer.it] 에러:", error);
-              chrome.tabs.sendMessage(sender.tab.id, { 
-                  action: "SHOW_INFO_TOAST", msg: `❌ Transfer.it 오류: ${error.message}`, isError: true 
-              }).catch(() => {});
+              sendTabMessage(sender.tab && sender.tab.id, {
+                  action: "SHOW_INFO_TOAST", msg: `❌ Transfer.it 오류: ${error.message}`, isError: true
+              });
           }
       })();
       return true;
@@ -1019,7 +1049,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   if (menuId === "registerDetailSelector") {
       if (tab && tab.id) {
-          chrome.tabs.sendMessage(tab.id, { action: "GET_AND_REGISTER_SELECTOR" }).catch(() => {});
+          sendTabMessage(tab.id, { action: "GET_AND_REGISTER_SELECTOR" });
       }
       return;
   }
@@ -1031,7 +1061,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   if (!cleanTitle) {
       if (tab && tab.id) {
-          chrome.tabs.sendMessage(tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 제목을 식별할 수 없어 취소되었습니다.", isError: true }).catch(() => {});
+          sendTabMessage(tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 제목을 식별할 수 없어 취소되었습니다.", isError: true });
       }
       return; 
   }
@@ -1066,11 +1096,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
           bgListMapCache = null; // 캐시 초기화
               chrome.storage.local.set({ bookList: list }, () => {
                   if (tab && tab.id) {
-                      chrome.tabs.sendMessage(tab.id, { action: "SHOW_TOAST", book: deletedBook, isDelete: true }).catch(() => {});
+                      sendTabMessage(tab.id, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
                   }
               });
           } else {
-              if (tab && tab.id) chrome.tabs.sendMessage(tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true }).catch(() => {});
+              if (tab && tab.id) sendTabMessage(tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
           }
       });
       return;
@@ -1190,7 +1220,7 @@ function processSaveQueue() {
                 if (tasks.length > 1) {
                     msgBook.title = "[총 " + tasks.length + "건 연속 처리] " + msgBook.title;
                 }
-                chrome.tabs.sendMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook }).catch(() => {});
+                sendTabMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook });
             }
             
             if (pendingTasks.length > 0) processSaveQueue();
@@ -1245,7 +1275,7 @@ function startProgressBroadcasting() {
 function broadcastToAllTabs(message) {
     chrome.tabs.query({}, function(tabs) {
         for (let tab of tabs) {
-            chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+            sendTabMessage(tab.id, message);
         }
     });
 }

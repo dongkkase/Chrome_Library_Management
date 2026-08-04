@@ -940,10 +940,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideExcludeCheckbox = document.getElementById('hideExcludeCheckbox');
     const hideCompleteCheckbox = document.getElementById('hideCompleteCheckbox');
     const hideIncompleteCheckbox = document.getElementById('hideIncompleteCheckbox');
+    const hideTranslateCheckbox = document.getElementById('hideTranslateCheckbox');
     const hideNewCheckbox = document.getElementById('hideNewCheckbox');
     const hideQuickMenuCheckbox = document.getElementById('hideQuickMenuCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -958,6 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hideExcludeCheckbox) hideExcludeCheckbox.checked = data.hideExclude;
         if (hideCompleteCheckbox) hideCompleteCheckbox.checked = data.hideComplete;
         if (hideIncompleteCheckbox) hideIncompleteCheckbox.checked = data.hideIncomplete;
+        if (hideTranslateCheckbox) hideTranslateCheckbox.checked = data.hideTranslate;
         if (hideNewCheckbox) hideNewCheckbox.checked = data.hideNew;
         if (hideQuickMenuCheckbox) hideQuickMenuCheckbox.checked = data.hideQuickMenu;
     });
@@ -1079,6 +1081,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (hideIncompleteCheckbox) {
         hideIncompleteCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideIncomplete: e.target.checked }));
+    }
+    if (hideTranslateCheckbox) {
+        hideTranslateCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideTranslate: e.target.checked }));
     }
     if (hideNewCheckbox) {
         hideNewCheckbox.addEventListener('change', e => chrome.storage.local.set({ hideNew: e.target.checked }));

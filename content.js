@@ -1,4 +1,53 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
+const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+
+function isExtensionContextValid() {
+    try {
+        return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+        return false;
+    }
+}
+
+function ignoreLastError() {
+    try {
+        void chrome.runtime.lastError;
+    } catch (e) {}
+}
+
+function sendRuntimeMessage(message) {
+    if (!isExtensionContextValid()) return;
+    try {
+        chrome.runtime.sendMessage(message, ignoreLastError);
+    } catch (e) {}
+}
+
+function safeStorageGet(defaults, callback) {
+    if (!isExtensionContextValid()) return false;
+    try {
+        chrome.storage.local.get(defaults, (data) => {
+            if (!isExtensionContextValid()) return;
+            callback(data);
+        });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function safeStorageSet(values, callback) {
+    if (!isExtensionContextValid()) return false;
+    try {
+        chrome.storage.local.set(values, () => {
+            ignoreLastError();
+            if (callback && isExtensionContextValid()) callback();
+        });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
@@ -261,6 +310,7 @@ let globalHideSelector = '';
 let isHideExclude = false;
 let isHideComplete = false;
 let isHideIncomplete = false;
+let isHideTranslate = false;
 let isHideNew = false;
 let isHideQuickMenu = false;
 let globalCustomCss = '';
@@ -296,6 +346,7 @@ function initDataCache(data) {
     isHideExclude = !!data.hideExclude;
     isHideComplete = !!data.hideComplete;
     isHideIncomplete = !!data.hideIncomplete;
+    isHideTranslate = !!data.hideTranslate;
     isHideNew = !!data.hideNew;
     isHideQuickMenu = !!data.hideQuickMenu;
 
@@ -401,6 +452,7 @@ function injectQuickHidePanel() {
             <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-exclude" ${isHideExclude ? 'checked' : ''}><span class="bm-slider"></span></label> 제외</label>
             <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-complete" ${isHideComplete ? 'checked' : ''}><span class="bm-slider"></span></label> 완결</label>
             <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-incomplete" ${isHideIncomplete ? 'checked' : ''}><span class="bm-slider"></span></label> 미완</label>
+            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-translate" ${isHideTranslate ? 'checked' : ''}><span class="bm-slider"></span></label> 번역</label>
             <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-new" ${isHideNew ? 'checked' : ''}><span class="bm-slider"></span></label> 신작</label>
         </div>
     `;
@@ -413,10 +465,11 @@ function injectQuickHidePanel() {
         else { content.style.display = 'none'; toggleBtn.textContent = '+'; }
     };
 
-    document.getElementById('bm-qh-exclude').addEventListener('change', e => chrome.storage.local.set({ hideExclude: e.target.checked }));
-    document.getElementById('bm-qh-complete').addEventListener('change', e => chrome.storage.local.set({ hideComplete: e.target.checked }));
-    document.getElementById('bm-qh-incomplete').addEventListener('change', e => chrome.storage.local.set({ hideIncomplete: e.target.checked }));
-    document.getElementById('bm-qh-new').addEventListener('change', e => chrome.storage.local.set({ hideNew: e.target.checked }));
+    document.getElementById('bm-qh-exclude').addEventListener('change', e => safeStorageSet({ hideExclude: e.target.checked }));
+    document.getElementById('bm-qh-complete').addEventListener('change', e => safeStorageSet({ hideComplete: e.target.checked }));
+    document.getElementById('bm-qh-incomplete').addEventListener('change', e => safeStorageSet({ hideIncomplete: e.target.checked }));
+    document.getElementById('bm-qh-translate').addEventListener('change', e => safeStorageSet({ hideTranslate: e.target.checked }));
+    document.getElementById('bm-qh-new').addEventListener('change', e => safeStorageSet({ hideNew: e.target.checked }));
 }
 
 function updateQuickHidePanel() {
@@ -430,10 +483,12 @@ function updateQuickHidePanel() {
     const excludeCb = document.getElementById('bm-qh-exclude');
     const completeCb = document.getElementById('bm-qh-complete');
     const incompleteCb = document.getElementById('bm-qh-incomplete');
+    const translateCb = document.getElementById('bm-qh-translate');
     const newCb = document.getElementById('bm-qh-new');
     if (excludeCb) excludeCb.checked = isHideExclude;
     if (completeCb) completeCb.checked = isHideComplete;
     if (incompleteCb) incompleteCb.checked = isHideIncomplete;
+    if (translateCb) translateCb.checked = isHideTranslate;
     if (newCb) newCb.checked = isHideNew;
 }
 
@@ -508,7 +563,7 @@ function processUselessComments() {
 
         setTimeout(() => {
             document.querySelectorAll('.bm-useless-opt-btn').forEach(btn => {
-                btn.onclick = () => chrome.runtime.sendMessage({ action: "OPEN_OPTIONS_FOR_COMMENTS" }).catch(()=>{});
+                btn.onclick = () => sendRuntimeMessage({ action: "OPEN_OPTIONS_FOR_COMMENTS" });
             });
             document.querySelectorAll('.bm-useless-show-btn').forEach(btn => {
                 btn.onclick = () => {
@@ -815,7 +870,7 @@ function injectDirectDownloadButtons(allowedDLs) {
             e.preventDefault();
             if (targetType === 'HELLKDIS' && !pw) {
                 showInfoToast("⚠️ 비밀번호 자동 추출 실패. 페이지가 열리면 수동으로 입력해주세요.", true);
-                try { chrome.runtime.sendMessage({ action: "OPEN_HELLKDIS_WITH_PW", url: url, password: "" }).catch(()=>{}); } 
+                try { sendRuntimeMessage({ action: "OPEN_HELLKDIS_WITH_PW", url: url, password: "" }); }
                 catch(err) { showInfoToast("⚠️ 확장프로그램이 업데이트 되었습니다. 새로고침(F5) 해주세요.", true); }
                 return;
             }
@@ -832,7 +887,7 @@ function injectDirectDownloadButtons(allowedDLs) {
                 if (hasTranslation) finalTitle += "(번역)";
                 let bType = getBookTypeForTitle(bookTitle);
                 if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
-                chrome.runtime.sendMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle }).catch(()=>{});
+                sendRuntimeMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle });
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
             }
@@ -978,7 +1033,7 @@ function openMissingPopoverContent(targetNoSpace, badgeElement) {
         });
     }
 
-    chrome.storage.local.get({ bookList: [] }, (data) => {
+    safeStorageGet({ bookList: [] }, (data) => {
         const list = data.bookList;
         const dbBook = list.find(b => {
             const noSpace = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
@@ -1040,7 +1095,7 @@ function openMissingPopoverContent(targetNoSpace, badgeElement) {
                 }
                 
                 const updatedList = list.map(b => b.id === dbBook.id ? { ...b, missingVols } : b);
-                chrome.storage.local.set({ bookList: updatedList }); 
+                safeStorageSet({ bookList: updatedList });
             };
         });
     });
@@ -1128,11 +1183,11 @@ function createQuickActions(linkData, hasBook) {
                             btn.style.pointerEvents = 'auto';
                         }, 2500);
                     }
-                    chrome.runtime.sendMessage({ 
+                    sendRuntimeMessage({
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
-                    }).catch(()=>{});
+                    });
                 } else {
                     // [낙관적 UI] 삭제 포함 즉시 캐시 갱신
                     const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
@@ -1183,13 +1238,13 @@ function createQuickActions(linkData, hasBook) {
                     
                     debouncedApplyStyles();
 
-                    chrome.runtime.sendMessage({ 
+                    sendRuntimeMessage({
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         cleanTitle: pureCleanTitle,
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
-                    }).catch(()=>{});
+                    });
                     
                 }
             } catch (err) {}
@@ -1244,7 +1299,8 @@ function applyStyleToSingleLink(link) {
         return;
     }
 
-    const { siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol } = link._bmData;
+    const { siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol, originalText } = link._bmData;
+    const hasTranslationTag = (originalText || '').includes('번역');
     let book = null;
     let maxScore = 0;
     
@@ -1285,6 +1341,7 @@ function applyStyleToSingleLink(link) {
         else if (book.type === "complete" && isHideComplete) shouldHide = true;
         else if (book.type === "incomplete" && isHideIncomplete) shouldHide = true;
         else if (book.type === "new" && isHideNew) shouldHide = true; // 신작(new) 대응
+        else if (hasTranslationTag && isHideTranslate) shouldHide = true;
 
         // 해상도/권수 업그레이드 및 누락 권수 예외 적용 (단, '제외' 항목은 업그레이드 여부와 무관하게 무조건 숨김)
         if (book.type !== "exclude") {
@@ -1351,6 +1408,7 @@ function applyStyleToSingleLink(link) {
     } else {
         removeBadge(link);
         if (isHideNew) shouldHide = true; // 어느 항목과도 매칭되지 않은 경우(미등록) 신작으로 간주하여 숨김 처리
+        if (!shouldHide && isHideTranslate && hasTranslationTag) shouldHide = true;
     }
 
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
@@ -1649,7 +1707,7 @@ function debouncedApplyStyles() {
 }
 
 function applyStyles() {
-  if (!chrome.runtime?.id || !isDataLoaded || !isTargetSite) return;
+  if (!isExtensionContextValid() || !isDataLoaded || !isTargetSite) return;
   
   if (globalAllowedDLs.length > 0) injectDirectDownloadButtons(globalAllowedDLs);
 
@@ -1731,7 +1789,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
+safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -1760,20 +1818,20 @@ chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true,
         applyStyles();
         
         new MutationObserver(() => {
-            if (!chrome.runtime?.id) return; 
+            if (!isExtensionContextValid()) return;
             debouncedApplyStyles(); 
         }).observe(document.body, { childList: true, subtree: true });
 
         document.addEventListener("contextmenu", (e) => {
             try {
-                if (!chrome.runtime?.id) return; 
+                if (!isExtensionContextValid()) return;
                 lastRightClickedElement = e.target; 
                 const link = e.target.closest('a');
                 if (link) { 
                     lastRightClickedLink = link; 
-                    chrome.runtime.sendMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(link) }).catch(()=>{}); 
+                    sendRuntimeMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(link) });
                 } else if (e.target) {
-                    chrome.runtime.sendMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(e.target) }).catch(()=>{});
+                    sendRuntimeMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(e.target) });
                 }
             } catch (err) {}
         }, true);
@@ -1914,6 +1972,7 @@ function updateDownloadUI(downloads) {
 
 try {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (!isExtensionContextValid()) return;
       if (request.action === "GET_AND_REGISTER_SELECTOR") {
           const host = window.location.hostname.replace(/^www\./, '');
           const selector = generateOptimalSelector(lastRightClickedElement);
@@ -1923,7 +1982,7 @@ try {
               return;
           }
           
-          chrome.storage.local.get({ allowedSites: [] }, (data) => {
+          safeStorageGet({ allowedSites: [] }, (data) => {
               let sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
               let existing = sites.find(s => (typeof s === 'string' ? s : s.url) === host);
               
@@ -1938,7 +1997,7 @@ try {
                   sites.push({ url: host, detailSelector: selector });
               }
               
-              chrome.storage.local.set({ allowedSites: sites }, () => {
+              safeStorageSet({ allowedSites: sites }, () => {
                   showInfoToast(`✅ [${host}] 상세페이지 제목이 등록되었습니다.<br><span style='font-size:12px; color:#ddd;'>추출: ${selector}</span>`);
                   setTimeout(() => window.location.reload(), 1500); 
               });
@@ -1946,7 +2005,7 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
+          safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
               initDataCache(data);
               document.querySelectorAll(globalTargetSelector).forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -1974,7 +2033,7 @@ try {
                   const btn = document.getElementById(btnId);
                   if (btn) {
                       btn.onclick = () => {
-                          chrome.runtime.sendMessage({action: 'OPEN_DOWNLOAD_FOLDER', downloadId: request.id});
+                          sendRuntimeMessage({action: 'OPEN_DOWNLOAD_FOLDER', downloadId: request.id});
                           btn.innerText = "열림!";
                       };
                   }
@@ -1984,13 +2043,13 @@ try {
     });
 } catch(e) {}
 
-chrome.storage.local.get({ autoConfirm: true }, (data) => {
+safeStorageGet({ autoConfirm: true }, (data) => {
     if (data.autoConfirm) {
         const currentHostname = window.location.hostname;
         const activeConfig = PRE_DEFINED_SITES.find(site => currentHostname.includes(site.url));
         if (activeConfig && activeConfig.autoConfirmKeywords && activeConfig.autoConfirmKeywords.length > 0) {
             try {
-                chrome.runtime.sendMessage({ action: "INJECT_BYPASS_SCRIPT", keywords: activeConfig.autoConfirmKeywords }).catch(()=>{});
+                sendRuntimeMessage({ action: "INJECT_BYPASS_SCRIPT", keywords: activeConfig.autoConfirmKeywords });
             } catch (err) {}
         }
     }
@@ -2001,7 +2060,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
+        safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -2013,44 +2072,48 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
+        safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
     }
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local') {
-        chrome.storage.local.get({ allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideNew: false, hideQuickMenu: false }, (data) => {
-            initDataCache(data);
-            updateQuickHidePanel();
+try {
+    if (isExtensionContextValid()) {
+        chrome.storage.onChanged.addListener((changes, namespace) => {
+            if (namespace === 'local') {
+                safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+                    initDataCache(data);
+                    updateQuickHidePanel();
 
-            // 실시간 테마 토글 적용/해제
-            let fixStyle = document.getElementById('bm-custom-style');
-            if (fixStyle) {
-                let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-                if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
-                if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
-                if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
-                fixStyle.textContent = styleContent;
-            }
+                    // 실시간 테마 토글 적용/해제
+                    let fixStyle = document.getElementById('bm-custom-style');
+                    if (fixStyle) {
+                        let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
+                        if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
+                        if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
+                        if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
+                        fixStyle.textContent = styleContent;
+                    }
 
-            // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
-            document.querySelectorAll(globalTargetSelector).forEach(el => {
-                if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
-                else if (el.querySelectorAll) {
-                    el.querySelectorAll('a').forEach(a => { if (a._bmData) a._bmData.raw = null; });
-                }
-            });
+                    // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
+                    document.querySelectorAll(globalTargetSelector).forEach(el => {
+                        if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
+                        else if (el.querySelectorAll) {
+                            el.querySelectorAll('a').forEach(a => { if (a._bmData) a._bmData.raw = null; });
+                        }
+                    });
 
-            if (globalDetailSelector) {
-                document.querySelectorAll(globalDetailSelector).forEach(el => {
-                    if (el._bmDetailData) el._bmDetailData.raw = null;
+                    if (globalDetailSelector) {
+                        document.querySelectorAll(globalDetailSelector).forEach(el => {
+                            if (el._bmDetailData) el._bmDetailData.raw = null;
+                        });
+                    }
+
+                    debouncedApplyStyles();
                 });
             }
-
-            debouncedApplyStyles();
         });
     }
-});
+} catch (e) {}
