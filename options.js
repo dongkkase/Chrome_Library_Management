@@ -122,7 +122,7 @@ let totalPages = 1;
 function renderList(filter = "", resetPage = false) {
   if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
 
-  chrome.storage.local.get({ bookList: [], sortOption: 'id_desc' }, (data) => {
+  chrome.storage.local.get({ bookList: [], missingVolsMap: {}, sortOption: 'id_desc' }, (data) => {
     listBody.innerHTML = '';
     
     let list = Array.isArray(data.bookList) ? data.bookList : [];
@@ -229,6 +229,7 @@ function renderList(filter = "", resetPage = false) {
     let prevNorm = null;
 
     pageItems.forEach(book => {
+        const displayMissingVols = getBookMissingVols(book, data.missingVolsMap);
         if (isDuplicateSearch) {
             const normTitle = getTitleMatchParts(book.title || '').matchKey;
             if (normTitle !== prevNorm) {
@@ -255,8 +256,8 @@ function renderList(filter = "", resetPage = false) {
           <td style="position:relative; vertical-align:middle; padding:0;">
             <div style="display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:100%;">
               <input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:35px; margin:0; padding:4px;">
-              ${(book.missingVols && book.missingVols.length > 0) 
-                  ? `<span class="missing-badge" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">${book.missingVols.length}누락</span>` 
+              ${displayMissingVols.length > 0
+                  ? `<span class="missing-badge" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">${displayMissingVols.length}누락</span>`
                   : `<span class="missing-badge empty" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">+누락</span>`}
             </div>
           </td>
@@ -385,10 +386,11 @@ document.getElementById('batchUpdateBtn').onclick = () => {
 // [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
 // ============================================================================
 document.getElementById('exportBtn').onclick = () => {
-    chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+    chrome.storage.local.get({ bookList: [], missingVolsMap: {}, allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
         // 객체(Object) 형태로 데이터를 묶어서 백업
         const exportData = {
             bookList: data.bookList,
+            missingVolsMap: data.missingVolsMap,
             allowedSites: data.allowedSites,
             filterWords: data.filterWords,
             editionKeywords: data.editionKeywords
@@ -448,6 +450,11 @@ document.getElementById('fileInput').onchange = (e) => {
 
                 if (Array.isArray(importedData.editionKeywords)) {
                     chrome.storage.local.set({ editionKeywords: importedData.editionKeywords }, renderEditionKeywords);
+                    hasSettings = true;
+                }
+
+                if (importedData.missingVolsMap && typeof importedData.missingVolsMap === 'object' && !Array.isArray(importedData.missingVolsMap)) {
+                    chrome.storage.local.set({ missingVolsMap: importedData.missingVolsMap });
                     hasSettings = true;
                 }
 
@@ -511,6 +518,7 @@ async function renderSnapshots() {
                         if (Array.isArray(snap.data.allowedSites)) { chrome.storage.local.set({ allowedSites: snap.data.allowedSites }, renderSites); hasSettings = true; }
                         if (Array.isArray(snap.data.filterWords)) { chrome.storage.local.set({ filterWords: snap.data.filterWords }, renderFilters); hasSettings = true; }
                         if (Array.isArray(snap.data.editionKeywords)) { chrome.storage.local.set({ editionKeywords: snap.data.editionKeywords }, renderEditionKeywords); hasSettings = true; }
+                        if (snap.data.missingVolsMap && typeof snap.data.missingVolsMap === 'object') { chrome.storage.local.set({ missingVolsMap: snap.data.missingVolsMap }); hasSettings = true; }
                         if (Array.isArray(snap.data.bookList)) { saveWithUndo(snap.data.bookList, '✅ 선택한 시점으로 복원이 완료되었습니다.'); } 
                         else if (hasSettings) { showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.'); } 
                     }
@@ -1306,6 +1314,11 @@ function initVersionCheck() {
 // 열려있는 슬라이드 패널(또는 옵션창)의 리스트를 즉시 새로고침합니다.
 // ============================================================================
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.missingVolsMap && changes.missingVolsUpdate) {
+        updateMissingBadge(changes.missingVolsUpdate.newValue);
+        return;
+    }
+
     if (areaName === 'local' && changes.bookList) {
         const searchInput = document.getElementById('searchInput');
         const filter = searchInput ? searchInput.value : '';
@@ -1317,6 +1330,61 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 
 // 누락 권수 관리 팝오버 초기화 및 이벤트 리스너 추가
+let missingVolSaveTimer = null;
+let pendingMissingVolSave = null;
+let missingVolSaveQueue = Promise.resolve();
+
+function updateMissingBadge(update) {
+    if (!update || update.bookId === undefined) return;
+
+    const badge = Array.from(document.querySelectorAll('.missing-badge')).find(element => {
+        return Number(element.dataset.id) === Number(update.bookId);
+    });
+    if (!badge) return;
+
+    const missingCount = Array.isArray(update.missingVols) ? update.missingVols.length : 0;
+    badge.classList.toggle('empty', missingCount === 0);
+    badge.textContent = missingCount > 0 ? `${missingCount}누락` : '+누락';
+}
+
+function scheduleMissingVolSave(missingVolsMap, bookId, missingVols) {
+    pendingMissingVolSave = {
+        missingVolsMap,
+        bookId,
+        missingVols: [...missingVols].sort((a, b) => a - b)
+    };
+
+    if (missingVolSaveTimer) clearTimeout(missingVolSaveTimer);
+    missingVolSaveTimer = setTimeout(flushPendingMissingVolSave, 350);
+}
+
+function flushPendingMissingVolSave() {
+    if (missingVolSaveTimer) {
+        clearTimeout(missingVolSaveTimer);
+        missingVolSaveTimer = null;
+    }
+    if (!pendingMissingVolSave) return missingVolSaveQueue;
+
+    const pending = pendingMissingVolSave;
+    pendingMissingVolSave = null;
+
+    const save = () => new Promise(resolve => {
+        const updatedMissingVolsMap = { ...pending.missingVolsMap };
+        updatedMissingVolsMap[String(pending.bookId)] = pending.missingVols;
+
+        const marker = {
+            bookId: pending.bookId,
+            missingVols: pending.missingVols,
+            timestamp: Date.now()
+        };
+
+        chrome.storage.local.set({ missingVolsMap: updatedMissingVolsMap, missingVolsUpdate: marker }, resolve);
+    });
+
+    missingVolSaveQueue = missingVolSaveQueue.then(save, save);
+    return missingVolSaveQueue;
+}
+
 let volPopover = document.getElementById('missingPopover');
 if (!volPopover) {
     volPopover = document.createElement('div');
@@ -1326,10 +1394,13 @@ if (!volPopover) {
     // 팝오버 외부 클릭 시 닫기
     document.addEventListener('click', (e) => {
         if (!volPopover.contains(e.target) && !e.target.closest('.missing-badge')) {
+            flushPendingMissingVolSave();
             volPopover.style.display = 'none';
         }
     });
 }
+
+window.addEventListener('pagehide', flushPendingMissingVolSave);
 
 // 리스트 내의 누락 배지 클릭 감지
 if (listBody) {
@@ -1343,9 +1414,10 @@ if (listBody) {
 }
 
 function openMissingPopover(bookId, badgeElement) {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
+    flushPendingMissingVolSave().then(() => chrome.storage.local.get({ bookList: [], missingVolsMap: {} }, (data) => {
         const list = data.bookList;
-        const book = list.find(b => b.id === bookId);
+        const bookIndex = list.findIndex(b => b.id === bookId);
+        const book = bookIndex > -1 ? list[bookIndex] : null;
         if (!book) return;
 
         const lastVol = parseInt(book.lastVol, 10);
@@ -1354,7 +1426,7 @@ function openMissingPopover(bookId, badgeElement) {
             return;
         }
 
-        let missingVols = book.missingVols || [];
+        const missingVolSet = new Set(getBookMissingVols(book, data.missingVolsMap));
 
         // 팝오버 내부 HTML 구성 (입력된 최대 권수까지 번호표 렌더링)
         volPopover.innerHTML = `
@@ -1365,7 +1437,7 @@ function openMissingPopover(bookId, badgeElement) {
             <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
             <div class="vol-grid">
                 ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
-                    <div class="vol-item ${missingVols.includes(v) ? 'missing' : ''}" data-vol="${v}">${v}</div>
+                    <div class="vol-item ${missingVolSet.has(v) ? 'missing' : ''}" data-vol="${v}">${v}</div>
                 `).join('')}
             </div>
         `;
@@ -1378,24 +1450,28 @@ function openMissingPopover(bookId, badgeElement) {
         if (leftPos < 10) leftPos = 10; // 화면 왼쪽 벗어남 방지
         volPopover.style.left = `${leftPos}px`;
 
-        document.getElementById('closePopoverBtn').onclick = () => volPopover.style.display = 'none';
+        document.getElementById('closePopoverBtn').onclick = () => {
+            flushPendingMissingVolSave();
+            volPopover.style.display = 'none';
+        };
         
-        // 개별 번호 클릭 시 토글 및 자동 저장
-        volPopover.querySelectorAll('.vol-item').forEach(item => {
-            item.onclick = (e) => {
-                const vol = parseInt(e.target.dataset.vol, 10);
-                if (e.target.classList.contains('missing')) {
-                    e.target.classList.remove('missing');
-                    missingVols = missingVols.filter(v => v !== vol);
-                } else {
-                    e.target.classList.add('missing');
-                    missingVols.push(vol);
-                }
-                
-                // 변경된 배열을 저장소에 업데이트 (저장 즉시 onChanged 이벤트로 인해 리스트 배지가 업데이트됨)
-                const updatedList = list.map(b => b.id === bookId ? { ...b, missingVols } : b);
-                chrome.storage.local.set({ bookList: updatedList }); 
-            };
-        });
-    });
+        const volumeGrid = volPopover.querySelector('.vol-grid');
+        volumeGrid.onclick = (event) => {
+            const item = event.target.closest('.vol-item');
+            if (!item) return;
+
+            const vol = parseInt(item.dataset.vol, 10);
+            if (missingVolSet.has(vol)) {
+                missingVolSet.delete(vol);
+                item.classList.remove('missing');
+            } else {
+                missingVolSet.add(vol);
+                item.classList.add('missing');
+            }
+
+            const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
+            updateMissingBadge({ bookId, missingVols });
+            scheduleMissingVolSave(data.missingVolsMap, bookId, missingVols);
+        };
+    }));
 }

@@ -49,6 +49,18 @@ function normalizeTitleText(value) {
         .replace(/\s+/g, '');
 }
 
+function getBookMissingVols(book, missingVolsMap) {
+    if (!book) return [];
+
+    const bookId = String(book.id);
+    if (missingVolsMap && Object.prototype.hasOwnProperty.call(missingVolsMap, bookId)) {
+        const storedVols = missingVolsMap[bookId];
+        return Array.isArray(storedVols) ? storedVols : [];
+    }
+
+    return Array.isArray(book.missingVols) ? book.missingVols : [];
+}
+
 function setEditionKeywords(words) {
     const source = Array.isArray(words) ? words : defaultEditionKeywords;
     const uniqueWords = new Map();

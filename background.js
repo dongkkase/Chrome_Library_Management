@@ -959,7 +959,7 @@ async function createDailySnapshot() {
         const existing = await db.snapshots.where('dateStr').equals(dateStr).first();
         if (existing) return;
         
-        chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, async (data) => {
+        chrome.storage.local.get({ bookList: [], missingVolsMap: {}, allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, async (data) => {
             const snapshotData = { timestamp: now.getTime(), dateStr: dateStr, data: data };
             await db.snapshots.add(snapshotData); // 스냅샷 저장
             

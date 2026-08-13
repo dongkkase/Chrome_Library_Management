@@ -1,5 +1,5 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
-const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], missingVolsMap: {}, editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
 
 function isExtensionContextValid() {
     try {
@@ -412,7 +412,7 @@ function initDataCache(data) {
             titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace, editionKey, matchKey });
         }
 
-        const enhanced = { ...b, _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _matchKey: matchKey };
+        const enhanced = { ...b, missingVols: getBookMissingVols(b, data.missingVolsMap), _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _matchKey: matchKey };
         if(!exactMatchCache[matchKey]) exactMatchCache[matchKey] = enhanced;
         return enhanced;
     });
@@ -1014,6 +1014,55 @@ function removeBadge(link) {
 
 // [전면 수정] 상세페이지 누락관리 팝오버 말풍선 디자인 및 애니메이션 적용 로직
 let contentVolPopover = null;
+let contentMissingVolSaveTimer = null;
+let pendingContentMissingVolSave = null;
+let contentMissingVolSaveQueue = Promise.resolve();
+
+function applyMissingVolUpdateToCache(update) {
+    if (!update || update.bookId === undefined) return;
+    const cachedBook = cachedBookList.find(book => book.id === update.bookId);
+    if (cachedBook) {
+        cachedBook.missingVols = Array.isArray(update.missingVols) ? [...update.missingVols] : [];
+    }
+}
+
+function scheduleContentMissingVolSave(missingVolsMap, bookId, missingVols) {
+    pendingContentMissingVolSave = {
+        missingVolsMap,
+        bookId,
+        missingVols: [...missingVols].sort((a, b) => a - b)
+    };
+
+    if (contentMissingVolSaveTimer) clearTimeout(contentMissingVolSaveTimer);
+    contentMissingVolSaveTimer = setTimeout(flushPendingContentMissingVolSave, 350);
+}
+
+function flushPendingContentMissingVolSave() {
+    if (contentMissingVolSaveTimer) {
+        clearTimeout(contentMissingVolSaveTimer);
+        contentMissingVolSaveTimer = null;
+    }
+    if (!pendingContentMissingVolSave) return contentMissingVolSaveQueue;
+
+    const pending = pendingContentMissingVolSave;
+    pendingContentMissingVolSave = null;
+
+    const save = () => new Promise(resolve => {
+        const updatedMissingVolsMap = { ...pending.missingVolsMap };
+        updatedMissingVolsMap[String(pending.bookId)] = pending.missingVols;
+
+        const marker = {
+            bookId: pending.bookId,
+            missingVols: pending.missingVols,
+            timestamp: Date.now()
+        };
+
+        if (!safeStorageSet({ missingVolsMap: updatedMissingVolsMap, missingVolsUpdate: marker }, resolve)) resolve();
+    });
+
+    contentMissingVolSaveQueue = contentMissingVolSaveQueue.then(save, save);
+    return contentMissingVolSaveQueue;
+}
 
 function openMissingPopoverContent(targetMatchKey, badgeElement) {
     if (!contentVolPopover) {
@@ -1054,16 +1103,16 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
 
         document.addEventListener('click', (e) => {
             if (contentVolPopover && !contentVolPopover.contains(e.target) && !e.target.closest('button')) {
+                flushPendingContentMissingVolSave();
                 contentVolPopover.style.display = 'none';
             }
         });
     }
 
-    safeStorageGet({ bookList: [] }, (data) => {
+    flushPendingContentMissingVolSave().then(() => safeStorageGet({ bookList: [], missingVolsMap: {} }, (data) => {
         const list = data.bookList;
-        const dbBook = list.find(b => {
-            return getTitleMatchParts(b.title).matchKey === targetMatchKey;
-        });
+        const bookIndex = list.findIndex(b => getTitleMatchParts(b.title).matchKey === targetMatchKey);
+        const dbBook = bookIndex > -1 ? list[bookIndex] : null;
 
         if (!dbBook) {
             showInfoToast('도서 데이터가 아직 저장되지 않았습니다. 잠시 후 다시 시도해주세요.', true);
@@ -1076,7 +1125,7 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
             return;
         }
 
-        let missingVols = dbBook.missingVols || [];
+        const missingVolSet = new Set(getBookMissingVols(dbBook, data.missingVolsMap));
 
         contentVolPopover.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:bold; border-bottom:1px solid #dee2e6; padding-bottom:8px; margin-bottom:8px; color:#333;">
@@ -1084,9 +1133,9 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
                 <button id="bmClosePopoverBtn" style="background:transparent; color:#333; padding:0; margin-left:5px; font-size:16px; border:none; cursor:pointer;">✕</button>
             </div>
             <div style="font-size:11px; color:#6c757d; margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
-            <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:5px; max-height:200px; overflow-y:auto; padding-right:4px; box-sizing:border-box;">
+            <div class="bm-vol-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:5px; max-height:200px; overflow-y:auto; padding-right:4px; box-sizing:border-box;">
                 ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
-                    <div class="bm-vol-item ${missingVols.includes(v) ? 'missing' : ''}" data-vol="${v}" style="text-align:center; padding:6px 0; font-size:12px; background:${missingVols.includes(v) ? '#ffe3e3' : '#f8f9fa'}; border:1px solid ${missingVols.includes(v) ? '#ffa8a8' : '#dee2e6'}; border-radius:4px; cursor:pointer; user-select:none; color:${missingVols.includes(v) ? '#e03131' : '#333'}; font-weight:500; transition:all 0.1s; ${missingVols.includes(v) ? 'text-decoration:line-through; opacity:0.8;' : ''}">${v}</div>
+                    <div class="bm-vol-item ${missingVolSet.has(v) ? 'missing' : ''}" data-vol="${v}" style="text-align:center; padding:6px 0; font-size:12px; background:${missingVolSet.has(v) ? '#ffe3e3' : '#f8f9fa'}; border:1px solid ${missingVolSet.has(v) ? '#ffa8a8' : '#dee2e6'}; border-radius:4px; cursor:pointer; user-select:none; color:${missingVolSet.has(v) ? '#e03131' : '#333'}; font-weight:500; transition:all 0.1s; ${missingVolSet.has(v) ? 'text-decoration:line-through; opacity:0.8;' : ''}">${v}</div>
                 `).join('')}
             </div>
         `;
@@ -1104,27 +1153,35 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
         contentVolPopover.style.transform = `translateX(-50%)`; // 수평 중앙 정렬 고정
         contentVolPopover.style.display = 'block';
 
-        document.getElementById('bmClosePopoverBtn').onclick = () => contentVolPopover.style.display = 'none';
+        document.getElementById('bmClosePopoverBtn').onclick = () => {
+            flushPendingContentMissingVolSave();
+            contentVolPopover.style.display = 'none';
+        };
         
-        contentVolPopover.querySelectorAll('.bm-vol-item').forEach(item => {
-            item.onclick = (e) => {
-                const vol = parseInt(e.target.dataset.vol, 10);
-                if (e.target.classList.contains('missing')) {
-                    e.target.classList.remove('missing');
-                    e.target.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; cursor:pointer; user-select:none; color:#333; font-weight:500; transition:all 0.1s;";
-                    missingVols = missingVols.filter(v => v !== vol);
-                } else {
-                    e.target.classList.add('missing');
-                    e.target.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#ffe3e3; border:1px solid #ffa8a8; border-radius:4px; cursor:pointer; user-select:none; color:#e03131; font-weight:500; transition:all 0.1s; text-decoration:line-through; opacity:0.8;";
-                    missingVols.push(vol);
-                }
-                
-                const updatedList = list.map(b => b.id === dbBook.id ? { ...b, missingVols } : b);
-                safeStorageSet({ bookList: updatedList });
-            };
-        });
-    });
+        const volumeGrid = contentVolPopover.querySelector('.bm-vol-grid');
+        volumeGrid.onclick = (event) => {
+            const item = event.target.closest('.bm-vol-item');
+            if (!item) return;
+
+            const vol = parseInt(item.dataset.vol, 10);
+            if (missingVolSet.has(vol)) {
+                missingVolSet.delete(vol);
+                item.classList.remove('missing');
+                item.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#f8f9fa; border:1px solid #dee2e6; border-radius:4px; cursor:pointer; user-select:none; color:#333; font-weight:500; transition:all 0.1s;";
+            } else {
+                missingVolSet.add(vol);
+                item.classList.add('missing');
+                item.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#ffe3e3; border:1px solid #ffa8a8; border-radius:4px; cursor:pointer; user-select:none; color:#e03131; font-weight:500; transition:all 0.1s; text-decoration:line-through; opacity:0.8;";
+            }
+
+            const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
+            applyMissingVolUpdateToCache({ bookId: dbBook.id, missingVols });
+            scheduleContentMissingVolSave(data.missingVolsMap, dbBook.id, missingVols);
+        };
+    }));
 }
+
+window.addEventListener('pagehide', flushPendingContentMissingVolSave);
 
 function createQuickActions(linkData, hasBook) {
     const container = document.createElement('span');
@@ -2071,6 +2128,12 @@ try {
     if (isExtensionContextValid()) {
         chrome.storage.onChanged.addListener((changes, namespace) => {
             if (namespace === 'local') {
+                if (changes.missingVolsMap && changes.missingVolsUpdate) {
+                    applyMissingVolUpdateToCache(changes.missingVolsUpdate.newValue);
+                    debouncedApplyStyles();
+                    return;
+                }
+
                 safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
                     initDataCache(data);
                     updateQuickHidePanel();
