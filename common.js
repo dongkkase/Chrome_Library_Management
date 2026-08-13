@@ -28,7 +28,7 @@ const defaultCustomFilters = [
 let globalCustomFilters = [...defaultCustomFilters];
 
 const defaultEditionKeywords = [
-    "신장판", "개정판", "애장판", "완전판", "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판"
+    "신장판", "개정판", "애장판", "완전판", "개정 완전판", "특별합본판", "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판"
 ];
 
 let globalEditionKeywords = [...defaultEditionKeywords];
@@ -288,7 +288,6 @@ function cleanSiteTitle(title) {
         .replace(/[：:—\-\/～〜〰∼~・·･_]/g, ' ')
         .replace(/\d+\s*(?:권|화)/g, ' ')
         .replace(/완결[!?.~]*/g, ' ')
-        .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
         .replace(/\<\s\>/g, '')
         .replace(/\s+/g, ' ')
         .replace(/\s+\(/g, '(')
