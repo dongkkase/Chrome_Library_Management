@@ -33,6 +33,9 @@ const defaultEditionKeywords = [
 
 let globalEditionKeywords = [...defaultEditionKeywords];
 let globalEditionKeywordKeys = defaultEditionKeywords.map(normalizeTitleText);
+let globalEditionKeywordEntries = defaultEditionKeywords
+    .map(keyword => createEditionKeywordEntry(keyword, normalizeTitleText(keyword)))
+    .sort((a, b) => b.key.length - a.key.length);
 
 function getDefaultEditionKeywords() {
     return [...defaultEditionKeywords];
@@ -60,6 +63,9 @@ function setEditionKeywords(words) {
 
     globalEditionKeywords = Array.from(uniqueWords.values());
     globalEditionKeywordKeys = Array.from(uniqueWords.keys());
+    globalEditionKeywordEntries = Array.from(uniqueWords.entries())
+        .map(([key, keyword]) => createEditionKeywordEntry(keyword, key))
+        .sort((a, b) => b.key.length - a.key.length);
 }
 
 function getEditionKeywordsSignature() {
@@ -71,6 +77,50 @@ function isEditionQualifier(value) {
     if (!normalizedValue) return false;
 
     return globalEditionKeywordKeys.some(keyword => normalizedValue.includes(keyword));
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function createEditionKeywordEntry(keyword, key) {
+    const keywordPattern = keyword
+        .trim()
+        .split(/\s+/)
+        .map(escapeRegExp)
+        .join('\\s+');
+
+    return {
+        keyword,
+        key,
+        trailingPattern: new RegExp(`(?:^|[\\s\\-_:：·・])(${keywordPattern})$`, 'i')
+    };
+}
+
+function getTrailingEditionQualifier(value) {
+    const trimmedValue = String(value || '').trim();
+    if (!trimmedValue) return null;
+
+    for (const entry of globalEditionKeywordEntries) {
+        const match = trimmedValue.match(entry.trailingPattern);
+        if (!match) continue;
+
+        const baseTitle = trimmedValue
+            .substring(0, match.index)
+            .replace(/[\s\-_:：·・]+$/g, '')
+            .trim();
+        if (!baseTitle) continue;
+
+        return { baseTitle, editionKey: entry.key, displayKeyword: entry.keyword };
+    }
+
+    return null;
+}
+
+function normalizeTrailingEditionTitle(value) {
+    const trailingEdition = getTrailingEditionQualifier(value);
+    if (!trailingEdition) return value;
+    return `${trailingEdition.baseTitle}(${trailingEdition.displayKeyword})`;
 }
 
 function replaceParentheticalSegments(value, replacer) {
@@ -85,13 +135,20 @@ function replaceParentheticalSegments(value, replacer) {
 
 function getTitleMatchParts(title) {
     const editionQualifiers = [];
-    const baseTitle = replaceParentheticalSegments(title, (fullMatch, innerText) => {
+    let baseTitle = replaceParentheticalSegments(title, (fullMatch, innerText) => {
         if (isEditionQualifier(innerText)) {
             const normalizedQualifier = normalizeTitleText(innerText);
             if (normalizedQualifier) editionQualifiers.push(normalizedQualifier);
         }
         return ' ';
     });
+
+    let trailingEdition = getTrailingEditionQualifier(baseTitle);
+    while (trailingEdition) {
+        editionQualifiers.push(trailingEdition.editionKey);
+        baseTitle = trailingEdition.baseTitle;
+        trailingEdition = getTrailingEditionQualifier(baseTitle);
+    }
 
     const baseOriginal = (baseTitle || '')
         .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '')
@@ -249,5 +306,5 @@ function cleanSiteTitle(title) {
             .trim();
     }
 
-    return result;
+    return normalizeTrailingEditionTitle(result);
 }
