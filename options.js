@@ -85,6 +85,34 @@ function renderFilters() {
   });
 }
 
+function renderEditionKeywords() {
+    chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, (data) => {
+        const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+        const container = document.getElementById('editionKeywordList');
+        if (!container) return;
+
+        container.innerHTML = '';
+        keywords.forEach(keyword => {
+            const tag = document.createElement('span');
+            tag.className = 'site-tag';
+            tag.style.cssText = 'background: rgba(32,201,151,0.05); border-color: rgba(32,201,151,0.25); margin:0;';
+
+            const label = document.createElement('b');
+            label.style.cssText = 'font-size:13px; color:#20c997;';
+            label.textContent = keyword;
+
+            const removeButton = document.createElement('b');
+            removeButton.style.cssText = 'color:#20c997; cursor:pointer; font-size:15px; margin-left:6px; opacity:0.8;';
+            removeButton.dataset.editionKeyword = keyword;
+            removeButton.textContent = '×';
+
+            tag.appendChild(label);
+            tag.appendChild(removeButton);
+            container.appendChild(tag);
+        });
+    });
+}
+
 let renderFrame;
 
 let currentPage = 1;
@@ -115,7 +143,7 @@ function renderList(filter = "", resetPage = false) {
         const titleMap = new Map();
         list.forEach(b => {
             if (!b || !b.title) return;
-            const normalized = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            const normalized = getTitleMatchParts(b.title).matchKey;
             if (normalized.length === 0) return;
             if (titleMap.has(normalized)) {
                 titleMap.get(normalized).push(b.id);
@@ -181,8 +209,8 @@ function renderList(filter = "", resetPage = false) {
     
     if (isDuplicateSearch) {
         filteredList.sort((a, b) => {
-            const normA = (a.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
-            const normB = (b.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            const normA = getTitleMatchParts(a.title || '').matchKey;
+            const normB = getTitleMatchParts(b.title || '').matchKey;
             if (normA < normB) return -1;
             if (normA > normB) return 1;
             return sortFn(a, b);
@@ -202,7 +230,7 @@ function renderList(filter = "", resetPage = false) {
 
     pageItems.forEach(book => {
         if (isDuplicateSearch) {
-            const normTitle = (book.title || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥]/g, '').toLowerCase();
+            const normTitle = getTitleMatchParts(book.title || '').matchKey;
             if (normTitle !== prevNorm) {
                 prevNorm = normTitle;
                 const groupTr = document.createElement('tr');
@@ -357,13 +385,13 @@ document.getElementById('batchUpdateBtn').onclick = () => {
 // [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
 // ============================================================================
 document.getElementById('exportBtn').onclick = () => {
-    // 저장소에서 3가지 데이터를 모두 불러옵니다.
-    chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [] }, (data) => {
+    chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
         // 객체(Object) 형태로 데이터를 묶어서 백업
         const exportData = {
             bookList: data.bookList,
             allowedSites: data.allowedSites,
-            filterWords: data.filterWords
+            filterWords: data.filterWords,
+            editionKeywords: data.editionKeywords
         };
         
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -415,6 +443,11 @@ document.getElementById('fileInput').onchange = (e) => {
                 // 필터(금지어) 설정이 존재하면 복구 및 화면 갱신
                 if (Array.isArray(importedData.filterWords)) {
                     chrome.storage.local.set({ filterWords: importedData.filterWords }, renderFilters);
+                    hasSettings = true;
+                }
+
+                if (Array.isArray(importedData.editionKeywords)) {
+                    chrome.storage.local.set({ editionKeywords: importedData.editionKeywords }, renderEditionKeywords);
                     hasSettings = true;
                 }
 
@@ -477,6 +510,7 @@ async function renderSnapshots() {
                         let hasSettings = false;
                         if (Array.isArray(snap.data.allowedSites)) { chrome.storage.local.set({ allowedSites: snap.data.allowedSites }, renderSites); hasSettings = true; }
                         if (Array.isArray(snap.data.filterWords)) { chrome.storage.local.set({ filterWords: snap.data.filterWords }, renderFilters); hasSettings = true; }
+                        if (Array.isArray(snap.data.editionKeywords)) { chrome.storage.local.set({ editionKeywords: snap.data.editionKeywords }, renderEditionKeywords); hasSettings = true; }
                         if (Array.isArray(snap.data.bookList)) { saveWithUndo(snap.data.bookList, '✅ 선택한 시점으로 복원이 완료되었습니다.'); } 
                         else if (hasSettings) { showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.'); } 
                     }
@@ -519,7 +553,7 @@ bulkInput.addEventListener('input', () => {
       .replace(/(\d+)?완/g, '')
       .replace(/\s?권$/g, '')
       .replace(/\s?완$/g, '')
-      .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, ' ')
+      .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -557,7 +591,7 @@ document.getElementById('saveBtn').onclick = () => {
       const titleMap = new Map();
       currentList.forEach((book, idx) => {
           if (book && book.title) {
-              const normalized = book.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+              const normalized = getTitleMatchParts(book.title).matchKey;
               titleMap.set(normalized, idx); // 제목을 키(Key)로, 인덱스를 값(Value)으로 저장
           }
       });
@@ -587,7 +621,7 @@ document.getElementById('saveBtn').onclick = () => {
           .replace(/(\d+)?완/g, '')
           .replace(/\s?권$/g, '')
           .replace(/\s?완$/g, '')
-          .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, ' ')
+          .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
 
@@ -596,7 +630,7 @@ document.getElementById('saveBtn').onclick = () => {
             return; 
         }
 
-        const normalizedNewTitle = cleanTitle.replace(/\s+/g, '').toLowerCase();
+        const normalizedNewTitle = getTitleMatchParts(cleanTitle).matchKey;
         
         const bookData = { 
           type: targetType,
@@ -644,6 +678,7 @@ document.body.onclick = (e) => {
   const id = parseFloat(e.target.dataset.id);
   const site = e.target.dataset.site;
   const filterWord = e.target.dataset.filter; 
+  const editionKeyword = e.target.dataset.editionKeyword;
 
   if (id && e.target.classList.contains('btn-del')) {
     chrome.storage.local.get({ bookList: [] }, (data) => {
@@ -684,6 +719,12 @@ document.body.onclick = (e) => {
         const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
         const newFilters = filters.filter(f => f !== filterWord);
         chrome.storage.local.set({ filterWords: newFilters }, renderFilters);
+    });
+  } else if (editionKeyword !== undefined) {
+    chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, (data) => {
+        const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+        const newKeywords = keywords.filter(keyword => keyword !== editionKeyword);
+        chrome.storage.local.set({ editionKeywords: newKeywords }, renderEditionKeywords);
     });
   }
 };
@@ -820,6 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderList('', true); 
         renderSites();
         renderFilters(); 
+        renderEditionKeywords();
         renderSnapshots();
 
         const timeSpan = document.getElementById('lastBackupTime');
@@ -884,6 +926,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         };
+    }
+
+    const addEditionKeywordBtn = document.getElementById('addEditionKeywordBtn');
+    const editionKeywordInput = document.getElementById('editionKeywordInput');
+    const addEditionKeyword = () => {
+        if (!editionKeywordInput) return;
+        const value = editionKeywordInput.value.trim();
+        const normalizedValue = normalizeTitleText(value);
+        if (!normalizedValue) return;
+
+        chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, (data) => {
+            const currentKeywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+            const alreadyExists = currentKeywords.some(keyword => normalizeTitleText(keyword) === normalizedValue);
+            if (alreadyExists) {
+                showInfoToast('❌ 이미 등록된 판본 키워드입니다.', true);
+                return;
+            }
+
+            chrome.storage.local.set({ editionKeywords: [...currentKeywords, value] }, () => {
+                editionKeywordInput.value = '';
+                renderEditionKeywords();
+            });
+        });
+    };
+
+    if (addEditionKeywordBtn) addEditionKeywordBtn.onclick = addEditionKeyword;
+    if (editionKeywordInput) {
+        editionKeywordInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addEditionKeyword();
+            }
+        });
     }
 
     const searchInput = document.getElementById('searchInput');

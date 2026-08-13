@@ -27,18 +27,104 @@ const defaultCustomFilters = [
 
 let globalCustomFilters = [...defaultCustomFilters];
 
+const defaultEditionKeywords = [
+    "신장판", "개정판", "애장판", "완전판", "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판"
+];
+
+let globalEditionKeywords = [...defaultEditionKeywords];
+let globalEditionKeywordKeys = defaultEditionKeywords.map(normalizeTitleText);
+
+function getDefaultEditionKeywords() {
+    return [...defaultEditionKeywords];
+}
+
+function normalizeTitleText(value) {
+    return (value || '')
+        .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '');
+}
+
+function setEditionKeywords(words) {
+    const source = Array.isArray(words) ? words : defaultEditionKeywords;
+    const uniqueWords = new Map();
+
+    source.forEach(word => {
+        const displayWord = String(word || '').trim();
+        const normalizedWord = normalizeTitleText(displayWord);
+        if (displayWord && normalizedWord && !uniqueWords.has(normalizedWord)) {
+            uniqueWords.set(normalizedWord, displayWord);
+        }
+    });
+
+    globalEditionKeywords = Array.from(uniqueWords.values());
+    globalEditionKeywordKeys = Array.from(uniqueWords.keys());
+}
+
+function getEditionKeywordsSignature() {
+    return [...globalEditionKeywordKeys].sort().join('|');
+}
+
+function isEditionQualifier(value) {
+    const normalizedValue = normalizeTitleText(value);
+    if (!normalizedValue) return false;
+
+    return globalEditionKeywordKeys.some(keyword => normalizedValue.includes(keyword));
+}
+
+function replaceParentheticalSegments(value, replacer) {
+    return (value || '').replace(
+        /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】/g,
+        (fullMatch, round, square, fullWidthRound, lenticular) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? '';
+            return replacer(fullMatch, innerText);
+        }
+    );
+}
+
+function getTitleMatchParts(title) {
+    const editionQualifiers = [];
+    const baseTitle = replaceParentheticalSegments(title, (fullMatch, innerText) => {
+        if (isEditionQualifier(innerText)) {
+            const normalizedQualifier = normalizeTitleText(innerText);
+            if (normalizedQualifier) editionQualifiers.push(normalizedQualifier);
+        }
+        return ' ';
+    });
+
+    const baseOriginal = (baseTitle || '')
+        .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+    const baseNoSpace = baseOriginal.replace(/\s+/g, '');
+    const editionKey = Array.from(new Set(editionQualifiers)).sort().join('|');
+
+    return {
+        baseOriginal,
+        baseNoSpace,
+        editionKey,
+        matchKey: editionKey ? `${baseNoSpace}::${editionKey}` : baseNoSpace
+    };
+}
+
 // 크롬 스토리지에서 필터링 단어를 비동기적으로 불러와 자체 캐싱해둡니다.
 // (content.js나 background.js를 수정하지 않고도 여기서 스스로 작동하도록 설계됨)
 if (typeof chrome !== 'undefined' && chrome.storage) {
-    chrome.storage.local.get({ filterWords: [] }, (data) => {
+    chrome.storage.local.get({ filterWords: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
         const userFilters = Array.isArray(data.filterWords) ? data.filterWords : [];
         globalCustomFilters = [...defaultCustomFilters, ...userFilters];
+        setEditionKeywords(data.editionKeywords);
     });
     // 옵션창에서 단어가 추가/삭제되면 즉시 캐시를 업데이트합니다.
     chrome.storage.onChanged.addListener((changes, namespace) => {
         if (namespace === 'local' && changes.filterWords) {
             const userFilters = changes.filterWords.newValue || [];
             globalCustomFilters = [...defaultCustomFilters, ...userFilters];
+        }
+        if (namespace === 'local' && changes.editionKeywords) {
+            setEditionKeywords(changes.editionKeywords.newValue);
         }
     });
 }
@@ -135,7 +221,10 @@ function cleanSiteTitle(title) {
         .replace(/스캔 단면|스캔단면|스캔 양면|스캔양면|스캔본|스캔판/g, '')
         .replace(/단편 만화|단편만화|단편집|단편|단행본/g, '')
         .replace(/권\~/gi, '')
-        .replace(/[\[\(].*?[\]\)]/g, ' ')
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】/g, (fullMatch, round, square, fullWidthRound, lenticular) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? '';
+            return isEditionQualifier(innerText) ? ` (${innerText.trim()}) ` : ' ';
+        })
         .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
         // 수정: 하단 공백 치환 정규식에서도 쉼표(,)를 제거
         .replace(/\d+\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+/g, ' ')
@@ -145,6 +234,8 @@ function cleanSiteTitle(title) {
         .replace(/\s+(완|화|권)[!?.~]*(?=\s|$)/g, ' ')
         .replace(/\<\s\>/g, '')
         .replace(/\s+/g, ' ')
+        .replace(/\s+\(/g, '(')
+        .replace(/\)\s+/g, ') ')
         .replace(/^\]\s*/, '')
         .replace(/,\s*$/, '')
         .replace(/\(\s*$/, '')

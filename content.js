@@ -1,5 +1,5 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
-const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
 
 function isExtensionContextValid() {
     try {
@@ -327,6 +327,7 @@ let lastRightClickedElement = null;
 
 let isDownloadUIEnabled = true; 
 let titleProcessingCache = new Map(); 
+let titleProcessingEditionSignature = '';
 let isEverythingEnabled = false;
 let isShowListQuickBtn = false;
 let isShowListQuickBtnHover = false;
@@ -336,6 +337,13 @@ let isSupportSingleCharEnabled = false;
 let isHideUselessCommentsEnabled = true;
 
 function initDataCache(data) {
+    setEditionKeywords(data.editionKeywords);
+    const currentEditionSignature = getEditionKeywordsSignature();
+    if (titleProcessingEditionSignature !== currentEditionSignature) {
+        titleProcessingCache.clear();
+        titleProcessingEditionSignature = currentEditionSignature;
+    }
+
     isDownloadUIEnabled = data.showDownloadUI !== false; 
     isEverythingEnabled = !!data.connectEverything;
     isShowListQuickBtn = !!data.showListQuickBtn;
@@ -387,20 +395,25 @@ function initDataCache(data) {
     similarityCache = {}; 
 
     cachedBookList = (Array.isArray(data.bookList) ? data.bookList : []).map(b => {
-        let processedOriginal, processedNoSpace;
+        let processedOriginal, processedNoSpace, editionKey, matchKey;
         
         if (titleProcessingCache.has(b.title)) {
             const cached = titleProcessingCache.get(b.title);
             processedOriginal = cached.original;
             processedNoSpace = cached.nospace;
+            editionKey = cached.editionKey;
+            matchKey = cached.matchKey;
         } else {
-            processedOriginal = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
-            processedNoSpace = processedOriginal.replace(/\s+/g, ''); 
-            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace });
+            const titleParts = getTitleMatchParts(b.title);
+            processedOriginal = titleParts.baseOriginal;
+            processedNoSpace = titleParts.baseNoSpace;
+            editionKey = titleParts.editionKey;
+            matchKey = titleParts.matchKey;
+            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace, editionKey, matchKey });
         }
 
-        const enhanced = { ...b, _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace };
-        if(!exactMatchCache[processedNoSpace]) exactMatchCache[processedNoSpace] = enhanced;
+        const enhanced = { ...b, _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _matchKey: matchKey };
+        if(!exactMatchCache[matchKey]) exactMatchCache[matchKey] = enhanced;
         return enhanced;
     });
 
@@ -659,6 +672,37 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
   return calculateLevenshtein(regBody, siteBody);
 }
 
+function findMatchingBook(titleParts) {
+    const { baseOriginal, baseNoSpace, editionKey, matchKey } = titleParts;
+
+    if (exactMatchCache[matchKey]) {
+        return { book: exactMatchCache[matchKey], maxScore: 100 };
+    }
+    if (similarityCache[matchKey] !== undefined) {
+        return similarityCache[matchKey];
+    }
+
+    let book = null;
+    let maxScore = 0;
+
+    for (let i = cachedBookList.length - 1; i >= 0; i--) {
+        const candidate = cachedBookList[i];
+        if (candidate._editionKey !== editionKey) continue;
+        if (Math.abs(candidate._regBodyNoSpace.length - baseNoSpace.length) > Math.min(candidate._regBodyNoSpace.length, baseNoSpace.length) * 2.5) continue;
+
+        const score = getSimilarity(candidate._regBodyOriginal, baseOriginal);
+        if (score >= 85 && score > maxScore) {
+            maxScore = score;
+            book = candidate;
+            if (score === 100) break;
+        }
+    }
+
+    const result = { book, maxScore };
+    similarityCache[matchKey] = result;
+    return result;
+}
+
 function showInfoToast(msg, isError = false) {
   let container = document.getElementById('book-manager-info-toast-container');
   if (!container) {
@@ -751,27 +795,9 @@ function showToast(book, isDelete = false) {
 
 function getBookTypeForTitle(titleStr) {
     if (!isDataLoaded || !titleStr) return null;
-    
-    let siteBodyOriginal = titleStr.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
-    let siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
-    
-    if (exactMatchCache[siteBodyNoSpace]) return exactMatchCache[siteBodyNoSpace].type;
-    if (similarityCache[siteBodyNoSpace] !== undefined) return similarityCache[siteBodyNoSpace].book ? similarityCache[siteBodyNoSpace].book.type : null;
-    
-    let book = null;
-    let maxScore = 0;
-    for (let i = cachedBookList.length - 1; i >= 0; i--) {
-        const b = cachedBookList[i];
-        if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
-        
-        const score = getSimilarity(b._regBodyOriginal, siteBodyOriginal);
-        if (score >= 85 && score > maxScore) { 
-            maxScore = score; book = b; 
-            if (score === 100) break; 
-        }
-    }
-    similarityCache[siteBodyNoSpace] = { book, maxScore };
-    return book ? book.type : null;
+
+    const match = findMatchingBook(getTitleMatchParts(titleStr));
+    return match.book ? match.book.type : null;
 }
 
 function injectDirectDownloadButtons(allowedDLs) {
@@ -989,7 +1015,7 @@ function removeBadge(link) {
 // [전면 수정] 상세페이지 누락관리 팝오버 말풍선 디자인 및 애니메이션 적용 로직
 let contentVolPopover = null;
 
-function openMissingPopoverContent(targetNoSpace, badgeElement) {
+function openMissingPopoverContent(targetMatchKey, badgeElement) {
     if (!contentVolPopover) {
         contentVolPopover = document.createElement('div');
         contentVolPopover.id = 'bm-missing-popover';
@@ -1036,8 +1062,7 @@ function openMissingPopoverContent(targetNoSpace, badgeElement) {
     safeStorageGet({ bookList: [] }, (data) => {
         const list = data.bookList;
         const dbBook = list.find(b => {
-            const noSpace = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-            return noSpace === targetNoSpace;
+            return getTitleMatchParts(b.title).matchKey === targetMatchKey;
         });
 
         if (!dbBook) {
@@ -1168,8 +1193,8 @@ function createQuickActions(linkData, hasBook) {
 
                 if (btnInfo.action === 'missing_vol') {
                     const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
-                    const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-                    openMissingPopoverContent(targetNoSpace, btn);
+                    const targetMatchKey = getTitleMatchParts(pureCleanTitle).matchKey;
+                    openMissingPopoverContent(targetMatchKey, btn);
                     return;
                 }
 
@@ -1191,18 +1216,19 @@ function createQuickActions(linkData, hasBook) {
                 } else {
                     // [낙관적 UI] 삭제 포함 즉시 캐시 갱신
                     const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
-                    const targetNoSpace = pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+                    const titleParts = getTitleMatchParts(pureCleanTitle);
+                    const targetMatchKey = titleParts.matchKey;
                     
                     if (btnInfo.action === 'delete') {
-                        if (exactMatchCache[targetNoSpace]) delete exactMatchCache[targetNoSpace];
-                        cachedBookList = cachedBookList.filter(b => b._regBodyNoSpace !== targetNoSpace);
+                        if (exactMatchCache[targetMatchKey]) delete exactMatchCache[targetMatchKey];
+                        cachedBookList = cachedBookList.filter(b => b._matchKey !== targetMatchKey);
                     } else {
-                        if (exactMatchCache[targetNoSpace]) {
-                            exactMatchCache[targetNoSpace].type = btnInfo.action;
+                        if (exactMatchCache[targetMatchKey]) {
+                            exactMatchCache[targetMatchKey].type = btnInfo.action;
                         } else {
                             let found = false;
                             for (let i = 0; i < cachedBookList.length; i++) {
-                                if (cachedBookList[i]._regBodyNoSpace === targetNoSpace) {
+                                if (cachedBookList[i]._matchKey === targetMatchKey) {
                                     cachedBookList[i].type = btnInfo.action;
                                     found = true;
                                     break;
@@ -1213,16 +1239,18 @@ function createQuickActions(linkData, hasBook) {
                                     title: pureCleanTitle, type: btnInfo.action,
                                     resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                                     lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
-                                    _regBodyOriginal: pureCleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim(),
-                                    _regBodyNoSpace: targetNoSpace
+                                    _regBodyOriginal: titleParts.baseOriginal,
+                                    _regBodyNoSpace: titleParts.baseNoSpace,
+                                    _editionKey: titleParts.editionKey,
+                                    _matchKey: targetMatchKey
                                 };
                                 cachedBookList.push(newBook);
-                                exactMatchCache[targetNoSpace] = newBook;
+                                exactMatchCache[targetMatchKey] = newBook;
                             }
                         }
                     }
 
-                    similarityCache[targetNoSpace] = undefined; 
+                    similarityCache[targetMatchKey] = undefined;
                     
                     document.querySelectorAll(globalTargetSelector).forEach(el => {
                         if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -1273,8 +1301,7 @@ function applyStyleToSingleLink(link) {
         if (skip) {
             link._bmData = { skip: true, raw: currentRawText };
         } else {
-            const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
-            const siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
+            const titleParts = getTitleMatchParts(pureTitle);
             
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
@@ -1289,7 +1316,7 @@ function applyStyleToSingleLink(link) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            link._bmData = { skip: false, siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol, raw: currentRawText, originalText };
+            link._bmData = { skip: false, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 
@@ -1299,30 +1326,11 @@ function applyStyleToSingleLink(link) {
         return;
     }
 
-    const { siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol, originalText } = link._bmData;
+    const { titleParts, siteBodyOriginal, siteRes, siteVol, originalText } = link._bmData;
     const hasTranslationTag = (originalText || '').includes('번역');
-    let book = null;
-    let maxScore = 0;
-    
-    if (exactMatchCache[siteBodyNoSpace]) {
-        book = exactMatchCache[siteBodyNoSpace];
-        maxScore = 100;
-    } else if (similarityCache[siteBodyNoSpace] !== undefined) {
-        book = similarityCache[siteBodyNoSpace].book;
-        maxScore = similarityCache[siteBodyNoSpace].maxScore;
-    } else {
-        for (let i = cachedBookList.length - 1; i >= 0; i--) {
-            const b = cachedBookList[i];
-            if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
-            
-            const score = getSimilarity(b._regBodyOriginal, siteBodyOriginal);
-            if (score >= 85 && score > maxScore) { 
-                maxScore = score; book = b; 
-                if (score === 100) break; 
-            }
-        }
-        similarityCache[siteBodyNoSpace] = { book, maxScore }; 
-    }
+    const match = findMatchingBook(titleParts);
+    const book = match.book;
+    const maxScore = match.maxScore;
     
     let badgeStyle = '';
     let newBadgeHTML = '';
@@ -1440,8 +1448,8 @@ function applyStyleToSingleLink(link) {
         let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
         let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
         
-        const siteBodyNoSpace = link._bmData.siteBodyNoSpace;
-        const matchBook = exactMatchCache[siteBodyNoSpace] || (similarityCache[siteBodyNoSpace] && similarityCache[siteBodyNoSpace].book);
+        const siteMatchKey = link._bmData.siteMatchKey;
+        const matchBook = exactMatchCache[siteMatchKey] || (similarityCache[siteMatchKey] && similarityCache[siteMatchKey].book);
         const hasBook = !!matchBook;
 
         if (!existingActions || existingActions.dataset.hasBook !== String(hasBook)) {
@@ -1506,8 +1514,7 @@ function applyStyleToDetailElement(el) {
         if (skip) {
             el._bmDetailData = { skip: true, raw: currentRawText };
         } else {
-            const siteBodyOriginal = pureTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim();
-            const siteBodyNoSpace = siteBodyOriginal.replace(/\s+/g, '');
+            const titleParts = getTitleMatchParts(pureTitle);
             
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
@@ -1522,7 +1529,7 @@ function applyStyleToDetailElement(el) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            el._bmDetailData = { skip: false, pureTitle, siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol, raw: currentRawText, originalText };
+            el._bmDetailData = { skip: false, pureTitle, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 
@@ -1547,29 +1554,10 @@ function applyStyleToDetailElement(el) {
         el.style.setProperty("display", "inline-block", "important");
     }
 
-    const { siteBodyOriginal, siteBodyNoSpace, siteRes, siteVol } = el._bmDetailData;
-    let book = null;
-    let maxScore = 0;
-    
-    if (exactMatchCache[siteBodyNoSpace]) {
-        book = exactMatchCache[siteBodyNoSpace];
-        maxScore = 100;
-    } else if (similarityCache[siteBodyNoSpace] !== undefined) {
-        book = similarityCache[siteBodyNoSpace].book;
-        maxScore = similarityCache[siteBodyNoSpace].maxScore;
-    } else {
-        for (let i = cachedBookList.length - 1; i >= 0; i--) {
-            const b = cachedBookList[i];
-            if (Math.abs(b._regBodyNoSpace.length - siteBodyNoSpace.length) > Math.min(b._regBodyNoSpace.length, siteBodyNoSpace.length) * 2.5) continue;
-            
-            const score = getSimilarity(b._regBodyOriginal, siteBodyOriginal);
-            if (score >= 85 && score > maxScore) { 
-                maxScore = score; book = b; 
-                if (score === 100) break; 
-            }
-        }
-        similarityCache[siteBodyNoSpace] = { book, maxScore }; 
-    }
+    const { titleParts, siteRes, siteVol } = el._bmDetailData;
+    const match = findMatchingBook(titleParts);
+    const book = match.book;
+    const maxScore = match.maxScore;
     
     let badgeStyle = '';
     let newBadgeHTML = '';

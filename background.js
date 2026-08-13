@@ -297,14 +297,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       
       if (message.type === "delete") {
-          chrome.storage.local.get({ bookList: [] }, (data) => {
+          chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+              setEditionKeywords(data.editionKeywords);
               let list = Array.isArray(data.bookList) ? data.bookList : [];
-              let targetTitleStr = message.cleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+              let targetTitleStr = getTitleMatchParts(message.cleanTitle).matchKey;
 
               // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
               let existingIndex = -1;
               for (let i = list.length - 1; i >= 0; i--) {
-                  if ((list[i].title || "").replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') === targetTitleStr) {
+                  if (getTitleMatchParts(list[i].title || "").matchKey === targetTitleStr) {
                       existingIndex = i;
                       break;
                   }
@@ -958,7 +959,7 @@ async function createDailySnapshot() {
         const existing = await db.snapshots.where('dateStr').equals(dateStr).first();
         if (existing) return;
         
-        chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [] }, async (data) => {
+        chrome.storage.local.get({ bookList: [], allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, async (data) => {
             const snapshotData = { timestamp: now.getTime(), dateStr: dateStr, data: data };
             await db.snapshots.add(snapshotData); // 스냅샷 저장
             
@@ -1005,6 +1006,10 @@ function checkUpdateInBackground() {
 
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.editionKeywords) {
+        bgListMapCache = null;
+        bgListLength = -1;
+    }
     if (areaName === 'local' && changes.openSlidePanel) {
         const isSlide = changes.openSlidePanel.newValue;
         if (chrome.action) {
@@ -1082,12 +1087,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 
   if (menuId === "deleteBook") {
-      chrome.storage.local.get({ bookList: [] }, (data) => {
+      chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+          setEditionKeywords(data.editionKeywords);
           let list = Array.isArray(data.bookList) ? data.bookList : [];
-          let targetTitleStr = cleanTitle.replace(/\s+/g, '').toLowerCase();
+          let targetTitleStr = getTitleMatchParts(cleanTitle).matchKey;
 
           let existingIndex = list.findIndex(b => {
-              const bTitle = (b.title || "").replace(/\s+/g, '').toLowerCase();
+              const bTitle = getTitleMatchParts(b.title || "").matchKey;
               return targetTitleStr === bTitle;
           });
 
@@ -1170,14 +1176,15 @@ function processSaveQueue() {
     const tasks = [...pendingTasks]; 
     pendingTasks = []; 
 
-    chrome.storage.local.get({ bookList: [] }, (data) => {
+    chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+        setEditionKeywords(data.editionKeywords);
         let list = Array.isArray(data.bookList) ? data.bookList : [];
         
         // [핵심 최적화] 매번 6만번 루프 돌며 해시맵을 만들지 않고, 갯수가 같으면 캐시된 맵 사용
         if (!bgListMapCache || bgListLength !== list.length) {
             bgListMapCache = new Map();
             for (let i = 0; i < list.length; i++) {
-                const t = (list[i].title || "").replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+                const t = getTitleMatchParts(list[i].title || "").matchKey;
                 bgListMapCache.set(t, i);
             }
             bgListLength = list.length;
@@ -1187,7 +1194,7 @@ function processSaveQueue() {
         let targetTabId = null;
 
         for (let task of tasks) {
-            const targetTitleStr = task.cleanTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+            const targetTitleStr = getTitleMatchParts(task.cleanTitle).matchKey;
             let existingIndex = bgListMapCache.has(targetTitleStr) ? bgListMapCache.get(targetTitleStr) : -1;
 
             if (existingIndex > -1) {
