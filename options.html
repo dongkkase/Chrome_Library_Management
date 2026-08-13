@@ -98,6 +98,22 @@
       background: #0d6efd; color: white; white-space: nowrap; font-weight: bold; transition: opacity 0.2s;
     }
     button:hover { opacity: 0.85; }
+
+    .search-tools-dropdown { position: relative; flex-shrink: 0; }
+    #searchToolsBtn { background: #6f42c1; min-width: 108px; height: 34px; padding: 6px 10px; }
+    #searchToolsBtn .dropdown-arrow { margin-left: 4px; font-size: 10px; }
+    .search-tools-menu {
+      display: none; position: absolute; top: calc(100% + 5px); left: 0; width: 220px;
+      padding: 5px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px;
+      box-shadow: 0 7px 20px rgba(0,0,0,0.22); z-index: 1000;
+    }
+    .search-tools-menu.open { display: block; }
+    .search-tools-menu button {
+      width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      background: transparent; color: var(--text); text-align: left; font-size: 12px;
+    }
+    .search-tools-menu button:hover { background: var(--tab-hover); opacity: 1; }
+    .search-tools-menu small { display: block; color: var(--text-muted); font-size: 10px; font-weight: normal; }
     
     .site-tag { 
       background: var(--bg); padding: 6px 10px; border-radius: 6px; font-size: 12px; 
@@ -462,7 +478,17 @@
                 <div>
                     <strong style="color: var(--text);">검색:</strong>
                     <div style="display: flex; width: 100%; gap: 5px; align-items: center;">
-                        <button id="findDuplicatesBtn" style="background: #fd7e14; padding: 6px 12px; font-size: 12px;" title="공백과 기호를 무시하고 제목이 겹치는 항목을 검색합니다.">🔍 중복 찾기</button>
+                        <div class="search-tools-dropdown">
+                            <button id="searchToolsBtn" type="button" aria-haspopup="true" aria-expanded="false"><span class="search-tools-label">목록 찾기</span><span class="dropdown-arrow">▼</span></button>
+                            <div id="searchToolsMenu" class="search-tools-menu" role="menu">
+                                <button type="button" data-special-filter="#중복" data-filter-label="중복 찾기" role="menuitem">
+                                    <span>🔍</span><span><b>중복 찾기</b><small>제목이 겹치는 항목</small></span>
+                                </button>
+                                <button type="button" data-special-filter="#누락" data-filter-label="누락 찾기" role="menuitem">
+                                    <span>📑</span><span><b>누락 찾기</b><small>누락 권수가 있는 도서</small></span>
+                                </button>
+                            </div>
+                        </div>
                         <div style="position: relative; width: 100%;">
                             <input type="text" id="searchInput" placeholder="저장된 제목 검색..." style="width: 100%; border-color: #0d6efd; padding-right: 24px; box-sizing: border-box;">
                             <span id="clearSearchBtn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px; font-weight: bold; display: none; line-height: 1;" title="검색어 지우기">&times;</span>

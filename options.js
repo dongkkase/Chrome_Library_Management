@@ -137,6 +137,7 @@ function renderList(filter = "", resetPage = false) {
     document.getElementById('stat-exclude').innerText = excludeCount;
 
     const isDuplicateSearch = filter === "#중복";
+    const isMissingSearch = filter === "#누락";
     let duplicateIds = new Set();
     
     if (isDuplicateSearch) {
@@ -162,6 +163,7 @@ function renderList(filter = "", resetPage = false) {
     const filteredList = list.filter(b => {
         if (!b || !b.title) return false;
         if (isDuplicateSearch) return duplicateIds.has(b.id);
+        if (isMissingSearch) return getBookMissingVols(b, data.missingVolsMap).length > 0;
         if (b.title.toLowerCase().includes(filter.toLowerCase())) return true;
         if (normalizedFilter) {
             const normalizedTitle = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
@@ -178,21 +180,13 @@ function renderList(filter = "", resetPage = false) {
     if (countDisplay) {
         if (isDuplicateSearch) {
             countDisplay.innerHTML = `중복 의심 목록: 총 <span style="color:#fd7e14;">${filteredList.length}</span>건 (공백/기호 무시 시 동일한 항목 묶음)`;
+        } else if (isMissingSearch) {
+            countDisplay.innerHTML = `누락 권수 등록 목록: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (누락 권수가 하나 이상인 도서)`;
         } else if (filter.trim() === "") {
             countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
             countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         }
-    }
-
-    const findDuplicatesBtn = document.getElementById('findDuplicatesBtn');
-    if (findDuplicatesBtn) {
-        findDuplicatesBtn.onclick = () => {
-            if (searchInput) {
-                searchInput.value = '#중복';
-                searchInput.dispatchEvent(new Event('input'));
-            }
-        };
     }
 
     // 정렬 로직 적용
@@ -358,12 +352,37 @@ document.getElementById('batchUpdateBtn').onclick = () => {
     let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
     if(!confirm(`현재 검색된 모든 항목을 [${typeNameKOR}] 타입으로 변경하시겠습니까?`)) return;
 
-    chrome.storage.local.get({ bookList: [] }, (data) => {
+    chrome.storage.local.get({ bookList: [], missingVolsMap: {} }, (data) => {
         let list = Array.isArray(data.bookList) ? data.bookList : [];
         const today = new Date().toISOString(); 
+        const isDuplicateSearch = filter === '#중복';
+        const isMissingSearch = filter === '#누락';
+        const duplicateTitleCounts = new Map();
+
+        if (isDuplicateSearch) {
+            list.forEach(book => {
+                if (!book || !book.title) return;
+                const matchKey = getTitleMatchParts(book.title).matchKey;
+                duplicateTitleCounts.set(matchKey, (duplicateTitleCounts.get(matchKey) || 0) + 1);
+            });
+        }
 
         const updatedList = list.map(book => {
             if (book && book.title) {
+                if (isDuplicateSearch) {
+                    const matchKey = getTitleMatchParts(book.title).matchKey;
+                    if ((duplicateTitleCounts.get(matchKey) || 0) > 1) {
+                        return { ...book, type: targetType, date: today };
+                    }
+                    return book;
+                }
+                if (isMissingSearch) {
+                    if (getBookMissingVols(book, data.missingVolsMap).length > 0) {
+                        return { ...book, type: targetType, date: today };
+                    }
+                    return book;
+                }
+
                 const lowerTitle = book.title.toLowerCase();
                 const matchOriginal = lowerTitle.includes(filter);
                 let matchNormalized = false;
@@ -967,15 +986,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const searchInput = document.getElementById('searchInput');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const searchToolsBtn = document.getElementById('searchToolsBtn');
+    const searchToolsMenu = document.getElementById('searchToolsMenu');
+    const searchToolsLabel = searchToolsBtn ? searchToolsBtn.querySelector('.search-tools-label') : null;
     let searchDebounceTimer;
+
+    const updateSearchToolsLabel = value => {
+        if (!searchToolsLabel) return;
+        if (value === '#중복') searchToolsLabel.textContent = '중복 찾기';
+        else if (value === '#누락') searchToolsLabel.textContent = '누락 찾기';
+        else searchToolsLabel.textContent = '목록 찾기';
+    };
+
+    const closeSearchToolsMenu = () => {
+        if (searchToolsMenu) searchToolsMenu.classList.remove('open');
+        if (searchToolsBtn) searchToolsBtn.setAttribute('aria-expanded', 'false');
+    };
+
+    if (searchToolsBtn && searchToolsMenu) {
+        searchToolsBtn.onclick = event => {
+            event.stopPropagation();
+            const willOpen = !searchToolsMenu.classList.contains('open');
+            searchToolsMenu.classList.toggle('open', willOpen);
+            searchToolsBtn.setAttribute('aria-expanded', String(willOpen));
+            if (willOpen) {
+                const firstMenuItem = searchToolsMenu.querySelector('[data-special-filter]');
+                if (firstMenuItem) firstMenuItem.focus();
+            }
+        };
+
+        searchToolsMenu.onclick = event => {
+            event.stopPropagation();
+            const menuItem = event.target.closest('[data-special-filter]');
+            if (!menuItem || !searchInput) return;
+
+            searchInput.value = menuItem.dataset.specialFilter;
+            searchInput.dispatchEvent(new Event('input'));
+            closeSearchToolsMenu();
+            searchToolsBtn.focus();
+        };
+
+        document.addEventListener('click', closeSearchToolsMenu);
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                closeSearchToolsMenu();
+                searchToolsBtn.focus();
+            }
+        });
+    }
+
     if (searchInput) {
         if (clearSearchBtn) {
             clearSearchBtn.style.display = searchInput.value ? 'block' : 'none';
         }
+        updateSearchToolsLabel(searchInput.value);
         searchInput.oninput = (e) => {
             if (clearSearchBtn) {
                 clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
             }
+            updateSearchToolsLabel(e.target.value);
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
                 // 검색어 입력 시 1페이지로 리셋 (true 전달)
@@ -988,6 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearSearchBtn.onclick = () => {
             searchInput.value = '';
             clearSearchBtn.style.display = 'none';
+            updateSearchToolsLabel('');
             renderList('', true);
         };
     }
@@ -1315,6 +1385,12 @@ function initVersionCheck() {
 // ============================================================================
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.missingVolsMap && changes.missingVolsUpdate) {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput && searchInput.value === '#누락') {
+            renderList('#누락', false);
+            return;
+        }
+
         updateMissingBadge(changes.missingVolsUpdate.newValue);
         return;
     }
