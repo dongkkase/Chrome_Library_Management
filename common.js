@@ -28,7 +28,8 @@ const defaultCustomFilters = [
 let globalCustomFilters = [...defaultCustomFilters];
 
 const defaultEditionKeywords = [
-    "신장판", "개정판", "애장판", "완전판", "개정 완전판", "특별합본판", "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판"
+    "신장판", "개정판", "애장판", "완전판", "개정 완전판", "특별합본판",
+    "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판", "소책자",
 ];
 
 let globalEditionKeywords = [...defaultEditionKeywords];
@@ -143,6 +144,25 @@ function replaceParentheticalSegments(value, replacer) {
             return replacer(fullMatch, innerText);
         }
     );
+}
+
+function getEditionQualifiers(value) {
+    const qualifiers = [];
+    const qualifierKeys = new Set();
+
+    replaceParentheticalSegments(value, (fullMatch, innerText) => {
+        const displayQualifier = innerText.trim();
+        const qualifierKey = normalizeTitleText(displayQualifier);
+
+        if (isEditionQualifier(displayQualifier) && qualifierKey && !qualifierKeys.has(qualifierKey)) {
+            qualifierKeys.add(qualifierKey);
+            qualifiers.push({ key: qualifierKey, display: displayQualifier });
+        }
+
+        return fullMatch;
+    });
+
+    return qualifiers;
 }
 
 function getTitleMatchParts(title) {
@@ -268,6 +288,9 @@ function cleanSiteTitle(title) {
 
     cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s+(?:그림|글)(?=\s|$)|(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|지음|작화|번역)(?=\s|$)/g, ' ');
 
+    // 권수나 해상도 뒤에 있는 판본명도 잘라내기 전에 별도로 보존합니다.
+    const preservedEditionQualifiers = getEditionQualifiers(cleaned);
+
     // 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
     // 수정: 정규식에서 쉼표(,)를 제거하여 21,000과 같은 형태에서 제목이 잘리지 않도록 함
     const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+|\d+\s*(?:권|화|화씩)|완결|\s완(\s|$))/i;
@@ -317,5 +340,15 @@ function cleanSiteTitle(title) {
             .trim();
     }
 
-    return normalizeTrailingEditionTitle(result);
+    result = normalizeTrailingEditionTitle(result);
+
+    const existingEditionKeys = new Set(getEditionQualifiers(result).map(qualifier => qualifier.key));
+    preservedEditionQualifiers.forEach(qualifier => {
+        if (!existingEditionKeys.has(qualifier.key)) {
+            result += `(${qualifier.display})`;
+            existingEditionKeys.add(qualifier.key);
+        }
+    });
+
+    return result;
 }
