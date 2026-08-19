@@ -128,10 +128,11 @@
     /* 각 열의 고정 너비를 명시하여 겹침 현상 완벽 방지 */
     th:nth-child(1) { width: 70px; }
     th:nth-child(2) { text-align: left; padding-left: 12px; width: auto; }
-    th:nth-child(3) { width: 75px; }
-    th:nth-child(4) { width: 145px; } /* 권수 + 누락 배지 영역 넉넉하게 확보 */
-    th:nth-child(5) { width: 95px; }  /* 등록일 영역 확보 */
-    th:nth-child(6) { width: 105px; } /* 관리 버튼 영역 확보 */
+    th:nth-child(3) { width: 140px; } /* 상위 폴더 규칙 */
+    th:nth-child(4) { width: 75px; }
+    th:nth-child(5) { width: 145px; } /* 권수 + 누락 배지 영역 넉넉하게 확보 */
+    th:nth-child(6) { width: 95px; }  /* 등록일 영역 확보 */
+    th:nth-child(7) { width: 105px; } /* 관리 버튼 영역 확보 */
     
     td { background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 8px; text-align: center; vertical-align: middle; transition: background-color 0.2s; }
     td:first-child { border-left: 1px solid var(--border); border-radius: 8px 0 0 8px; }
@@ -142,7 +143,7 @@
     .btn-del { background: #fa5252; padding: 4px 10px; font-size: 11px; }
     
     /* 인라인 에디터 인풋 필드 고도화 */
-    .edit-title, .edit-res, .edit-vol {
+    .edit-title, .edit-res, .edit-vol, .edit-folder-rule {
       width: 100%;
       border: 1px solid transparent;
       background: transparent;
@@ -157,15 +158,32 @@
     .edit-title { text-align: left; font-weight: 500; }
     .edit-res, .edit-vol { text-align: center; }
     
-    .edit-title:hover, .edit-res:hover, .edit-vol:hover {
+    .edit-title:hover, .edit-res:hover, .edit-vol:hover, .edit-folder-rule:hover {
       border-color: var(--border);
       background: var(--input-bg);
     }
-    .edit-title:focus, .edit-res:focus, .edit-vol:focus {
+    .edit-title:focus, .edit-res:focus, .edit-vol:focus, .edit-folder-rule:focus {
       outline: none;
       border-color: #0d6efd;
       background: var(--input-bg);
       box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+    }
+
+    .folder-rule-editor {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+    }
+    .folder-rule-editor .edit-folder-rule {
+      width: 1px;
+      min-width: 0;
+      flex: 1;
+    }
+    .btn-folder-rule-bulk {
+      padding: 4px 8px;
+      font-size: 11px;
+      white-space: nowrap;
     }
     
     /* 타입 선택기 커스텀 배지 스타일 */
@@ -257,9 +275,9 @@
     
     body.side-panel-mode tbody tr { 
         display: grid !important; 
-        /* 3열 레이아웃을 85px(타입), 1fr(제목), 115px(권수/관리)로 조정하여 공간 확보 */
-        grid-template-columns: 85px 1fr 115px !important; 
-        grid-template-rows: auto auto auto; 
+        /* 4행 레이아웃으로 타입/제목/폴더룰/해상도/권수/관리를 분리 */
+        grid-template-columns: 80px 1fr 100px !important; 
+        grid-template-rows: auto auto auto auto; 
         background: var(--panel);
         border: 1px solid var(--border); 
         border-radius: 12px;
@@ -307,7 +325,7 @@
 
     /* 1행 배치: 타입 배지, 날짜, 관리 버튼 */
     body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; display: flex; align-items: center; } 
-    body.side-panel-mode td:nth-child(5) { 
+    body.side-panel-mode td:nth-child(6) { 
         grid-row: 1; grid-column: 2; 
         display: block !important; 
         line-height: 24px;
@@ -318,8 +336,8 @@
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     } 
-    body.side-panel-mode td:nth-child(6) { grid-row: 1; grid-column: 3; display: flex; gap: 4px; justify-content: flex-end; align-items: center; } 
-    body.side-panel-mode td:nth-child(6) button { padding: 4px 8px; font-size: 11px; }
+    body.side-panel-mode td:nth-child(7) { grid-row: 1; grid-column: 3; display: flex; gap: 4px; justify-content: flex-end; align-items: center; } 
+    body.side-panel-mode td:nth-child(7) button { padding: 4px 8px; font-size: 11px; }
     
     /* 2행 배치: 도서 제목 (강조된 컴포넌트 박스 형태) */
     body.side-panel-mode td:nth-child(2) { 
@@ -345,8 +363,8 @@
         background: #cccccc30 !important;
     }
     
-    /* 3행 배치: 해상도 및 권수 입력 필드 */
-    body.side-panel-mode td:nth-child(3), body.side-panel-mode td:nth-child(4) {
+    /* 3행 배치: 상위 폴더 규칙 입력 필드 */
+    body.side-panel-mode td:nth-child(3) {
         display: flex !important;
         align-items: center;
         background: var(--input-bg);
@@ -356,13 +374,36 @@
         box-sizing: border-box;
         background: #cccccc30 !important;
     }
-    body.side-panel-mode td:nth-child(3) { grid-row: 3; grid-column: 1 / span 2; }
-    body.side-panel-mode td:nth-child(4) { grid-row: 3; grid-column: 3; }
+    body.side-panel-mode td:nth-child(3) { grid-row: 3; grid-column: 1 / span 3; }
+    body.side-panel-mode td:nth-child(3) > .folder-rule-editor {
+        width: 100%;
+    }
+    body.side-panel-mode .folder-rule-editor .btn-folder-rule-bulk {
+        padding: 3px 7px;
+        font-size: 10px;
+    }
+    body.side-panel-mode td:nth-child(3):before { content: "📁"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
     
-    body.side-panel-mode td:nth-child(3):before { content: "📺"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
-    body.side-panel-mode td:nth-child(4):before { content: "📑"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    /* 4행 배치: 해상도/권수 입력 필드 */
+    body.side-panel-mode td:nth-child(4), body.side-panel-mode td:nth-child(5) {
+        display: flex !important;
+        align-items: center;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 2px 8px !important;
+        box-sizing: border-box;
+        background: #cccccc30 !important;
+    }
+    body.side-panel-mode td:nth-child(4) { grid-row: 4; grid-column: 1 / span 2; }
+    body.side-panel-mode td:nth-child(5) { grid-row: 4; grid-column: 3; }
     
-    body.side-panel-mode td:nth-child(3) input, body.side-panel-mode td:nth-child(4) input {
+    body.side-panel-mode td:nth-child(4):before { content: "📺"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    body.side-panel-mode td:nth-child(5):before { content: "📑"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    
+    body.side-panel-mode td:nth-child(3) input,
+    body.side-panel-mode td:nth-child(4) input, 
+    body.side-panel-mode td:nth-child(5) input {
         border: none !important;
         background: transparent !important;
         padding: 4px 0 !important;
@@ -370,6 +411,18 @@
         font-weight: 500;
         box-shadow: none !important;
         text-align: left;
+        min-width: 0 !important;
+    }
+    body.side-panel-mode td:nth-child(5) > div {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    body.side-panel-mode td:nth-child(5) > div > input {
+        width: 0 !important;
+        flex: 1 1 auto;
+        min-width: 0 !important;
     }
     
     body.side-panel-mode .panel-box { padding: 10px; }
@@ -487,6 +540,9 @@
                                 <button type="button" data-special-filter="#누락" data-filter-label="누락 찾기" role="menuitem">
                                     <span>📑</span><span><b>누락 찾기</b><small>누락 권수가 있는 도서</small></span>
                                 </button>
+                                <button type="button" data-special-filter="#폴더규칙:" data-filter-label="폴더 규칙 찾기" role="menuitem">
+                                    <span>📂</span><span><b>폴더 규칙 찾기</b><small>폴더 규칙명으로 검색</small></span>
+                                </button>
                             </div>
                         </div>
                         <div style="position: relative; width: 100%;">
@@ -510,6 +566,7 @@
             <tr>
                 <th style="width: 75px;">타입</th>
                 <th>도서 제목</th>
+                <th style="width: 140px;">상위 폴더 규칙</th>
                 <th style="width: 80px;">해상도</th>
                 <th style="width: 60px;">권수</th>
                 <th style="width: 80px;">등록일</th>

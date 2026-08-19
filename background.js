@@ -1,9 +1,28 @@
 importScripts('dexie.min.js', 'db.js', 'common.js');
 
 let lastRightClickedTitle = "";
-let downloadTitlesMap = {}; // 다운로드 ID와 폴더명(책 제목) 매핑
+let downloadTitlesMap = {}; // 다운로드 ID와 폴더 경로 매핑
 let urlToTitleMap = {};
 let gofileAuthLock = null;
+
+function sanitizeDownloadFolderSegment(segment) {
+    return String(segment || '')
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function sanitizeDownloadFolderPath(rawPath) {
+    const normalizedPath = String(rawPath || '').replace(/\\/g, '/').trim();
+    if (!normalizedPath) return '';
+
+    const segments = normalizedPath
+        .split('/')
+        .map((segment) => sanitizeDownloadFolderSegment(segment))
+        .filter((segment) => segment.length > 0);
+
+    return segments.join('/');
+}
 
 function ignoreLastError() {
     void chrome.runtime.lastError;
@@ -395,8 +414,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // 콜백에서 다운로드 ID와 폴더명(title) 연결
         chrome.downloads.download({ url: targetDlUrl, conflictAction: "uniquify" }, (downloadId) => {
-            if (downloadId && message.title) {
-                downloadTitlesMap[downloadId] = message.title; 
+            if (downloadId && (message.downloadFolder || message.title)) {
+                downloadTitlesMap[downloadId] = message.downloadFolder || message.title; 
             }
             if (chrome.runtime.lastError) {
                 sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true });
@@ -654,8 +673,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             
             // 콜백에서 다운로드 ID와 폴더명(title) 연결
             chrome.downloads.download({ url: dlUrl, conflictAction: "uniquify" }, (downloadId) => {
-                if (downloadId && message.title) {
-                    downloadTitlesMap[downloadId] = message.title;
+                if (downloadId && (message.downloadFolder || message.title)) {
+                    downloadTitlesMap[downloadId] = message.downloadFolder || message.title;
                 }
                 if (chrome.runtime.lastError) {
                     sendTabMessage(sender.tab && sender.tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 다운로드 시작 실패: " + chrome.runtime.lastError.message, isError: true });
@@ -779,7 +798,7 @@ else if (message.action === "DOWNLOAD_TRANSFERIT") {
 
                       if (isTransferItDownload) {
                           myDownloadId = item.id;
-                          if (message.title) downloadTitlesMap[item.id] = message.title; 
+                          if (message.downloadFolder || message.title) downloadTitlesMap[item.id] = message.downloadFolder || message.title; 
                           
                           sendTabMessage(sender.tab && sender.tab.id, {
                               action: "SHOW_INFO_TOAST", msg: "✅ Transfer.it 다운로드가 시작되었습니다! (탭 자동 종료)"
@@ -1335,19 +1354,17 @@ chrome.downloads.onChanged.addListener((delta) => {
 // VDH 충돌 완벽 차단: 스마트 스위치 (Smart Switch) 로직
 // 평상시에는 리스너를 지워두고, 우리 도서를 다운받을 때만 찰나의 순간에 켭니다.
 // ==============================================================================
-let expectedDownloadTitle = null;
+let expectedDownloadFolder = null;
 let hookFallbackTimer = null;
 
 const dynamicFolderListener = (item, suggest) => {
-    let title = downloadTitlesMap[item.id] || expectedDownloadTitle;
-    if (title) {
+    const targetPath = downloadTitlesMap[item.id] || expectedDownloadFolder;
+    const safePath = sanitizeDownloadFolderPath(targetPath);
+    if (safePath) {
         chrome.storage.local.get({ autoFolder: true }, (data) => {
             if (data.autoFolder !== false) {
-                let safeTitle = title.replace(/[\\/:*?"<>|.]/g, ' ').replace(/\s+/g, ' ').trim();
-                if (safeTitle) {
-                    suggest({ filename: safeTitle + "/" + item.filename, conflictAction: "uniquify" });
-                    return;
-                }
+                suggest({ filename: safePath + "/" + item.filename, conflictAction: "uniquify" });
+                return;
             }
             suggest();
         });
@@ -1358,8 +1375,9 @@ const dynamicFolderListener = (item, suggest) => {
 
 // 1. 사용자가 도서 다운로드를 지시(DOWNLOAD_*)할 때만 스위치를 ON
 chrome.runtime.onMessage.addListener((message) => {
-    if (message.action && message.action.startsWith("DOWNLOAD_") && message.title) {
-        expectedDownloadTitle = message.title;
+    const expectedFolder = message && (message.downloadFolder || message.title);
+    if (message && message.action && message.action.startsWith("DOWNLOAD_") && expectedFolder) {
+        expectedDownloadFolder = expectedFolder;
         
         // 브라우저에 리스너(훅) 물리적 장착
         if (!chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
@@ -1371,6 +1389,7 @@ chrome.runtime.onMessage.addListener((message) => {
         hookFallbackTimer = setTimeout(() => {
             if (chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
                 chrome.downloads.onDeterminingFilename.removeListener(dynamicFolderListener);
+                expectedDownloadFolder = null;
             }
         }, 3 * 60 * 1000);
     }
@@ -1383,7 +1402,7 @@ chrome.downloads.onChanged.addListener((delta) => {
             // 진행 중인 우리 다운로드가 없다면 브라우저에서 리스너 완전 철거
             if (chrome.downloads.onDeterminingFilename.hasListener(dynamicFolderListener)) {
                 chrome.downloads.onDeterminingFilename.removeListener(dynamicFolderListener);
-                expectedDownloadTitle = null;
+                expectedDownloadFolder = null;
             }
         }
     }
