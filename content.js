@@ -48,6 +48,22 @@ function safeStorageSet(values, callback) {
     }
 }
 
+function stripEditionTagsForEverythingSearch(title) {
+    const normalizedTitle = String(title || '')
+        .replace(/&lt;/gi, '(')
+        .replace(/&gt;/gi, ')')
+        .replace(/</g, '(')
+        .replace(/>/g, ')');
+
+    return normalizedTitle
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
+            return isEditionQualifier(innerText) ? ' ' : fullMatch;
+        })
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
@@ -58,7 +74,7 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
-    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001)(?:&|#|$)/i,
+    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001|D1106)(?:&|#|$)/i,
     boardCss2: `
         #fboardlist table { display: block !important; width: 100%; }
         #fboardlist thead { display: none !important; }
@@ -403,6 +419,37 @@ function removeVQuery(query) {
         })
         .join('&');
     return filtered ? `?${filtered}` : '';
+}
+
+function sanitizeDownloadFolderSegment(name) {
+    return String(name || '')
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildDownloadFolder(folderRule, fallbackTitle) {
+    const safeTitle = sanitizeDownloadFolderSegment(fallbackTitle);
+
+    if (!folderRule || !String(folderRule).trim()) {
+        return safeTitle;
+    }
+
+    const normalizedRule = String(folderRule).trim().replace(/\\/g, '/');
+    const safeSegments = normalizedRule
+        .split('/')
+        .map((segment) => sanitizeDownloadFolderSegment(segment))
+        .filter((segment) => segment.length > 0);
+
+    if (safeSegments.length === 0) {
+        return safeTitle;
+    }
+
+    if (!safeTitle) {
+        return safeSegments.join('/');
+    }
+
+    return `${safeSegments.join('/')}/${safeTitle}`;
 }
 
 function normalizeBoardImageUrl(source) {
@@ -1139,7 +1186,7 @@ function injectDirectDownloadButtons(allowedDLs) {
         return "";
     }
 
-    function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTranslation) {
+function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTranslation) {
         if (insertAfterElement.nextElementSibling && insertAfterElement.nextElementSibling.classList.contains('auto-dl-btn')) return;
         
         const autoBtn = document.createElement('a');
@@ -1176,7 +1223,17 @@ function injectDirectDownloadButtons(allowedDLs) {
                 if (hasTranslation) finalTitle += "(번역)";
                 let bType = getBookTypeForTitle(bookTitle);
                 if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
-                sendRuntimeMessage({ action: "DOWNLOAD_" + targetType, url: url, password: pw, title: finalTitle });
+                const match = bookTitle ? findMatchingBook(getTitleMatchParts(bookTitle)) : { book: null };
+                const matchedBook = match && match.book ? match.book : null;
+                const downloadFolder = buildDownloadFolder(matchedBook && matchedBook.folderRule, finalTitle);
+                sendRuntimeMessage({
+                    action: "DOWNLOAD_" + targetType,
+                    url: url,
+                    password: pw,
+                    title: finalTitle,
+                    downloadFolder: downloadFolder,
+                    bookId: matchedBook ? matchedBook.id : null
+                });
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
             }
@@ -1500,6 +1557,7 @@ function createQuickActions(linkData, hasBook) {
                         return;
                     }
                     const cleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const everythingSearchTitle = stripEditionTagsForEverythingSearch(cleanTitle);
                     let iframe = document.getElementById('bm-everything-iframe');
                     if (!iframe) {
                         iframe = document.createElement('iframe');
@@ -1507,7 +1565,7 @@ function createQuickActions(linkData, hasBook) {
                         iframe.style.display = 'none';
                         document.body.appendChild(iframe);
                     }
-                    iframe.src = "es:" + encodeURIComponent(cleanTitle);
+                    iframe.src = "es:" + encodeURIComponent(everythingSearchTitle);
                     return;
                 }
 
@@ -1531,7 +1589,9 @@ function createQuickActions(linkData, hasBook) {
                     sendRuntimeMessage({
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
-                        cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
+                        cleanTitle: btnInfo.action === 'everything_search'
+                            ? stripEditionTagsForEverythingSearch(typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
+                            : (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
                     });
                 } else {
                     // [낙관적 UI] 삭제 포함 즉시 캐시 갱신

@@ -118,12 +118,109 @@ let renderFrame;
 let currentPage = 1;
 const itemsPerPage = 100; // 한 페이지에 보여줄 항목 수 (100개 권장)
 let totalPages = 1;
+let folderRulePreview;
+let activeFolderRuleInput = null;
+let folderRulePreviewHideTimer;
+
+function ensureFolderRulePreview() {
+    if (folderRulePreview) return folderRulePreview;
+
+    folderRulePreview = document.createElement('div');
+    folderRulePreview.id = 'folderRulePreview';
+    folderRulePreview.className = 'folder-rule-preview-popover';
+    document.body.appendChild(folderRulePreview);
+
+    return folderRulePreview;
+}
+
+function getFolderRulePreviewPath(folderInput) {
+    if (!folderInput) return '';
+
+    const row = folderInput.closest('tr');
+    const title = row ? (row.querySelector('.edit-title')?.value || '').trim() : '';
+    const currentFolderRule = (folderInput.value || '').trim();
+    const inputExampleRule = currentFolderRule || '(입력값)';
+    const defaultFolderRule = '상위 폴더 명';
+
+    const typedPath = `${inputExampleRule}/${title || '(책 제목)'}`;
+    const defaultPath = `${defaultFolderRule}/${title || '(책 제목)'}`;
+
+    return `${typedPath}|${defaultPath}`;
+}
+
+function updateFolderRulePreviewContent(folderInput) {
+    const preview = ensureFolderRulePreview();
+    const paths = getFolderRulePreviewPath(folderInput);
+    const [typedPath, defaultPath] = paths ? paths.split('|') : ['', ''];
+
+    preview.innerHTML = `
+      <div>입력했을 때: '${typedPath}'</div>
+      <div>입력하지 않았을 때: '${defaultPath}'</div>
+      <div style="margin-top:4px; color:var(--text-muted);">다운로드 시 최종 경로는 위 규칙을 따라 생성됩니다.</div>
+    `;
+}
+
+function updateFolderRulePreviewPosition(folderInput) {
+    const preview = ensureFolderRulePreview();
+    const inputRect = folderInput.getBoundingClientRect();
+
+    preview.style.display = 'block';
+    preview.classList.remove('open');
+
+    updateFolderRulePreviewContent(folderInput);
+
+    const previewRect = preview.getBoundingClientRect();
+
+    let top = inputRect.bottom + window.scrollY + 10;
+    let left = inputRect.left + window.scrollX + (inputRect.width / 2) - (previewRect.width / 2);
+
+    top = Math.max(window.scrollY + 6, top);
+    left = Math.max(window.scrollX + 8, Math.min(window.scrollX + window.innerWidth - previewRect.width - 8, left));
+
+    const arrowLeft = Math.max(
+        10,
+        Math.min(previewRect.width - 20, inputRect.left + window.scrollX + (inputRect.width / 2) - left - 8)
+    );
+
+    preview.style.left = `${left}px`;
+    preview.style.top = `${top}px`;
+    preview.style.setProperty('--folder-rule-arrow-x', `${arrowLeft}px`);
+}
+
+function showFolderRulePreview(folderInput) {
+    if (!folderInput || !(folderInput instanceof HTMLInputElement)) return;
+    activeFolderRuleInput = folderInput;
+    if (folderRulePreviewHideTimer) {
+        clearTimeout(folderRulePreviewHideTimer);
+        folderRulePreviewHideTimer = null;
+    }
+    folderRulePreview.classList.remove('open');
+    updateFolderRulePreviewPosition(folderInput);
+    requestAnimationFrame(() => {
+        if (folderRulePreview) folderRulePreview.classList.add('open');
+    });
+}
+
+function hideFolderRulePreview() {
+    if (!folderRulePreview) return;
+    activeFolderRuleInput = null;
+    folderRulePreview.classList.remove('open');
+    if (folderRulePreviewHideTimer) {
+        clearTimeout(folderRulePreviewHideTimer);
+    }
+    folderRulePreviewHideTimer = setTimeout(() => {
+        if (!folderRulePreview.classList.contains('open')) {
+            folderRulePreview.style.display = 'none';
+        }
+    }, 300);
+}
 
 function renderList(filter = "", resetPage = false) {
   if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
 
   chrome.storage.local.get({ bookList: [], missingVolsMap: {}, sortOption: 'id_desc' }, (data) => {
     listBody.innerHTML = '';
+    hideFolderRulePreview();
     
     let list = Array.isArray(data.bookList) ? data.bookList : [];
     
@@ -136,8 +233,11 @@ function renderList(filter = "", resetPage = false) {
     document.getElementById('stat-incomplete').innerText = incompleteCount;
     document.getElementById('stat-exclude').innerText = excludeCount;
 
+    const folderRulePrefix = "#폴더규칙";
     const isDuplicateSearch = filter === "#중복";
     const isMissingSearch = filter === "#누락";
+    const isFolderRuleSearch = filter === folderRulePrefix || filter.startsWith(folderRulePrefix + ":");
+    const folderRuleKeyword = isFolderRuleSearch ? filter.slice(folderRulePrefix.length).replace(/^[:\s]*/, '').trim() : '';
     let duplicateIds = new Set();
     
     if (isDuplicateSearch) {
@@ -160,10 +260,19 @@ function renderList(filter = "", resetPage = false) {
 
     // 필터링 적용
     const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+    const normalizedFolderRuleKeyword = isFolderRuleSearch ? folderRuleKeyword.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') : '';
     const filteredList = list.filter(b => {
         if (!b || !b.title) return false;
         if (isDuplicateSearch) return duplicateIds.has(b.id);
         if (isMissingSearch) return getBookMissingVols(b, data.missingVolsMap).length > 0;
+        if (isFolderRuleSearch) {
+            const folderRule = (b.folderRule || '').trim();
+            if (!folderRule) return false;
+            if (!folderRuleKeyword) return true;
+            if (folderRule.toLowerCase().includes(folderRuleKeyword.toLowerCase())) return true;
+            const normalizedFolderRule = folderRule.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+            return normalizedFolderRule.includes(normalizedFolderRuleKeyword);
+        }
         if (b.title.toLowerCase().includes(filter.toLowerCase())) return true;
         if (normalizedFilter) {
             const normalizedTitle = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
@@ -182,6 +291,9 @@ function renderList(filter = "", resetPage = false) {
             countDisplay.innerHTML = `중복 의심 목록: 총 <span style="color:#fd7e14;">${filteredList.length}</span>건 (공백/기호 무시 시 동일한 항목 묶음)`;
         } else if (isMissingSearch) {
             countDisplay.innerHTML = `누락 권수 등록 목록: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (누락 권수가 하나 이상인 도서)`;
+        } else if (isFolderRuleSearch) {
+            const keywordText = folderRuleKeyword ? `"${folderRuleKeyword}"(이)` : '등록된';
+            countDisplay.innerHTML = `상위 폴더 규칙 ${keywordText}인 목록: 총 <span style="color:#20c997;">${filteredList.length}</span>건`;
         } else if (filter.trim() === "") {
             countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
@@ -230,7 +342,7 @@ function renderList(filter = "", resetPage = false) {
                 prevNorm = normTitle;
                 const groupTr = document.createElement('tr');
                 groupTr.className = 'group-header-tr';
-                groupTr.innerHTML = `<td colspan="6" style="text-align: left; padding: 6px 12px; font-weight: bold; font-size: 12px; background-color: rgba(127, 127, 127, 0.1); color: var(--text); border-bottom: 2px solid #fd7e14; border-top: 2px solid var(--border);">📦 동일 항목 그룹: <span style="color:#fd7e14;">${normTitle}</span></td>`;
+                groupTr.innerHTML = `<td colspan="7" style="text-align: left; padding: 6px 12px; font-weight: bold; font-size: 12px; background-color: rgba(127, 127, 127, 0.1); color: var(--text); border-bottom: 2px solid #fd7e14; border-top: 2px solid var(--border);">📦 동일 항목 그룹: <span style="color:#fd7e14;">${normTitle}</span></td>`;
                 fragment.appendChild(groupTr);
             }
         }
@@ -245,6 +357,12 @@ function renderList(filter = "", resetPage = false) {
             </select>
           </td>
           <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
+          <td>
+            <div class="folder-rule-editor">
+              <input type="text" class="edit-folder-rule" value="${book.folderRule || ''}" data-id="${book.id}" placeholder="상위 폴더 규칙">
+              <button type="button" class="btn-folder-rule-bulk" data-id="${book.id}">일괄 수정</button>
+            </div>
+          </td>
           <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}" placeholder="해상도" style="width:100%"></td>
           
           <td style="position:relative; vertical-align:middle; padding:0;">
@@ -357,6 +475,10 @@ document.getElementById('batchUpdateBtn').onclick = () => {
         const today = new Date().toISOString(); 
         const isDuplicateSearch = filter === '#중복';
         const isMissingSearch = filter === '#누락';
+        const folderRulePrefix = "#폴더규칙";
+        const isFolderRuleSearch = filter === folderRulePrefix || filter.startsWith(folderRulePrefix + ":");
+        const folderRuleKeyword = isFolderRuleSearch ? filter.slice(folderRulePrefix.length).replace(/^[:\s]*/, '').trim() : '';
+        const normalizedFolderRuleKeyword = isFolderRuleSearch ? folderRuleKeyword.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') : '';
         const duplicateTitleCounts = new Map();
 
         if (isDuplicateSearch) {
@@ -378,6 +500,19 @@ document.getElementById('batchUpdateBtn').onclick = () => {
                 }
                 if (isMissingSearch) {
                     if (getBookMissingVols(book, data.missingVolsMap).length > 0) {
+                        return { ...book, type: targetType, date: today };
+                    }
+                    return book;
+                }
+                if (isFolderRuleSearch) {
+                    const folderRule = (book.folderRule || '').trim();
+                    if (!folderRule) return book;
+                    if (!folderRuleKeyword) return { ...book, type: targetType, date: today };
+                    if (folderRule.toLowerCase().includes(folderRuleKeyword.toLowerCase())) {
+                        return { ...book, type: targetType, date: today };
+                    }
+                    const normalizedFolderRule = folderRule.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+                    if (normalizedFolderRule.includes(normalizedFolderRuleKeyword)) {
                         return { ...book, type: targetType, date: today };
                     }
                     return book;
@@ -658,6 +793,7 @@ document.getElementById('saveBtn').onclick = () => {
         const bookData = { 
           type: targetType,
           title: cleanTitle, 
+          folderRule: "",
           resolution: resMatch ? Array.from(new Set(resMatch)).join(',') : "", 
           lastVol: parsedVol, 
           date: new Date().toISOString(), 
@@ -723,10 +859,43 @@ document.body.onclick = (e) => {
             title: newTitle, 
             resolution: row.querySelector('.edit-res').value.trim(), 
             lastVol: row.querySelector('.edit-vol').value.trim(),
+            folderRule: row.querySelector('.edit-folder-rule').value.trim(),
             date: new Date().toISOString() 
         };
         saveWithUndo(list, '✅ 수정이 완료되었습니다.');
       }
+    });
+  } else if (id && e.target.classList.contains('btn-folder-rule-bulk')) {
+    chrome.storage.local.get({ bookList: [] }, (data) => {
+        const list = Array.isArray(data.bookList) ? data.bookList : [];
+        const baseIndex = list.findIndex(b => b.id === id);
+        if (baseIndex < 0) return;
+
+        const row = e.target.closest('tr');
+        if (!row) return;
+
+        const nextRule = (row.querySelector('.edit-folder-rule')?.value || '').trim();
+        const baseRule = String(list[baseIndex].folderRule || '').trim();
+
+        if (baseRule === nextRule) {
+          showInfoToast('⚠️ 변경값이 동일해 일괄 수정할 대상이 없습니다.');
+          return;
+        }
+
+        const targetCount = list.filter(book => String(book.folderRule || '').trim() === baseRule).length;
+        if (targetCount <= 0) return;
+
+        const targetLabel = baseRule || '(미설정)';
+        const changedLabel = nextRule || '(비움)';
+        if (!confirm(`"[${targetLabel}]" 규칙으로 등록된 ${targetCount}건을 "${changedLabel}"(으)로 일괄 수정할까요?`)) return;
+
+        const now = new Date().toISOString();
+        const updatedList = list.map(book => {
+          const currentRule = String(book.folderRule || '').trim();
+          if (currentRule !== baseRule) return book;
+          return { ...book, folderRule: nextRule, date: now };
+        });
+        saveWithUndo(updatedList, `✅ 규칙 "${changedLabel}"(으)로 ${targetCount}건의 상위 폴더 규칙을 일괄 수정했습니다.`);
     });
   } else if (site) {
     chrome.storage.local.get({ allowedSites: [] }, (data) => {
@@ -904,6 +1073,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.target.setAttribute('data-type', e.target.value);
             }
         });
+
+        listBody.addEventListener('focusin', (e) => {
+            if (e.target.classList.contains('edit-folder-rule')) {
+                showFolderRulePreview(e.target);
+            }
+        });
+
+        listBody.addEventListener('input', (e) => {
+            if (e.target.classList.contains('edit-folder-rule')) {
+                showFolderRulePreview(e.target);
+            }
+        });
+
+        listBody.addEventListener('focusout', (e) => {
+            if (!e.target.classList.contains('edit-folder-rule')) return;
+            hideFolderRulePreview();
+        });
+
+        window.addEventListener('scroll', () => {
+            if (!activeFolderRuleInput) return;
+            updateFolderRulePreviewPosition(activeFolderRuleInput);
+        }, true);
+
+        window.addEventListener('resize', () => {
+            if (!activeFolderRuleInput) return;
+            updateFolderRulePreviewPosition(activeFolderRuleInput);
+        });
     }
 
     const addSiteBtn = document.getElementById('addSiteBtn');
@@ -995,6 +1191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!searchToolsLabel) return;
         if (value === '#중복') searchToolsLabel.textContent = '중복 찾기';
         else if (value === '#누락') searchToolsLabel.textContent = '누락 찾기';
+        else if (value === '#폴더규칙' || value.startsWith('#폴더규칙:')) searchToolsLabel.textContent = '폴더 규칙 찾기';
         else searchToolsLabel.textContent = '목록 찾기';
     };
 
@@ -1020,10 +1217,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const menuItem = event.target.closest('[data-special-filter]');
             if (!menuItem || !searchInput) return;
 
-            searchInput.value = menuItem.dataset.specialFilter;
+            const specialFilter = menuItem.dataset.specialFilter || '';
+            searchInput.value = specialFilter;
             searchInput.dispatchEvent(new Event('input'));
             closeSearchToolsMenu();
-            searchToolsBtn.focus();
+            searchInput.focus();
+            if (typeof searchInput.setSelectionRange === 'function') {
+                const len = searchInput.value.length;
+                searchInput.setSelectionRange(len, len);
+            }
         };
 
         document.addEventListener('click', closeSearchToolsMenu);

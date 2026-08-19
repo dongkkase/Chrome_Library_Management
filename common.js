@@ -146,9 +146,9 @@ function normalizeTrailingEditionTitle(value) {
 
 function replaceParentheticalSegments(value, replacer) {
     return (value || '').replace(
-        /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】/g,
-        (fullMatch, round, square, fullWidthRound, lenticular) => {
-            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? '';
+        /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g,
+        (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
             return replacer(fullMatch, innerText);
         }
     );
@@ -174,8 +174,13 @@ function getEditionQualifiers(value) {
 }
 
 function getTitleMatchParts(title) {
+    const normalizedTitle = (title || '')
+        .replace(/&lt;/gi, '(')
+        .replace(/&gt;/gi, ')')
+        .replace(/</g, '(')
+        .replace(/>/g, ')');
     const editionQualifiers = [];
-    let baseTitle = replaceParentheticalSegments(title, (fullMatch, innerText) => {
+    let baseTitle = replaceParentheticalSegments(normalizedTitle, (fullMatch, innerText) => {
         if (isEditionQualifier(innerText)) {
             const normalizedQualifier = normalizeTitleText(innerText);
             if (normalizedQualifier) editionQualifiers.push(normalizedQualifier);
@@ -231,7 +236,7 @@ const uselessCommentKeywords = [
     "감사합니다", "고맙습니다", "감사", "수고", "잘볼게요", "잘볼께요", 
     "잘보겠습니다", "ㄱㅅ", "ㄳ", "감사요", "감솨", "수고하셨습니다", "수고하세요",
     "잘봤습니다", "잘봤어요", "감사합니당", '소중한 자료 감사합니다', '잘받겟습니다', '잘받았습니다',
-    '확인했습니다', '확인', '학인했어요', '잘받앗습니다', '잘받앗어요'
+    '확인했습니다', '확인', '학인했어요', '잘받앗습니다', '잘받앗어요', '받아갑니다'
 ];
 
 function isUselessComment(text) {
@@ -245,10 +250,16 @@ function isUselessComment(text) {
 function cleanSiteTitle(title) {
     if (!title) return "";
 
+    let rawTitle = (title || '')
+        .replace(/&lt;/gi, '(')
+        .replace(/&gt;/gi, ')')
+        .replace(/</g, '(')
+        .replace(/>/g, ')');
+
     const hasMarkdownLink = /\[[^\]]+\]\((?:https?:\/\/|\/)[^)]+\)/i.test(title);
 
     // 눈에 보이지 않는 유령 공백(Zero-Width Space) 완전히 분쇄
-    let cleaned = title.replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '');
+    let cleaned = rawTitle.replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '');
 
     if (hasMarkdownLink) {
         cleaned = cleaned
@@ -335,8 +346,8 @@ function cleanSiteTitle(title) {
         .replace(/스캔 단면|스캔단면|스캔 양면|스캔양면|스캔본|스캔판/g, '')
         .replace(/단편 만화|단편만화|단편집|단편|단행본/g, '')
         .replace(/권\~/gi, '')
-        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】/g, (fullMatch, round, square, fullWidthRound, lenticular) => {
-            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? '';
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
             return isEditionQualifier(innerText) ? ` (${innerText.trim()}) ` : ' ';
         })
         .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
@@ -372,5 +383,5 @@ function cleanSiteTitle(title) {
         }
     });
 
-    return result;
+    return result.replace(/<\s*([^<>]+)\s*>/g, '($1)');
 }
