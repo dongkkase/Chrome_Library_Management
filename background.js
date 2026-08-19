@@ -279,20 +279,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   else if (message.action === "QUICK_ACTION") {
       const tabId = sender.tab ? sender.tab.id : null;
+      const sanitizedTitle = sanitizeBookTitleForStorage(message.cleanTitle);
       
       if (message.type === "search") {
-          chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(message.cleanTitle) }).catch(() => {});
+          chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(sanitizedTitle) }).catch(() => {});
           return true;
       }
 
       if (message.type === "everything_search") {
-          executeEverythingSearch(message.cleanTitle, tabId);
+          executeEverythingSearch(sanitizedTitle, tabId);
           return true;
       }
 
       console.log(message.type);
       if (message.type === "ridi_preview") {
-          performRidiSearch(message.cleanTitle);
+          performRidiSearch(sanitizedTitle);
           return true;
       }
       
@@ -300,7 +301,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
               setEditionKeywords(data.editionKeywords);
               let list = Array.isArray(data.bookList) ? data.bookList : [];
-              let targetTitleStr = getTitleMatchParts(message.cleanTitle).matchKey;
+              let targetTitleStr = getTitleMatchParts(sanitizedTitle).matchKey;
 
               // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
               let existingIndex = -1;
@@ -327,7 +328,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       pendingTasks.push({
-          cleanTitle: message.cleanTitle, 
+          cleanTitle: sanitizedTitle, 
           resolution: message.resolution, 
           lastVol: message.lastVol, 
           type: message.type, 
@@ -1049,6 +1050,16 @@ let saveTimer = null;
 let bgListMapCache = null; // [신규] 백그라운드 해시맵 캐시
 let bgListLength = -1;
 
+function sanitizeBookTitleForStorage(title) {
+    return cleanSiteTitle(
+        String(title || '')
+            .replace(/&lt;/gi, '(')
+            .replace(/&gt;/gi, ')')
+            .replace(/</g, '(')
+            .replace(/>/g, ')')
+    );
+}
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const menuId = info.menuItemId;
 
@@ -1062,7 +1073,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   let rawTitle = (info.selectionText || lastRightClickedTitle || info.linkText || "").trim();
   if (!rawTitle) return;
 
-  let cleanTitle = cleanSiteTitle(rawTitle);
+  let cleanTitle = sanitizeBookTitleForStorage(rawTitle);
 
   if (!cleanTitle) {
       if (tab && tab.id) {
@@ -1194,7 +1205,8 @@ function processSaveQueue() {
         let targetTabId = null;
 
         for (let task of tasks) {
-            const targetTitleStr = getTitleMatchParts(task.cleanTitle).matchKey;
+            const normalizedTaskTitle = sanitizeBookTitleForStorage(task.cleanTitle);
+            const targetTitleStr = getTitleMatchParts(normalizedTaskTitle).matchKey;
             let existingIndex = bgListMapCache.has(targetTitleStr) ? bgListMapCache.get(targetTitleStr) : -1;
 
             if (existingIndex > -1) {
@@ -1202,11 +1214,12 @@ function processSaveQueue() {
                 list[existingIndex].resolution = task.resolution || list[existingIndex].resolution;
                 list[existingIndex].type = task.type; 
                 list[existingIndex].date = task.dateString; 
+                list[existingIndex].title = normalizedTaskTitle;
                 lastSavedBook = list[existingIndex]; 
             } else {
                 lastSavedBook = { 
                     id: Date.now() + Math.random(), 
-                    title: task.cleanTitle, 
+                    title: normalizedTaskTitle, 
                     type: task.type, 
                     resolution: task.resolution, 
                     lastVol: task.lastVol, 
