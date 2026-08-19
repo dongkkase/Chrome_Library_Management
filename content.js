@@ -48,6 +48,22 @@ function safeStorageSet(values, callback) {
     }
 }
 
+function stripEditionTagsForEverythingSearch(title) {
+    const normalizedTitle = String(title || '')
+        .replace(/&lt;/gi, '(')
+        .replace(/&gt;/gi, ')')
+        .replace(/</g, '(')
+        .replace(/>/g, ')');
+
+    return normalizedTitle
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
+            return isEditionQualifier(innerText) ? ' ' : fullMatch;
+        })
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
@@ -1500,6 +1516,7 @@ function createQuickActions(linkData, hasBook) {
                         return;
                     }
                     const cleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const everythingSearchTitle = stripEditionTagsForEverythingSearch(cleanTitle);
                     let iframe = document.getElementById('bm-everything-iframe');
                     if (!iframe) {
                         iframe = document.createElement('iframe');
@@ -1507,7 +1524,7 @@ function createQuickActions(linkData, hasBook) {
                         iframe.style.display = 'none';
                         document.body.appendChild(iframe);
                     }
-                    iframe.src = "es:" + encodeURIComponent(cleanTitle);
+                    iframe.src = "es:" + encodeURIComponent(everythingSearchTitle);
                     return;
                 }
 
@@ -1531,7 +1548,9 @@ function createQuickActions(linkData, hasBook) {
                     sendRuntimeMessage({
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
-                        cleanTitle: typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText
+                        cleanTitle: btnInfo.action === 'everything_search'
+                            ? stripEditionTagsForEverythingSearch(typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
+                            : (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
                     });
                 } else {
                     // [낙관적 UI] 삭제 포함 즉시 캐시 갱신

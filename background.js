@@ -287,7 +287,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       if (message.type === "everything_search") {
-          executeEverythingSearch(sanitizedTitle, tabId);
+          executeEverythingSearch(stripEditionTagsForEverythingSearch(sanitizedTitle), tabId);
           return true;
       }
 
@@ -1058,6 +1058,16 @@ function sanitizeBookTitleForStorage(title) {
             .replace(/</g, '(')
             .replace(/>/g, ')')
     );
+}
+
+function stripEditionTagsForEverythingSearch(title) {
+    return String(title || '')
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+            const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
+            return isEditionQualifier(innerText) ? ' ' : fullMatch;
+        })
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
