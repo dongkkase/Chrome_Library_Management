@@ -1,6 +1,7 @@
 libmanagement.zip
 .vscode/
 build.ps1
+build.sh
 .gitignore
 *.bak
 demo_site/
