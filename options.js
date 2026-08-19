@@ -118,12 +118,109 @@ let renderFrame;
 let currentPage = 1;
 const itemsPerPage = 100; // 한 페이지에 보여줄 항목 수 (100개 권장)
 let totalPages = 1;
+let folderRulePreview;
+let activeFolderRuleInput = null;
+let folderRulePreviewHideTimer;
+
+function ensureFolderRulePreview() {
+    if (folderRulePreview) return folderRulePreview;
+
+    folderRulePreview = document.createElement('div');
+    folderRulePreview.id = 'folderRulePreview';
+    folderRulePreview.className = 'folder-rule-preview-popover';
+    document.body.appendChild(folderRulePreview);
+
+    return folderRulePreview;
+}
+
+function getFolderRulePreviewPath(folderInput) {
+    if (!folderInput) return '';
+
+    const row = folderInput.closest('tr');
+    const title = row ? (row.querySelector('.edit-title')?.value || '').trim() : '';
+    const currentFolderRule = (folderInput.value || '').trim();
+    const inputExampleRule = currentFolderRule || '(입력값)';
+    const defaultFolderRule = '상위 폴더 명';
+
+    const typedPath = `${inputExampleRule}/${title || '(책 제목)'}`;
+    const defaultPath = `${defaultFolderRule}/${title || '(책 제목)'}`;
+
+    return `${typedPath}|${defaultPath}`;
+}
+
+function updateFolderRulePreviewContent(folderInput) {
+    const preview = ensureFolderRulePreview();
+    const paths = getFolderRulePreviewPath(folderInput);
+    const [typedPath, defaultPath] = paths ? paths.split('|') : ['', ''];
+
+    preview.innerHTML = `
+      <div>입력했을 때: '${typedPath}'</div>
+      <div>입력하지 않았을 때: '${defaultPath}'</div>
+      <div style="margin-top:4px; color:var(--text-muted);">다운로드 시 최종 경로는 위 규칙을 따라 생성됩니다.</div>
+    `;
+}
+
+function updateFolderRulePreviewPosition(folderInput) {
+    const preview = ensureFolderRulePreview();
+    const inputRect = folderInput.getBoundingClientRect();
+
+    preview.style.display = 'block';
+    preview.classList.remove('open');
+
+    updateFolderRulePreviewContent(folderInput);
+
+    const previewRect = preview.getBoundingClientRect();
+
+    let top = inputRect.bottom + window.scrollY + 10;
+    let left = inputRect.left + window.scrollX + (inputRect.width / 2) - (previewRect.width / 2);
+
+    top = Math.max(window.scrollY + 6, top);
+    left = Math.max(window.scrollX + 8, Math.min(window.scrollX + window.innerWidth - previewRect.width - 8, left));
+
+    const arrowLeft = Math.max(
+        10,
+        Math.min(previewRect.width - 20, inputRect.left + window.scrollX + (inputRect.width / 2) - left - 8)
+    );
+
+    preview.style.left = `${left}px`;
+    preview.style.top = `${top}px`;
+    preview.style.setProperty('--folder-rule-arrow-x', `${arrowLeft}px`);
+}
+
+function showFolderRulePreview(folderInput) {
+    if (!folderInput || !(folderInput instanceof HTMLInputElement)) return;
+    activeFolderRuleInput = folderInput;
+    if (folderRulePreviewHideTimer) {
+        clearTimeout(folderRulePreviewHideTimer);
+        folderRulePreviewHideTimer = null;
+    }
+    folderRulePreview.classList.remove('open');
+    updateFolderRulePreviewPosition(folderInput);
+    requestAnimationFrame(() => {
+        if (folderRulePreview) folderRulePreview.classList.add('open');
+    });
+}
+
+function hideFolderRulePreview() {
+    if (!folderRulePreview) return;
+    activeFolderRuleInput = null;
+    folderRulePreview.classList.remove('open');
+    if (folderRulePreviewHideTimer) {
+        clearTimeout(folderRulePreviewHideTimer);
+    }
+    folderRulePreviewHideTimer = setTimeout(() => {
+        if (!folderRulePreview.classList.contains('open')) {
+            folderRulePreview.style.display = 'none';
+        }
+    }, 300);
+}
 
 function renderList(filter = "", resetPage = false) {
   if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
 
   chrome.storage.local.get({ bookList: [], missingVolsMap: {}, sortOption: 'id_desc' }, (data) => {
     listBody.innerHTML = '';
+    hideFolderRulePreview();
     
     let list = Array.isArray(data.bookList) ? data.bookList : [];
     
@@ -975,6 +1072,33 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.classList.contains('edit-type')) {
                 e.target.setAttribute('data-type', e.target.value);
             }
+        });
+
+        listBody.addEventListener('focusin', (e) => {
+            if (e.target.classList.contains('edit-folder-rule')) {
+                showFolderRulePreview(e.target);
+            }
+        });
+
+        listBody.addEventListener('input', (e) => {
+            if (e.target.classList.contains('edit-folder-rule')) {
+                showFolderRulePreview(e.target);
+            }
+        });
+
+        listBody.addEventListener('focusout', (e) => {
+            if (!e.target.classList.contains('edit-folder-rule')) return;
+            hideFolderRulePreview();
+        });
+
+        window.addEventListener('scroll', () => {
+            if (!activeFolderRuleInput) return;
+            updateFolderRulePreviewPosition(activeFolderRuleInput);
+        }, true);
+
+        window.addEventListener('resize', () => {
+            if (!activeFolderRuleInput) return;
+            updateFolderRulePreviewPosition(activeFolderRuleInput);
         });
     }
 

@@ -442,6 +442,52 @@
     #missingPopover .vol-item.missing { background: #ffe3e3; color: #e03131; border-color: #ffa8a8; text-decoration: line-through; opacity: 0.8; }
     body.dark-mode #missingPopover .vol-item.missing { background: #2b1d1d; color: #ff8787; border-color: #4a2a2a; }
 
+    .folder-rule-preview-popover {
+      position: absolute;
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+      z-index: 12000;
+      max-width: 360px;
+      box-sizing: border-box;
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.4;
+      pointer-events: none;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      visibility: hidden;
+    }
+    .folder-rule-preview-popover.open {
+      opacity: 1;
+      transform: translateY(0);
+      visibility: visible;
+    }
+    .folder-rule-preview-popover::before,
+    .folder-rule-preview-popover::after {
+      content: "";
+      position: absolute;
+      left: var(--folder-rule-arrow-x, 16px);
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+    }
+    .folder-rule-preview-popover::before {
+      top: -9px;
+      border-top: 0;
+      border-bottom: 9px solid var(--border);
+    }
+    .folder-rule-preview-popover::after {
+      top: -8px;
+      border-top: 0;
+      border-bottom: 8px solid var(--panel);
+    }
+
     .sub-options{}
     .sub-options label{font-size: 14px;cursor: pointer;display: flex;align-items: center;gap: 0px;margin-bottom: 10px;color: var(--text);flex-wrap: wrap;}
     .sub-options label>input{width: 16px;height: 16px;margin: 0;cursor: pointer;margin-right: 10px;}
