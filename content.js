@@ -74,7 +74,7 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
-    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001)(?:&|#|$)/i,
+    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001|D1106)(?:&|#|$)/i,
     boardCss2: `
         #fboardlist table { display: block !important; width: 100%; }
         #fboardlist thead { display: none !important; }
