@@ -52,6 +52,9 @@
 - **누락 권 관리** 
   <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/16.png?v=3'/>
 
+- **게시물 숨김 처리** 
+  <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/17.gif?v=3'/>
+
 - **바로 다운로드 기능** 
   <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/10.png?v=3'/>
   <br><img src='https://github.com/dongkkase/Chrome_Library_Management/blob/main/demo/11.png?v=3'/>
