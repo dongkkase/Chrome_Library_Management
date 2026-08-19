@@ -1,5 +1,13 @@
 // common.js (공통 정규식 관리 파일)
 let globalFilters = [
+    "＃","＆","＊","＠","§","※","☆","★",
+    "○","●","◎","◇","◆","□","■","△","▲",
+    "▽","▼","→","←","↑","↓","↔","〓","◁",
+    "◀","▷","▶","♤","♠","♡","♥","♧",
+    "♣","⊙","◈","▣","◐","◑","▒","▤",
+    "▥","▨","▧","▦","▩","♨","☏","☎",
+    "☜","☞","¶","†","‡","↕","↗","↙","↖","↘",
+    "♭","♩","♪","♬","㉿","㈜","№","㏇","™","㏂","㏘","℡","®","ª","º",    
     "_", "__", "=", "❤️",  "⭐", "한방팩", "묶음팩", "[완결]", "직작 |", 
     "상/하권", "상,하권", "상-하권", "상~하", "상,하", "상/하", 
     "[미완결]", "[미완]", "(미완결)", "(미완)",
@@ -11,7 +19,7 @@ let globalFilters = [
     "(번역)", "번역)", "上", "下", "☎", ".txt", "♣",
     // "", "", "", "", "", "", "", "", "", "",
     // "", "", "", "", "", "", "", "", "", "",
-    "✅", "✓"
+    "✅", "✓", "신규 19禁", 
 ];
 // [신규 추가] 사용자 정의 필터링(금지어) 단어를 저장할 전역 변수
 const defaultCustomFilters = [
@@ -248,6 +256,20 @@ function cleanSiteTitle(title) {
             .replace(/https?:\/\/[^\s"'<>]+/gi, ' ');
     }
 
+    if (globalFilters && globalFilters.length > 0) {
+        const sortedFilters = [...globalFilters].sort((a, b) => b.length - a.length);
+
+        sortedFilters.forEach(word => {
+            const trimWord = word.trim();
+            if (['~', '-', '～', '〜', '〰', '∼', '–', '—', '_', '__'].includes(trimWord)) return;
+
+            const safeWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(safeWord, 'gi');
+            cleaned = cleaned.replace(regex, ' ');
+        });
+    }
+
+    // 한번 더 삭제 처리
     if (globalFilters && globalFilters.length > 0) {
         const sortedFilters = [...globalFilters].sort((a, b) => b.length - a.length);
 

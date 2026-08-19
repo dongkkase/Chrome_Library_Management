@@ -58,6 +58,50 @@ const PRE_DEFINED_SITES = [
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
+    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001)(?:&|#|$)/i,
+    boardCss2: `
+        #fboardlist table { display: block !important; width: 100%; }
+        #fboardlist thead { display: none !important; }
+        #fboardlist tbody { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; padding: 10px 0; align-items: stretch !important; }
+        #fboardlist tr { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; align-content: flex-start !important; align-items: flex-start !important; background-color: #ffffff; border: 1px solid #e0e0e0 !important; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); transition: transform 0.2s ease, box-shadow 0.2s ease; box-sizing: border-box !important; height: 100% !important; }
+
+        #fboardlist tr:hover { transform: translateY(-4px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1); }
+
+        #fboardlist td { display: block !important; text-align: left !important; border: none !important; padding: 0 !important; font-size: 13px; box-sizing: border-box !important; }
+        #fboardlist td:nth-child(1) { display: none !important; }
+
+        #fboardlist td:nth-child(3) { order: 1; width: 100% !important; flex-basis: 100% !important; margin-bottom: 8px !important; }
+
+        #fboardlist td:nth-child(3) > div,
+        #fboardlist td:nth-child(3) > a:has(img) { float: none !important; display: block !important; width: 100% !important; max-height: none !important; height: auto !important; overflow: visible !important; }
+
+        #fboardlist td:nth-child(3) span { display: inline !important; width: auto !important; float: none !important; margin-left: 4px !important; }
+        #fboardlist td:nth-child(3) img:not([src*="icon"]){ display: block !important; width: 100% !important; height: 220px !important; min-height: 220px !important; max-height: 220px !important; object-fit: cover !important; border-radius: 6px !important; background-color: #f5f5f5 !important; margin: 0 0 10px 0 !important; padding: 0 !important; border: none !important; flex-shrink: 0 !important; }
+
+        #fboardlist td:nth-child(3) img[src*="icon"]{ width: auto !important; height: auto !important; min-height: 0 !important; display: inline-block !important; margin: 0 2px !important; }
+
+        #fboardlist td:nth-child(3) a.bo_tit,
+        #fboardlist td:nth-child(3) a:not(:has(img)) { display: inline !important; font-weight: 600 !important; font-size: 14px !important; line-height: 1.4 !important; color: #333 !important; text-decoration: none !important; white-space: normal !important; }
+
+        #fboardlist td:nth-child(2),
+        #fboardlist td:nth-child(4),
+        #fboardlist td:nth-child(5),
+        #fboardlist td:nth-child(6),
+        #fboardlist td:nth-child(7) { order: 2; width: auto !important; flex-basis: auto !important; margin-right: 8px !important; font-size: 12px !important; display: inline-block !important; margin-top: 0 !important; margin-bottom: 0 !important; }
+
+        #fboardlist td:nth-child(2) { color: #007bff !important; font-weight: bold !important; }
+
+        #fboardlist td:nth-child(4),
+        #fboardlist td:nth-child(5),
+        #fboardlist td:nth-child(6),
+        #fboardlist td:nth-child(7) { color: #888888 !important; }
+
+        #fboardlist td:nth-child(6)::before { content: "조회 "; }
+        #fboardlist td:nth-child(7)::before { content: "추천 "; }        
+    `,
+    boardJS2: () => {
+        observeBoardJS2Targets();
+    },
     commentSelector: ".media-content",
     commentWrapperSelector: ".media",
     
@@ -315,6 +359,9 @@ let isHideNew = false;
 let isHideQuickMenu = false;
 let globalCustomCss = '';
 let globalThemeCss = '';
+let globalBoardCss2 = '';
+let globalBoardJS2 = null;
+let isBoardJS2Executed = false;
 
 let isTargetSite = false;
 let exactMatchCache = {};
@@ -335,8 +382,203 @@ let isCustomThemeEnabled = false;
 let isAllowedBoard = true;
 let isSupportSingleCharEnabled = false;
 let isHideUselessCommentsEnabled = true;
+let isBoardJS2Initialized = false;
+let boardJS2Observer = null;
+let boardJS2TargetsQueue = [];
+let boardJS2PendingProcessTimer = null;
+let boardJS2IsProcessing = false;
+let isBoardJS2Scheduled = false;
+const boardJS2BatchSize = 4;
+const boardJS2ProcessDelay = 120;
+const boardJS2TargetSelector = ".board-thumbnail img, img.board-thumbnail, .list-subject>div>a>img";
+
+function removeVQuery(query) {
+    if (!query) return '';
+    const filtered = query
+        .split('&')
+        .filter((param) => {
+            const eqIndex = param.indexOf('=');
+            const key = (eqIndex === -1 ? param : param.slice(0, eqIndex)).trim().toLowerCase();
+            return key !== 'v';
+        })
+        .join('&');
+    return filtered ? `?${filtered}` : '';
+}
+
+function normalizeBoardImageUrl(source) {
+    const hashStart = source.indexOf('#');
+    const hashPart = hashStart === -1 ? '' : source.slice(hashStart);
+    const sourceWithoutHash = hashStart === -1 ? source : source.slice(0, hashStart);
+    const queryStart = sourceWithoutHash.indexOf('?');
+    const basePart = queryStart === -1 ? sourceWithoutHash : sourceWithoutHash.slice(0, queryStart);
+    const queryPart = queryStart === -1 ? '' : sourceWithoutHash.slice(queryStart + 1);
+
+    const sourceName = basePart.slice(basePart.lastIndexOf('/') + 1);
+    const lowerSourceName = sourceName.toLowerCase();
+    const isGifOrPng = lowerSourceName.endsWith('.gif') || lowerSourceName.endsWith('.png');
+    const cleanQuery = removeVQuery(queryPart);
+    const lastSlash = basePart.lastIndexOf('/');
+    const sourcePath = lastSlash === -1 ? '' : basePart.slice(0, lastSlash + 1);
+    let imageBase = sourceName;
+
+    if (isGifOrPng) {
+        imageBase = imageBase.replace(/^thumb2-/, '')
+            .replace(/_65x50(?=\.[^./?#]+$)/i, '')
+            .replace(/_480p(?=\.[^./?#]+$)/i, '');
+    } else {
+        imageBase = imageBase.replace(/_65x50(?=(?:\.[^./?#]+|$))/i, '_480p');
+    }
+
+    return `${sourcePath}${imageBase}` + cleanQuery + hashPart;
+}
+
+function resetBoardJS2State() {
+    boardJS2TargetsQueue = [];
+    isBoardJS2Scheduled = false;
+    if (boardJS2PendingProcessTimer) {
+        clearTimeout(boardJS2PendingProcessTimer);
+        boardJS2PendingProcessTimer = null;
+    }
+    boardJS2IsProcessing = false;
+    if (boardJS2Observer) {
+        boardJS2Observer.disconnect();
+        boardJS2Observer = null;
+    }
+    isBoardJS2Initialized = false;
+}
+
+function stopBoardJS2Observer() {
+    if (boardJS2Observer) {
+        boardJS2Observer.disconnect();
+        boardJS2Observer = null;
+    }
+}
+
+function scheduleBoardJS2Process() {
+    if (isBoardJS2Scheduled || boardJS2IsProcessing) return;
+    isBoardJS2Scheduled = true;
+    boardJS2PendingProcessTimer = setTimeout(() => {
+        isBoardJS2Scheduled = false;
+        processBoardJS2Targets();
+    }, boardJS2ProcessDelay);
+}
+
+function enqueueBoardJS2Image(img) {
+    if (!img || img.tagName !== 'IMG') return;
+    const source = img.getAttribute('data-original') || img.getAttribute('src');
+    if (!source) return;
+
+    const normalized = normalizeBoardImageUrl(source);
+    if (!normalized) return;
+
+    if (
+        img.dataset.bmBoardJS2Done === '1' &&
+        img.dataset.bmBoardJS2Source === source &&
+        img.dataset.bmBoardJS2Result === normalized
+    ) return;
+
+    if (img.dataset.bmBoardJS2Queued === '1') return;
+    img.dataset.bmBoardJS2Queued = '1';
+    img.dataset.bmBoardJS2NextSource = source;
+    img.dataset.bmBoardJS2NextResult = normalized;
+    boardJS2TargetsQueue.push(img);
+    scheduleBoardJS2Process();
+}
+
+function processBoardJS2Targets() {
+    if (boardJS2IsProcessing) {
+        scheduleBoardJS2Process();
+        return;
+    }
+    boardJS2IsProcessing = true;
+
+    let count = 0;
+    while (boardJS2TargetsQueue.length > 0 && count < boardJS2BatchSize) {
+        const img = boardJS2TargetsQueue.shift();
+        if (!img || img.tagName !== 'IMG') continue;
+        const queuedSource = img.dataset.bmBoardJS2NextSource;
+        const queuedResult = img.dataset.bmBoardJS2NextResult;
+        img.dataset.bmBoardJS2Queued = '0';
+
+        if (!queuedSource || !queuedResult) continue;
+
+        if (img.getAttribute('src') !== queuedResult) {
+            img.setAttribute('src', queuedResult);
+        }
+        img.dataset.bmBoardJS2Done = '1';
+        img.dataset.bmBoardJS2Source = queuedSource;
+        img.dataset.bmBoardJS2Result = queuedResult;
+        count++;
+    }
+
+    boardJS2IsProcessing = false;
+    if (boardJS2TargetsQueue.length > 0) {
+        boardJS2PendingProcessTimer = setTimeout(processBoardJS2Targets, boardJS2ProcessDelay);
+        return;
+    }
+    boardJS2PendingProcessTimer = null;
+}
+
+function handleBoardJS2Entries(entries) {
+    if (!globalBoardJS2) return;
+    for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (!entry.isIntersecting) continue;
+        enqueueBoardJS2Image(entry.target);
+    }
+}
+
+function observeBoardJS2Targets() {
+    const targets = document.querySelectorAll(boardJS2TargetSelector);
+    if (!targets || targets.length === 0) return;
+
+    if (!boardJS2Observer) {
+        if (!window.IntersectionObserver) {
+            for (let i = 0; i < targets.length; i++) enqueueBoardJS2Image(targets[i]);
+            return;
+        }
+        boardJS2Observer = new IntersectionObserver(handleBoardJS2Entries, { rootMargin: '220px', threshold: 0.01 });
+        isBoardJS2Initialized = true;
+    }
+
+    const viewportTop = -220;
+    const viewportBottom = window.innerHeight + 220;
+    for (let i = 0; i < targets.length; i++) {
+        boardJS2Observer.observe(targets[i]);
+        const rect = targets[i].getBoundingClientRect();
+        if (rect.bottom >= viewportTop && rect.top <= viewportBottom) {
+            enqueueBoardJS2Image(targets[i]);
+        }
+    }
+}
+
+function isBoardFilterUrlMatched(filter, url) {
+    if (!filter) return false;
+    if (filter.test(url)) return true;
+
+    try {
+        const boardId = new URL(url).searchParams.get('bo_table');
+        if (!boardId) return false;
+        if (filter.test(`?bo_table=${boardId}`)) return true;
+        if (filter.test(`&bo_table=${boardId}`)) return true;
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
+
+function getBoardTableFromUrl(url) {
+    try {
+        const boardId = new URL(url).searchParams.get('bo_table');
+        return boardId ? boardId.toUpperCase() : '';
+    } catch (e) {
+        return '';
+    }
+}
 
 function initDataCache(data) {
+    const previousBoardJS2 = globalBoardJS2;
+
     setEditionKeywords(data.editionKeywords);
     const currentEditionSignature = getEditionKeywordsSignature();
     if (titleProcessingEditionSignature !== currentEditionSignature) {
@@ -373,7 +615,16 @@ function initDataCache(data) {
         globalHideSelector = config.hideSelector || 'tr, li, .list-item';
         globalCustomCss = config.customCss || '';
         globalThemeCss = config.themeCss || '';
-        isAllowedBoard = config.boardFilter ? config.boardFilter.test(window.location.href) : true;
+        const currentUrl = window.location.href;
+        const currentBoardId = getBoardTableFromUrl(currentUrl);
+        const isBoardFilterMatched = isBoardFilterUrlMatched(config.boardFilter, currentUrl);
+        const isBoardFilter2Matched = isBoardFilterUrlMatched(config.boardFilter2, currentUrl)
+            || (hostname.includes('tcafe21.com') && ['D1007', 'D1104', 'D1103', 'D1201', 'D1102', 'D1101', 'D1011', 'D2001'].includes(currentBoardId));
+        isAllowedBoard = isBoardFilterMatched || isBoardFilter2Matched || !config.boardFilter;
+        globalBoardCss2 = isCustomThemeEnabled && isBoardFilter2Matched && config.boardCss2 ? config.boardCss2 : '';
+        globalBoardJS2 = isCustomThemeEnabled && isBoardFilter2Matched && typeof config.boardJS2 === 'function' ? config.boardJS2 : null;
+        isBoardJS2Executed = false;
+        if (!isBoardFilter2Matched) globalBoardJS2 = null;
     } else if (matchedUserSite) {
         isTargetSite = true;
         globalAllowedDLs = ["giga", "gofile"]; 
@@ -381,11 +632,23 @@ function initDataCache(data) {
         globalHideSelector = matchedUserSite.hideSelector || 'tr, li, .list-item';
         globalCustomCss = matchedUserSite.customCss || '';
         globalThemeCss = matchedUserSite.themeCss || '';
+        globalBoardCss2 = '';
+        globalBoardJS2 = null;
+        isBoardJS2Executed = false;
         isAllowedBoard = true;
     } else {
         isTargetSite = false;
         globalAllowedDLs = [];
+        globalBoardCss2 = '';
+        globalBoardJS2 = null;
+        isBoardJS2Executed = false;
         isAllowedBoard = true;
+    }
+
+    if (previousBoardJS2 !== globalBoardJS2) {
+        if (!globalBoardJS2) {
+            resetBoardJS2State();
+        }
     }
 
     globalDetailSelector = (matchedUserSite && typeof matchedUserSite === 'object' && matchedUserSite.detailSelector) 
@@ -1818,12 +2081,18 @@ function applyStyles() {
   let currentBookCount = Math.max(1, cachedBookList.length);
   const chunkSize = Math.max(10, Math.floor(maxOpsPerFrame / currentBookCount)); 
 
-  function processChunk() {
-      const end = Math.min(index + chunkSize, allLinks.length);
-      for (; index < end; index++) applyStyleToSingleLink(allLinks[index]);
-      if (index < allLinks.length) applyStylesFrame = requestAnimationFrame(processChunk);
-  }
-  applyStylesFrame = requestAnimationFrame(processChunk);
+    function processChunk() {
+        const end = Math.min(index + chunkSize, allLinks.length);
+        for (; index < end; index++) applyStyleToSingleLink(allLinks[index]);
+        if (index < allLinks.length) applyStylesFrame = requestAnimationFrame(processChunk);
+    }
+    applyStylesFrame = requestAnimationFrame(processChunk);
+
+    if (document.readyState === 'complete' && globalBoardJS2) {
+        try {
+            globalBoardJS2();
+        } catch (err) {}
+    }
 }
 
 function generateOptimalSelector(el) {
@@ -1841,6 +2110,23 @@ safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
         const initPanel = () => {
             injectQuickHidePanel();
             updateQuickHidePanel();
+            if (document.readyState === 'complete' && globalBoardJS2) {
+                try {
+                    globalBoardJS2();
+                } catch (err) {}
+                return;
+            }
+
+            window.addEventListener(
+                'load',
+                () => {
+                    if (!globalBoardJS2) return;
+                    try {
+                        globalBoardJS2();
+                    } catch (err) {}
+                },
+                { once: true }
+            );
         };
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initPanel);
@@ -1856,6 +2142,7 @@ safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
         }
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
         if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
+        if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
         if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
         if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
         fixStyle.textContent = styleContent;
@@ -2143,6 +2430,7 @@ try {
                     if (fixStyle) {
                         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
                         if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
+                        if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
                         if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
                         if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
                         fixStyle.textContent = styleContent;
