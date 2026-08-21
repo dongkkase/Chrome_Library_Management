@@ -231,107 +231,24 @@ const PRE_DEFINED_SITES = [
     allowedDLs: []
 },
 {
-    url: "enterjoy.day", 
-    selector: "#fboardlist .list-board", 
-    hideSelector: ".list-item",
+    url: "chating.wiki",
+    selector: "a.cw-board-item",
+    detailSelector: ".cw-article-header > h1",
+    hideSelector: "a",
     allowedDLs: ["giga", "gofile", "transfer"],
-    autoConfirmKeywords: ["열람하시겠습니까"], 
-    boardFilter: /[?&]bo_table=(sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)/i,
-    commentSelector: ".media-content",
-    commentWrapperSelector: ".media",
+    autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
+    boardFilter: new RegExp([
+        '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
+        '/게시판/남성향/(?:최신작|판타지|현판|무협-선협|번역|일반서적|만화-웹툰|애니|영화|드라마)(?=/|[?#]|$)',
+        '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰)(?=/|[?#]|$)'
+    ].join('|'), 'i'),
+    commentSelector: ".cw-comment-body",
+    commentWrapperSelector: ".cw-comment-list > article",
+    customCss: `
+        .cw-article-header .bm-quick-actions{background:none !important;border:0 !important;  padding-left: 0 !important}
+        .cw-article-materials{margin-top:20px !important}
+    `,
     themeCss: `
-        #fboardlist > ul, #fboardlist .board-list, #fboardlist > div,
-        #fboardlist table, #fboardlist table tbody {
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
-            gap: 16px !important;
-            padding: 0 !important;
-            border: none !important;
-            background: transparent !important;
-        }
-        #fboardlist table thead { display: none !important; }
-        #fboardlist .list-board li{margin-bottom:5px}
-        #fboardlist .list-item, 
-        #fboardlist .list-board li,
-        #fboardlist table tbody tr {
-            display: flex !important;
-            flex-direction: column !important;
-            background: #ffffff !important;
-            border: 1px solid #e9ecef !important;
-            border-radius: 12px !important;
-            padding: 16px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.04) !important;
-            transition: all 0.2s ease-in-out !important;
-            border-bottom: 1px solid #e9ecef !important;
-            width: auto !important;
-            align-items: flex-start !important;
-        }
-        #fboardlist .list-item:hover, 
-        #fboardlist .list-board li:hover,
-        #fboardlist table tbody tr:hover {
-            transform: translateY(-4px) !important;
-            box-shadow: 0 12px 24px rgba(0,0,0,0.1) !important;
-            border-color: #80bdff !important;
-            z-index: 10;
-        }
-        #fboardlist table td {
-            display: block !important;
-            border: none !important;
-            padding: 0 !important;
-            width: 100% !important;
-            text-align: left !important;
-        }
-        #fboardlist .wr-subject,
-        #fboardlist table td.td_subject,
-        #fboardlist table td.list-subject {
-            flex-grow: 1 !important;
-            margin-bottom: 12px !important;
-            padding: 0 !important;
-            width: 100% !important;
-        }
-        #fboardlist .wr-subject a,
-        #fboardlist table td.td_subject a,
-        #fboardlist table td.list-subject a {
-            display: block !important;
-            font-size: 15px !important;
-            font-weight: 700 !important;
-            line-height: 1.5 !important;
-            color: #212529 !important;
-            word-break: keep-all !important;
-            text-decoration: none !important;
-        }
-        #fboardlist .wr-subject a:hover,
-        #fboardlist table td.td_subject a:hover {
-            color: #0d6efd !important;
-        }
-        /* 작성자, 날짜 영역 하단 배치 */
-        #fboardlist .wr-name, 
-        #fboardlist .wr-date,
-        #fboardlist table td.td_name,
-        #fboardlist table td.td_datetime {
-            display: inline-block !important;
-            font-size: 12px !important;
-            color: #868e96 !important;
-            margin-top: 8px !important;
-        }
-        #fboardlist .wr-name,
-        #fboardlist table td.td_name { margin-right: 10px !important; }
-        
-        /* 기존 리스트 헤더 및 불필요 항목 숨김 */
-        #fboardlist .list-header,
-        .list-item .wr-good,
-        .list-item .wr-hit,
-        .list-item .wr-num,
-        #fboardlist table td.td_num,
-        #fboardlist table td.td_m_id,
-        #fboardlist table td.td_hit,
-        #fboardlist table td.td_good {
-            display: none !important;
-        }
-        
-        /* 뱃지 및 퀵 버튼 여백 조정 */
-        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
-        .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 8px !important; width: auto !important; }
-        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
     `,
 }, 
 { 
@@ -601,13 +518,22 @@ function observeBoardJS2Targets() {
 
 function isBoardFilterUrlMatched(filter, url) {
     if (!filter) return false;
-    if (filter.test(url)) return true;
+
+    const matchesFilter = candidateUrl => {
+        filter.lastIndex = 0;
+        return filter.test(candidateUrl);
+    };
+
+    if (matchesFilter(url)) return true;
 
     try {
+        const decodedUrl = decodeURI(url);
+        if (decodedUrl !== url && matchesFilter(decodedUrl)) return true;
+
         const boardId = new URL(url).searchParams.get('bo_table');
         if (!boardId) return false;
-        if (filter.test(`?bo_table=${boardId}`)) return true;
-        if (filter.test(`&bo_table=${boardId}`)) return true;
+        if (matchesFilter(`?bo_table=${boardId}`)) return true;
+        if (matchesFilter(`&bo_table=${boardId}`)) return true;
         return false;
     } catch (e) {
         return false;
@@ -1662,9 +1588,78 @@ function createQuickActions(linkData, hasBook) {
     return container;
 }
 
+function getListRenderTargets(link) {
+    const defaultTargets = {
+        badgeTarget: link,
+        actionsTarget: link,
+        usesSeparateTargets: false
+    };
+
+    if (!window.location.hostname.includes('chating.wiki')) return defaultTargets;
+
+    const titleTarget = link.matches('a.cw-board-item')
+        ? link.querySelector(':scope > .cw-board-item__title')
+        : link.closest('.cw-board-item__title');
+    if (!titleTarget) return defaultTargets;
+
+    const nestedTagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags');
+    if (nestedTagsTarget) {
+        return {
+            badgeTarget: titleTarget,
+            actionsTarget: nestedTagsTarget,
+            usesSeparateTargets: true
+        };
+    }
+
+    let itemContainer = titleTarget.parentElement;
+    while (itemContainer && itemContainer !== document.body && !itemContainer.matches('.cw-board-table')) {
+        const tagsTarget = itemContainer.querySelector('.cw-board-item__tags');
+        if (tagsTarget) {
+            return {
+                badgeTarget: titleTarget,
+                actionsTarget: tagsTarget,
+                usesSeparateTargets: true
+            };
+        }
+        itemContainer = itemContainer.parentElement;
+    }
+
+    return defaultTargets;
+}
+
+function getDetailRenderTargets(detailElement) {
+    const defaultTargets = {
+        badgeTarget: detailElement,
+        actionsTarget: detailElement,
+        usesSeparateTargets: false
+    };
+
+    if (!window.location.hostname.includes('chating.wiki')) return defaultTargets;
+
+    const articleHeader = detailElement.closest('.cw-article-header');
+    const actionsTarget = articleHeader?.querySelector(':scope > .cw-article-attributes');
+    if (!actionsTarget) return defaultTargets;
+
+    return {
+        badgeTarget: detailElement,
+        actionsTarget,
+        usesSeparateTargets: true
+    };
+}
+
 function applyStyleToSingleLink(link) {
     // 핵심 방어: 이미 상세페이지 로직이 처리한 요소면 일반 링크 함수는 쳐다보지도 않고 도망감 (무한루프 차단)
     if (link.dataset.bmIsDetail === "true") return; 
+
+    const renderTargets = getListRenderTargets(link);
+    const badgeTarget = renderTargets.badgeTarget;
+    const actionsTarget = renderTargets.actionsTarget;
+
+    if (renderTargets.usesSeparateTargets) {
+        link.querySelector(':scope > .book-badge')?.remove();
+        link.querySelector(':scope > .bm-badge-br.list-br')?.remove();
+        link.querySelector(':scope > .bm-quick-actions.list-actions')?.remove();
+    }
 
     const currentRawText = link.textContent || "";
     
@@ -1702,6 +1697,10 @@ function applyStyleToSingleLink(link) {
 
     if (link._bmData.skip) {
         removeBadge(link);
+        if (renderTargets.usesSeparateTargets) {
+            badgeTarget.querySelector(':scope > .book-badge')?.remove();
+            actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions')?.remove();
+        }
         link.dataset.bmShouldHide = "false";
         return;
     }
@@ -1800,23 +1799,31 @@ function applyStyleToSingleLink(link) {
     }
 
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
-    const existingBadge = link.querySelector(':scope > .book-badge');
+    const existingBadge = badgeTarget.querySelector(':scope > .book-badge');
     if (newBadgeHTML) {
-        if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML) {
-            if (existingBadge) existingBadge.remove();
-            const badge = document.createElement('span');
-            badge.className = 'book-badge';
-            badge.style.cssText = badgeStyle;
-            badge.innerHTML = newBadgeHTML;
-            badge.dataset.html = newBadgeHTML;
+        const shouldInsertBeforeTags = renderTargets.usesSeparateTargets && actionsTarget.parentElement === badgeTarget;
+        const shouldMoveBadge = existingBadge && shouldInsertBeforeTags && existingBadge.nextElementSibling !== actionsTarget;
+        if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML || shouldMoveBadge) {
+            let badge = existingBadge;
+            if (!badge || badge.dataset.html !== newBadgeHTML) {
+                if (badge) badge.remove();
+                badge = document.createElement('span');
+                badge.className = 'book-badge';
+                badge.style.cssText = badgeStyle;
+                badge.innerHTML = newBadgeHTML;
+                badge.dataset.html = newBadgeHTML;
+            }
 
-            link.appendChild(badge);
+            if (shouldInsertBeforeTags) badgeTarget.insertBefore(badge, actionsTarget);
+            else badgeTarget.appendChild(badge);
             
             // 기존에 있던 줄바꿈과 퀵버튼을 뱃지 뒤로 밀어내어 순서가 꼬이는 현상 완벽 해결
-            const existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
-            const existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
-            if (existingBr) link.appendChild(existingBr);
-            if (existingActions) link.appendChild(existingActions);
+            if (!renderTargets.usesSeparateTargets) {
+                const existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
+                const existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+                if (existingBr) link.appendChild(existingBr);
+                if (existingActions) link.appendChild(existingActions);
+            }
         }
     } else if (existingBadge) {
         existingBadge.remove();
@@ -1825,8 +1832,8 @@ function applyStyleToSingleLink(link) {
     // 리스트 퀵 버튼 렌더링 (데이터가 없어도 표기하되, 작성자명 등 오작동 요소는 필터링)
     const isLikelyTitle = !!newBadgeHTML || siteRes > 0 || siteVol > 0 || siteBodyOriginal.length > 3;
     if (isShowListQuickBtn && isLikelyTitle && isAllowedBoard) {
-        let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
-        let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+        let existingBr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br.list-br');
+        let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
         
         const siteMatchKey = link._bmData.siteMatchKey;
         const matchBook = exactMatchCache[siteMatchKey] || (similarityCache[siteMatchKey] && similarityCache[siteMatchKey].book);
@@ -1836,22 +1843,39 @@ function applyStyleToSingleLink(link) {
             if (existingBr) existingBr.remove();
             if (existingActions) existingActions.remove();
 
-            const br = document.createElement('br');
-            br.className = 'bm-badge-br list-br';
-            link.appendChild(br);
+            if (!renderTargets.usesSeparateTargets) {
+                const br = document.createElement('br');
+                br.className = 'bm-badge-br list-br';
+                actionsTarget.appendChild(br);
+            }
 
             const actions = createQuickActions(link._bmData, hasBook);
             actions.classList.add('list-actions');
             actions.dataset.hasBook = String(hasBook);
             actions.style.marginLeft = "0";
             actions.style.marginTop = "4px";
-            actions.style.display = "inline-flex"; 
-            link.appendChild(actions);
+            actions.style.display = renderTargets.usesSeparateTargets ? "flex" : "inline-flex";
+            actionsTarget.appendChild(actions);
+        }
+
+        if (renderTargets.usesSeparateTargets) {
+            existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
+            if (existingActions) {
+                actionsTarget.style.setProperty("display", "flex", "important");
+                actionsTarget.style.setProperty("flex-wrap", "wrap", "important");
+                existingActions.style.display = "flex";
+                existingActions.style.width = "100%";
+                existingActions.style.minWidth = "0";
+                existingActions.style.setProperty("flex", "0 0 100%", "important");
+                existingActions.style.boxSizing = "border-box";
+                existingActions.style.flexWrap = "wrap";
+                existingActions.style.overflowX = "visible";
+            }
         }
     } else {
         // 옵션이 꺼져있거나, 잘못된 요소로 판단되었을 때 퀵버튼 제거
-        let existingBr = link.querySelector(':scope > .bm-badge-br.list-br');
-        let existingActions = link.querySelector(':scope > .bm-quick-actions.list-actions');
+        let existingBr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br.list-br');
+        let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
         if (existingBr) existingBr.remove();
         if (existingActions) existingActions.remove();
     }
@@ -1878,6 +1902,15 @@ function applyStyleToSingleLink(link) {
 function applyStyleToDetailElement(el) {
     // 핵심 방어 마커 부착: 내가 상세페이지 로직으로 찜했으니 단일 링크 로직은 건들지 마라 선언
     el.dataset.bmIsDetail = "true"; 
+
+    const renderTargets = getDetailRenderTargets(el);
+    const badgeTarget = renderTargets.badgeTarget;
+    const actionsTarget = renderTargets.actionsTarget;
+
+    if (renderTargets.usesSeparateTargets) {
+        el.querySelector(':scope > .bm-badge-br')?.remove();
+        el.querySelector(':scope > .bm-quick-actions')?.remove();
+    }
     
     const currentRawText = el.textContent || "";
     
@@ -1915,9 +1948,9 @@ function applyStyleToDetailElement(el) {
 
     if (el._bmDetailData.skip) {
         removeBadge(el);
-        const act = el.querySelector(':scope > .bm-quick-actions'); // 직계만 탐색
+        const act = actionsTarget.querySelector(':scope > .bm-quick-actions'); // 직계만 탐색
         if (act) act.remove(); 
-        const bbr = el.querySelector(':scope > .bm-badge-br'); // 직계만 탐색
+        const bbr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br'); // 직계만 탐색
         if (bbr) bbr.remove();
         return;
     }
@@ -2007,14 +2040,14 @@ function applyStyleToDetailElement(el) {
     }
 
     // 직계 자손(:scope >)만 탐색하도록 교체! (엄한 자식 뱃지를 지우는 대참사 방지)
-    let existingBadge = el.querySelector(':scope > .book-badge');
-    let existingBr = el.querySelector(':scope > .bm-badge-br');
-    let existingActions = el.querySelector(':scope > .bm-quick-actions');
+    let existingBadge = badgeTarget.querySelector(':scope > .book-badge');
+    let existingBr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br');
+    let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions');
 
     const needsBadgeUpdate = newBadgeHTML && (!existingBadge || existingBadge.dataset.html !== newBadgeHTML);
     const needsBadgeRemoval = !newBadgeHTML && existingBadge;
     const needsActionsUpdate = isAllowedBoard ? (!existingActions || existingActions.dataset.hasBook !== String(!!book)) : !!existingActions;
-    const needsBr = isAllowedBoard ? !existingBr : !!existingBr;
+    const needsBr = renderTargets.usesSeparateTargets ? false : (isAllowedBoard ? !existingBr : !!existingBr);
 
     // 변경 사항이 하나라도 있을 때만 기존 요소를 뜯어내고 다시 그립니다
     if (needsBadgeUpdate || needsBadgeRemoval || needsActionsUpdate || needsBr) {
@@ -2028,19 +2061,36 @@ function applyStyleToDetailElement(el) {
             badge.style.cssText = badgeStyle;
             badge.innerHTML = newBadgeHTML;
             badge.dataset.html = newBadgeHTML;
-            el.appendChild(badge);
+            badgeTarget.appendChild(badge);
         }
 
         if (isAllowedBoard) {
-            const br = document.createElement('br');
-            br.className = 'bm-badge-br';
-            el.appendChild(br);
+            if (!renderTargets.usesSeparateTargets) {
+                const br = document.createElement('br');
+                br.className = 'bm-badge-br';
+                actionsTarget.appendChild(br);
+            }
 
             const actions = createQuickActions(el._bmDetailData, !!book);
             actions.dataset.hasBook = !!book;
             actions.style.marginLeft = "0";
             actions.style.marginTop = "5px";
-            el.appendChild(actions);
+            actionsTarget.appendChild(actions);
+        }
+    }
+
+    if (renderTargets.usesSeparateTargets) {
+        existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions');
+        if (existingActions) {
+            actionsTarget.style.setProperty("display", "flex", "important");
+            actionsTarget.style.setProperty("flex-wrap", "wrap", "important");
+            existingActions.style.display = "flex";
+            existingActions.style.width = "100%";
+            existingActions.style.minWidth = "0";
+            existingActions.style.setProperty("flex", "0 0 100%", "important");
+            existingActions.style.boxSizing = "border-box";
+            existingActions.style.flexWrap = "wrap";
+            existingActions.style.overflowX = "visible";
         }
     }
 
@@ -2081,6 +2131,15 @@ function applyStyles() {
 
   // tcafe21.com 보드 필터 적용 대상인 경우 4번째 td(작성자)를 5번째 td(날짜) 위로 이동
   const hostname = window.location.hostname;
+  if (hostname.includes('chating.wiki') && isAllowedBoard) {
+      const materials = document.querySelector('.cw-article-materials');
+      const articleBody = document.querySelector('.cw-article-body');
+
+      if (materials && articleBody?.parentNode && articleBody.previousElementSibling !== materials) {
+          articleBody.parentNode.insertBefore(materials, articleBody);
+      }
+  }
+
   if ((hostname.includes("tcafe") || hostname.includes("tcafed")) && isAllowedBoard) {
       document.querySelectorAll('#fboardlist table tbody tr').forEach(tr => {
           const td4 = tr.querySelector('td:nth-child(4)');
