@@ -6,3 +6,4 @@ build.sh
 *.bak
 demo_site/
 memo.md
+.DS_Store
