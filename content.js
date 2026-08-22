@@ -769,6 +769,19 @@ function getOrCreateHoverContainer() {
 
 let uselessCommentCount = 0;
 
+function extractVisibleCommentText(element) {
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll('script, style, template, textarea, input, select, option, button, [hidden], [aria-hidden="true"]').forEach(node => {
+        node.remove();
+    });
+    clone.querySelectorAll('*').forEach(node => {
+        if (node.style?.display === 'none' || node.style?.visibility === 'hidden') {
+            node.remove();
+        }
+    });
+    return clone.textContent.trim();
+}
+
 function processUselessComments() {
     if (!isHideUselessCommentsEnabled || !isTargetSite) return;
     if (!isTargetSite) return;
@@ -791,7 +804,7 @@ function processUselessComments() {
     document.querySelectorAll(config.commentSelector).forEach(el => {
         if (el.dataset.bmHidden) return;
         
-        const text = el.textContent.trim();
+        const text = extractVisibleCommentText(el);
         if (isUselessComment(text)) {
             let wrapper = config.commentWrapperSelector ? el.closest(config.commentWrapperSelector) : el;
             if (wrapper && wrapper.style.display !== 'none') {
