@@ -836,7 +836,7 @@ function getPureLinkText(link) {
   let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
   const temp = document.createElement('div');
   temp.innerHTML = safeHTML;
-  const unwantedElements = temp.querySelectorAll('.count, .book-badge, .comment-badge, .bm-quick-actions');
+  const unwantedElements = temp.querySelectorAll('.count, .book-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em');
   unwantedElements.forEach(el => el.remove());
   const walker = document.createTreeWalker(temp, NodeFilter.SHOW_COMMENT, null, false);
   let commentNode;
@@ -1706,7 +1706,11 @@ function applyStyleToSingleLink(link) {
     }
 
     const { titleParts, siteBodyOriginal, siteRes, siteVol, originalText } = link._bmData;
-    const hasTranslationTag = (originalText || '').includes('번역');
+    const hostname = window.location.hostname;
+    const isTcafeSite = hostname.includes('tcafe') || hostname.includes('tcafed');
+    const tcafeRow = isTcafeSite ? link.closest('tr') : null;
+    const translationText = tcafeRow ? tcafeRow.textContent || '' : originalText || '';
+    const hasTranslationTag = translationText.includes('번역');
     const match = findMatchingBook(titleParts);
     const book = match.book;
     const maxScore = match.maxScore;
