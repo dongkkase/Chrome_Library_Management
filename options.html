@@ -269,14 +269,14 @@
     body.side-panel-mode .batch-control > div > div{display:flex}
     body.side-panel-mode .batch-control select, body.side-panel-mode .batch-control input { width: 100% !important; margin-left: 0 !important; }
     
-    body.side-panel-mode table { display: block; width: 100% !important; border: none; background: transparent; }
-    body.side-panel-mode thead { display: none !important; }
-    body.side-panel-mode tbody { display: block; width: 100%; }
+    body:is(.side-panel-mode, .compact-list-mode) table { display: block; width: 100% !important; border: none; background: transparent; }
+    body:is(.side-panel-mode, .compact-list-mode) thead { display: none !important; }
+    body:is(.side-panel-mode, .compact-list-mode) tbody { display: block; width: 100%; }
     
-    body.side-panel-mode tbody tr { 
+    body:is(.side-panel-mode, .compact-list-mode) tbody tr {
         display: grid !important; 
         /* 4행 레이아웃으로 타입/제목/폴더룰/해상도/권수/관리를 분리 */
-        grid-template-columns: 80px 1fr 100px !important; 
+        grid-template-columns: 80px 1fr 150px !important;
         grid-template-rows: auto auto auto auto; 
         background: var(--panel);
         border: 1px solid var(--border); 
@@ -288,12 +288,12 @@
         gap: 8px 4px;
     }
     
-    body.side-panel-mode tbody tr:hover {
+    body:is(.side-panel-mode, .compact-list-mode) tbody tr:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.06);
         border-color: #0d6efd;
     }
-    body.side-panel-mode td { 
+    body:is(.side-panel-mode, .compact-list-mode) td {
         border: none !important; 
         padding: 0 !important; 
         text-align: left; 
@@ -302,10 +302,11 @@
         width: auto !important;
         height: auto !important;
     }
-    body.side-panel-mode td:first-child, body.side-panel-mode td:last-child { border-radius: 0; }
+    body:is(.side-panel-mode, .compact-list-mode) td:first-child,
+    body:is(.side-panel-mode, .compact-list-mode) td:last-child { border-radius: 0; }
     
     /* 중복 찾기 그룹 헤더 사이드패널 레이아웃 예외 처리 */
-    body.side-panel-mode tbody tr.group-header-tr {
+    body:is(.side-panel-mode, .compact-list-mode) tbody tr.group-header-tr {
         display: block !important;
         padding: 0 !important;
         margin-bottom: 8px !important;
@@ -313,10 +314,10 @@
         background: transparent !important;
         box-shadow: none !important;
     }
-    body.side-panel-mode tbody tr.group-header-tr:hover {
+    body:is(.side-panel-mode, .compact-list-mode) tbody tr.group-header-tr:hover {
         transform: none !important;
     }
-    body.side-panel-mode tbody tr.group-header-tr td {
+    body:is(.side-panel-mode, .compact-list-mode) tbody tr.group-header-tr td {
         display: block !important;
         width: 100% !important;
         box-sizing: border-box;
@@ -324,8 +325,8 @@
     }
 
     /* 1행 배치: 타입 배지, 날짜, 관리 버튼 */
-    body.side-panel-mode td:nth-child(1) { grid-row: 1; grid-column: 1; display: flex; align-items: center; } 
-    body.side-panel-mode td:nth-child(6) { 
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(1) { grid-row: 1; grid-column: 1; display: flex; align-items: center; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(6) {
         grid-row: 1; grid-column: 2; 
         display: block !important; 
         line-height: 24px;
@@ -336,11 +337,11 @@
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     } 
-    body.side-panel-mode td:nth-child(7) { grid-row: 1; grid-column: 3; display: flex; gap: 4px; justify-content: flex-end; align-items: center; } 
-    body.side-panel-mode td:nth-child(7) button { padding: 4px 8px; font-size: 11px; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(7) { grid-row: 1; grid-column: 3; display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(7) button { padding: 4px 8px; font-size: 11px; }
     
     /* 2행 배치: 도서 제목 (강조된 컴포넌트 박스 형태) */
-    body.side-panel-mode td:nth-child(2) { 
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(2) {
         grid-row: 2; 
         grid-column: 1 / span 3; 
         background: rgba(127,127,127,0.05); 
@@ -349,11 +350,11 @@
         border: 1px solid transparent;
         transition: border-color 0.2s;
     }
-    body.side-panel-mode td:nth-child(2):focus-within {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(2):focus-within {
         border-color: rgba(13, 110, 253, 0.3);
         background: var(--input-bg);
     }
-    body.side-panel-mode td:nth-child(2) input {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(2) input {
         font-size: 13px;
         font-weight: 600;
         background: transparent !important;
@@ -364,7 +365,7 @@
     }
     
     /* 3행 배치: 상위 폴더 규칙 입력 필드 */
-    body.side-panel-mode td:nth-child(3) {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(3) {
         display: flex !important;
         align-items: center;
         background: var(--input-bg);
@@ -374,18 +375,19 @@
         box-sizing: border-box;
         background: #cccccc30 !important;
     }
-    body.side-panel-mode td:nth-child(3) { grid-row: 3; grid-column: 1 / span 3; }
-    body.side-panel-mode td:nth-child(3) > .folder-rule-editor {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(3) { grid-row: 3; grid-column: 1 / span 3; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(3) > .folder-rule-editor {
         width: 100%;
     }
-    body.side-panel-mode .folder-rule-editor .btn-folder-rule-bulk {
+    body:is(.side-panel-mode, .compact-list-mode) .folder-rule-editor .btn-folder-rule-bulk {
         padding: 3px 7px;
         font-size: 10px;
     }
-    body.side-panel-mode td:nth-child(3):before { content: "📁"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(3):before { content: "📁"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
     
     /* 4행 배치: 해상도/권수 입력 필드 */
-    body.side-panel-mode td:nth-child(4), body.side-panel-mode td:nth-child(5) {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(4),
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5) {
         display: flex !important;
         align-items: center;
         background: var(--input-bg);
@@ -395,15 +397,15 @@
         box-sizing: border-box;
         background: #cccccc30 !important;
     }
-    body.side-panel-mode td:nth-child(4) { grid-row: 4; grid-column: 1 / span 2; }
-    body.side-panel-mode td:nth-child(5) { grid-row: 4; grid-column: 3; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(4) { grid-row: 4; grid-column: 1 / span 2; }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5) { grid-row: 4; grid-column: 3; }
     
-    body.side-panel-mode td:nth-child(4):before { content: "📺"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
-    body.side-panel-mode td:nth-child(5):before { content: "📑"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(4):before { content: "📺"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5):before { content: "📑"; font-size: 11px; margin-right: 6px; color: var(--text-muted); }
     
-    body.side-panel-mode td:nth-child(3) input,
-    body.side-panel-mode td:nth-child(4) input, 
-    body.side-panel-mode td:nth-child(5) input {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(3) input,
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(4) input,
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5) input {
         border: none !important;
         background: transparent !important;
         padding: 4px 0 !important;
@@ -413,13 +415,13 @@
         text-align: left;
         min-width: 0 !important;
     }
-    body.side-panel-mode td:nth-child(5) > div {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5) > div {
         width: 100%;
         display: flex;
         align-items: center;
         gap: 4px;
     }
-    body.side-panel-mode td:nth-child(5) > div > input {
+    body:is(.side-panel-mode, .compact-list-mode) td:nth-child(5) > div > input {
         width: 0 !important;
         flex: 1 1 auto;
         min-width: 0 !important;
@@ -513,7 +515,7 @@
             </div>
             <span style="font-size: 13px; color: var(--text-muted);">현재 버전: <b id="current-version">v1.0</b></span>
 
-            <button id="manual-check-btn" style="margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
+            <button id="manual-check-btn" style="display: none; margin-left: 15px; padding: 4px 8px; font-size: 11px; background: var(--tab-hover); color: var(--text);">업데이트 확인</button>
             <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
             <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
 
@@ -614,7 +616,7 @@
                 <th>도서 제목</th>
                 <th style="width: 140px;">상위 폴더 규칙</th>
                 <th style="width: 80px;">해상도</th>
-                <th style="width: 60px;">권수</th>
+                <th style="width: 90px;">권수</th>
                 <th style="width: 80px;">등록일</th>
                 <th style="width: 110px;">관리</th>
             </tr>

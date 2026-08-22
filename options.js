@@ -367,7 +367,7 @@ function renderList(filter = "", resetPage = false) {
           
           <td style="position:relative; vertical-align:middle; padding:0;">
             <div style="display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:100%;">
-              <input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:35px; margin:0; padding:4px;">
+              <input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:52px; margin:0; padding:4px;">
               ${displayMissingVols.length > 0
                   ? `<span class="missing-badge" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">${displayMissingVols.length}누락</span>`
                   : `<span class="missing-badge empty" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">+누락</span>`}
@@ -998,6 +998,13 @@ async function loadReleaseHistory() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { 
+    const syncCompactListLayout = () => {
+        document.body.classList.toggle('compact-list-mode', window.innerWidth <= 900);
+    };
+
+    syncCompactListLayout();
+    window.addEventListener('resize', syncCompactListLayout);
+
     if (window.location.hash === '#sidepanel') {
         document.body.classList.add('side-panel-mode');
     }
@@ -1486,97 +1493,114 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function initVersionCheck() {
-  const manifest = chrome.runtime.getManifest();
-  const currentVersion = manifest.version;
-  const versionSpan = document.getElementById('current-version');
-  if (versionSpan) versionSpan.textContent = "v" + currentVersion;
+async function initVersionCheck() {
+    const manifest = chrome.runtime.getManifest();
+    const currentVersion = manifest.version;
+    const versionSpan = document.getElementById('current-version');
+    if (versionSpan) versionSpan.textContent = "v" + currentVersion;
 
-  const updateLink = document.getElementById('update-link');
-  const manualBtn = document.getElementById('manual-check-btn');
-  const statusMsg = document.getElementById('update-status-msg');
-  
-  const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
+    const updateLink = document.getElementById('update-link');
+    const manualBtn = document.getElementById('manual-check-btn');
+    const statusMsg = document.getElementById('update-status-msg');
 
-  const checkVersion = (isManual = false) => {
-    if (isManual && statusMsg) {
-      statusMsg.textContent = "⏳ 확인 중...";
-      statusMsg.style.color = "#6c757d";
-      statusMsg.style.display = "inline-block";
-      if (updateLink) updateLink.style.display = "none";
+    let extensionInfo;
+    try {
+        extensionInfo = await chrome.management.getSelf();
+    } catch (error) {
+        console.log("설치 유형 확인 실패:", error);
+        return;
     }
 
-    chrome.storage.local.get(['lastVersionCheckTime', 'latestVersionInfo'], async (data) => {
+    const isManualInstall = extensionInfo.installType === 'development';
+    if (!isManualInstall) {
+        if (manualBtn) manualBtn.style.display = 'none';
+        if (updateLink) updateLink.style.display = 'none';
+        if (statusMsg) statusMsg.style.display = 'none';
+        return;
+    }
 
-      const now = Date.now();
-      const updateInterval = 2 * 60 * 60 * 1000; 
-      let latestData = data.latestVersionInfo;
-      const shouldFetch = isManual || !data.lastVersionCheckTime || (now - data.lastVersionCheckTime > updateInterval);
+    if (manualBtn) manualBtn.style.display = 'inline-block';
 
-      if (shouldFetch) {
-        try {
-          const response = await fetch(GITHUB_RAW_URL + "?t=" + now); 
-          if (response.ok) {
-            latestData = await response.json();
-            chrome.storage.local.set({
-              lastVersionCheckTime: now,
-              latestVersionInfo: latestData
-            });
-          } else {
-            throw new Error("서버 응답 오류");
-          }
-        } catch (error) {
-          console.log("버전 체크 실패:", error);
-          if (isManual && statusMsg) {
-            statusMsg.textContent = "⚠️ 확인 실패 (인터넷 연결 오류)";
-            statusMsg.style.color = "#dc3545";
-            setTimeout(() => statusMsg.style.display = "none", 3000);
-          }
-          return;
+    const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
+
+    const checkVersion = (isManual = false) => {
+        if (isManual && statusMsg) {
+            statusMsg.textContent = "⏳ 확인 중...";
+            statusMsg.style.color = "#6c757d";
+            statusMsg.style.display = "inline-block";
+            if (updateLink) updateLink.style.display = "none";
         }
-      }
 
-      if (latestData && latestData.latest_version) {
-        if (currentVersion !== latestData.latest_version) {
-          if (updateLink) {
-            updateLink.style.display = 'inline-block';
-            updateLink.textContent = `📥 최신 파일 받기 (v${latestData.latest_version})`;
-            
-            updateLink.onclick = (e) => {
-                e.preventDefault(); 
-                
-                const zipUrl = `https://github.com/dongkkase/Chrome_Library_Management/releases/download/v${latestData.latest_version}/libmanagement.zip`;             
-                
-                chrome.downloads.download({ url: zipUrl }, () => {
-                    alert(`📥 [v${latestData.latest_version}] 업데이트 파일(.zip) 다운로드가 시작되었습니다!\n\n[수동 업데이트 방법]\n1. 다운로드된 압축 파일을 풉니다.\n2. 기존 확장프로그램 폴더에 파일들을 모두 덮어씌웁니다.\n3. 크롬 '확장프로그램 관리(chrome://extensions)' 페이지에서 [↻ 새로고침] 버튼을 누르면 적용됩니다.`);
-                });
-            };
-          }
-          if (statusMsg) statusMsg.style.display = "none";
-          if (chrome.action && chrome.action.setBadgeText) {
-              chrome.action.setBadgeText({ text: "NEW" });
-              chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
-          }
-        } else {
-          if (updateLink) updateLink.style.display = "none";
-          if (isManual && statusMsg) {
-            statusMsg.textContent = "✅ 최신 버전입니다.";
-            statusMsg.style.color = "#28a745";
-            setTimeout(() => statusMsg.style.display = "none", 3000); 
-          }
-          if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
-        }
-      }
-    });
-  };
+        chrome.storage.local.get(['lastVersionCheckTime', 'latestVersionInfo'], async (data) => {
+            const now = Date.now();
+            const updateInterval = 2 * 60 * 60 * 1000;
+            let latestData = data.latestVersionInfo;
+            const shouldFetch = isManual || !data.lastVersionCheckTime || (now - data.lastVersionCheckTime > updateInterval);
 
-  checkVersion(false);
+            if (shouldFetch) {
+                try {
+                    const response = await fetch(GITHUB_RAW_URL + "?t=" + now);
+                    if (response.ok) {
+                        latestData = await response.json();
+                        chrome.storage.local.set({
+                            lastVersionCheckTime: now,
+                            latestVersionInfo: latestData
+                        });
+                    } else {
+                        throw new Error("서버 응답 오류");
+                    }
+                } catch (error) {
+                    console.log("버전 체크 실패:", error);
+                    if (isManual && statusMsg) {
+                        statusMsg.textContent = "⚠️ 확인 실패 (인터넷 연결 오류)";
+                        statusMsg.style.color = "#dc3545";
+                        setTimeout(() => statusMsg.style.display = "none", 3000);
+                    }
+                    return;
+                }
+            }
 
-  if (manualBtn) {
-    manualBtn.addEventListener('click', () => {
-      checkVersion(true);
-    });
-  }
+            if (latestData && latestData.latest_version) {
+                if (currentVersion !== latestData.latest_version) {
+                    if (updateLink) {
+                        updateLink.style.display = 'inline-block';
+                        updateLink.textContent = `📥 최신 파일 받기 (v${latestData.latest_version})`;
+
+                        updateLink.onclick = (e) => {
+                            e.preventDefault();
+
+                            const zipUrl = `https://github.com/dongkkase/Chrome_Library_Management/releases/download/v${latestData.latest_version}/libmanagement.zip`;
+
+                            chrome.downloads.download({ url: zipUrl }, () => {
+                                alert(`📥 [v${latestData.latest_version}] 업데이트 파일(.zip) 다운로드가 시작되었습니다!\n\n[수동 업데이트 방법]\n1. 다운로드된 압축 파일을 풉니다.\n2. 기존 확장프로그램 폴더에 파일들을 모두 덮어씌웁니다.\n3. 크롬 '확장프로그램 관리(chrome://extensions)' 페이지에서 [↻ 새로고침] 버튼을 누르면 적용됩니다.`);
+                            });
+                        };
+                    }
+                    if (statusMsg) statusMsg.style.display = "none";
+                    if (chrome.action && chrome.action.setBadgeText) {
+                        chrome.action.setBadgeText({ text: "NEW" });
+                        chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+                    }
+                } else {
+                    if (updateLink) updateLink.style.display = "none";
+                    if (isManual && statusMsg) {
+                        statusMsg.textContent = "✅ 최신 버전입니다.";
+                        statusMsg.style.color = "#28a745";
+                        setTimeout(() => statusMsg.style.display = "none", 3000);
+                    }
+                    if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
+                }
+            }
+        });
+    };
+
+    checkVersion(false);
+
+    if (manualBtn) {
+        manualBtn.addEventListener('click', () => {
+            checkVersion(true);
+        });
+    }
 }
 
 
