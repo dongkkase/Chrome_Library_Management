@@ -239,7 +239,7 @@ const PRE_DEFINED_SITES = [
     autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
     boardFilter: new RegExp([
         '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
-        '/게시판/남성향/(?:최신작|판타지|현판|무협-선협|번역|일반서적|만화-웹툰|애니|영화|드라마)(?=/|[?#]|$)',
+        '/게시판/남성향/(?:최신작|판타지|현판|무협-선협|번역|일반서적|만화-웹툰|애니|영화|드라마|라노벨|대체역사|성인소설)(?=/|[?#]|$)',
         '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰)(?=/|[?#]|$)'
     ].join('|'), 'i'),
     commentSelector: ".cw-comment-body",
