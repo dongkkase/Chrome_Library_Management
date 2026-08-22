@@ -239,12 +239,53 @@ const uselessCommentKeywords = [
     '확인했습니다', '확인', '학인했어요', '잘받앗습니다', '잘받앗어요', '받아갑니다'
 ];
 
+const USELESS_COMMENT_SIMILARITY_THRESHOLD = 80;
+const normalizedUselessCommentKeywords = uselessCommentKeywords
+    .map(normalizeCommentText)
+    .filter(Boolean);
+
+function normalizeCommentText(text) {
+    return (text || '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, '')
+        .toLowerCase();
+}
+
+function calculateCommentSimilarity(source, target) {
+    if (source === target) return 100;
+    if (!source || !target) return 0;
+
+    const maxLength = Math.max(source.length, target.length);
+    const minLength = Math.min(source.length, target.length);
+    if ((minLength / maxLength) * 100 < USELESS_COMMENT_SIMILARITY_THRESHOLD) return 0;
+
+    let previousRow = new Uint16Array(target.length + 1);
+    let currentRow = new Uint16Array(target.length + 1);
+    for (let j = 0; j <= target.length; j++) previousRow[j] = j;
+
+    for (let i = 1; i <= source.length; i++) {
+        currentRow[0] = i;
+        for (let j = 1; j <= target.length; j++) {
+            const substitutionCost = source[i - 1] === target[j - 1] ? 0 : 1;
+            currentRow[j] = Math.min(
+                previousRow[j] + 1,
+                currentRow[j - 1] + 1,
+                previousRow[j - 1] + substitutionCost
+            );
+        }
+        [previousRow, currentRow] = [currentRow, previousRow];
+    }
+
+    return ((maxLength - previousRow[target.length]) / maxLength) * 100;
+}
+
 function isUselessComment(text) {
-    if (!text) return false;
-    let cleanText = text.replace(/<[^>]+>/g, '').replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, '');
-    if (cleanText.length === 0 || cleanText.length > 20) return false; // 너무 길면 정상 댓글로 간주
-    
-    return uselessCommentKeywords.some(kw => cleanText.includes(kw.replace(/[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]/g, '')));
+    const cleanText = normalizeCommentText(text);
+    if (!cleanText) return false;
+
+    return normalizedUselessCommentKeywords.some(keyword =>
+        calculateCommentSimilarity(cleanText, keyword) >= USELESS_COMMENT_SIMILARITY_THRESHOLD
+    );
 }
 
 function cleanSiteTitle(title) {
