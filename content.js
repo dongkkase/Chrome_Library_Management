@@ -198,6 +198,7 @@ const PRE_DEFINED_SITES = [
 { 
     url: "lamu.club", 
     selector: ".board-hot-posts, #fboardlist .list-subject",
+    detailSelector: ".view-wrap > h1",
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
     hideSelector: "tr",
@@ -1205,7 +1206,8 @@ function injectDirectDownloadButtons(allowedDLs) {
                 temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
                 temp.querySelectorAll('.bm-quick-actions, .book-badge, button, .auto-dl-btn').forEach(e => e.remove());
                 let rawText = temp.textContent;
-                if (rawText.includes('번역')) hasTranslation = true;
+                // if (rawText.includes('번역')) hasTranslation = true;
+                if (/번역|AI/i.test(rawText)) hasTranslation = true;
                 let title = cleanSiteTitle(rawText);
                 let skip = false;
                 if (!title || title.length < 1) skip = true;
@@ -1221,7 +1223,8 @@ function injectDirectDownloadButtons(allowedDLs) {
             temp.innerHTML = container.innerHTML.replace(/<img[^>]*>/gi, '');
             temp.querySelectorAll('.bm-quick-actions, .book-badge, .auto-dl-btn, button, .count').forEach(e => e.remove());
             let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
-            if (rawText.includes('번역')) hasTranslation = true;
+            // if (rawText.includes('번역')) hasTranslation = true;
+            if (/번역|AI/i.test(rawText)) hasTranslation = true;
             let title = cleanSiteTitle(rawText);
             let skip = false;
             if (!title || title.length < 1) skip = true;
@@ -1231,7 +1234,8 @@ function injectDirectDownloadButtons(allowedDLs) {
         }
 
         let pageTitle = document.title.split(/[-|]/)[0]; 
-        if (pageTitle.includes('번역')) hasTranslation = true;
+        // if (pageTitle.includes('번역')) hasTranslation = true;
+        if (/번역|AI/i.test(pageTitle)) hasTranslation = true;
         return { title: cleanSiteTitle(pageTitle) || "알수없는제목", hasTranslation: hasTranslation };
     }
 
@@ -1850,10 +1854,10 @@ function applyStyleToSingleLink(link) {
 
     const { titleParts, siteBodyOriginal, siteRes, siteVol, originalText } = link._bmData;
     const hostname = window.location.hostname;
-    const isTcafeSite = hostname.includes('tcafe') || hostname.includes('tcafed');
+    const isTcafeSite = hostname.includes('lamu') || hostname.includes('tcafe') || hostname.includes('tcafed');
     const tcafeRow = isTcafeSite ? link.closest('tr') : null;
     const translationText = tcafeRow ? tcafeRow.textContent || '' : originalText || '';
-    const hasTranslationTag = translationText.includes('번역');
+    const hasTranslationTag = /번역|AI/i.test(translationText);
     const match = findMatchingBook(titleParts);
     const book = match.book;
     const maxScore = match.maxScore;
@@ -2281,6 +2285,15 @@ function applyStyles() {
   if (hostname.includes('chating.wiki') && isAllowedBoard) {
       const materials = document.querySelector('.cw-article-materials');
       const articleBody = document.querySelector('.cw-article-body');
+
+      if (materials && articleBody?.parentNode && articleBody.previousElementSibling !== materials) {
+          articleBody.parentNode.insertBefore(materials, articleBody);
+      }
+  }
+
+  if (hostname.includes('lamu.club') && isAllowedBoard) {
+      const materials = document.querySelector('.well');
+      const articleBody = document.querySelector('.panel.panel-default.view-head');
 
       if (materials && articleBody?.parentNode && articleBody.previousElementSibling !== materials) {
           articleBody.parentNode.insertBefore(materials, articleBody);
