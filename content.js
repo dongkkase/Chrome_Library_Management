@@ -388,7 +388,7 @@ const PRE_DEFINED_SITES = [
         
         openActions.forEach(actionBtn => {
             const materialContainer = actionBtn.closest('.cw-article-material');
-            // 처리된 요소는 건너뛰기
+            // 처리된 요소는 건너뛰기 (applyStyles가 여러 번 실행되어도 중복되지 않게 막아줍니다)
             if (!materialContainer || materialContainer.dataset.bmLinkProcessed === "true") return;
 
             const h3Element = materialContainer.querySelector('h3');
@@ -410,10 +410,11 @@ const PRE_DEFINED_SITES = [
             }
         });
 
-        // a 태그가 새로 생성되었다면, 기존의 다운로드 버튼 생성 함수를 즉시 호출하여 버튼을 붙여줍니다.
+        // a 태그가 새로 생성되었다면, 확실한 배열 값을 직접 주입하여 즉시 다운로드 버튼 생성
         if (isModified && typeof injectDirectDownloadButtons === 'function') {
-            injectDirectDownloadButtons(globalAllowedDLs);
+            injectDirectDownloadButtons(["giga", "gofile", "transfer"]);
         }
+
     }
 }, 
 { 
@@ -2311,11 +2312,19 @@ function debouncedApplyStyles() {
 
 function applyStyles() {
   if (!isExtensionContextValid() || !isDataLoaded || !isTargetSite) return;
+
+  const hostname = window.location.hostname;
   
+  // ▼▼▼ 여기에 customJS 실행 코드 추가 (화면이 바뀔 때마다 감지하여 실행) ▼▼▼
+  const currentConfig = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
+  if (currentConfig && typeof currentConfig.customJS === 'function') {
+      try { currentConfig.customJS(); } catch (err) {}
+  }
+  // ▲▲▲ 추가 끝 ▲▲▲
+
   if (globalAllowedDLs.length > 0) injectDirectDownloadButtons(globalAllowedDLs);
 
   // tcafe21.com 보드 필터 적용 대상인 경우 4번째 td(작성자)를 5번째 td(날짜) 위로 이동
-  const hostname = window.location.hostname;
   if (hostname.includes('chating.wiki') && isAllowedBoard) {
       const materials = document.querySelector('.cw-article-materials');
       const articleBody = document.querySelector('.cw-article-body');
@@ -2407,19 +2416,6 @@ function applyStyles() {
         } catch (err) {}
     }
 
-    if (document.readyState === 'complete') {
-        try {
-            if (globalBoardJS2) globalBoardJS2();
-            
-            // 이 부분을 추가!
-            const hostname = window.location.hostname;
-            let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
-            if (config && typeof config.customJS === 'function' && !config._customJS_executed) {
-                 config.customJS();
-                 config._customJS_executed = true; // 중복 실행 방지
-            }
-        } catch (err) {}
-    }
 }
 
 function generateOptimalSelector(el) {
