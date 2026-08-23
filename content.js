@@ -378,9 +378,43 @@ const PRE_DEFINED_SITES = [
     customCss: `
         .cw-article-header .bm-quick-actions{background:none !important;border:0 !important;  padding-left: 0 !important}
         .cw-article-materials{margin-top:20px !important}
+        .cw-article-material__copy h3{overflow:visible !important}
     `,
     themeCss: `
     `,
+    customJS: () => {
+        const openActions = document.querySelectorAll('.cw-material-open-action');
+        let isModified = false;
+        
+        openActions.forEach(actionBtn => {
+            const materialContainer = actionBtn.closest('.cw-article-material');
+            // 처리된 요소는 건너뛰기
+            if (!materialContainer || materialContainer.dataset.bmLinkProcessed === "true") return;
+
+            const h3Element = materialContainer.querySelector('h3');
+            if (!h3Element) return;
+
+            const textValue = h3Element.textContent.trim();
+            const urlRegex = /(https?:\/\/[^\s]+)/i;
+            const match = textValue.match(urlRegex);
+
+            if (match && match[1]) {
+                const targetUrl = match[1];
+
+                // h3 요소의 텍스트를 클릭 가능한 a 태그로 교체
+                h3Element.innerHTML = `<a href="${targetUrl}" target="_blank" style="color: #1e90ff; text-decoration: underline; word-break: break-all;">${textValue}</a>`;
+                
+                // 중복 변경 방지 마커 설정
+                materialContainer.dataset.bmLinkProcessed = "true";
+                isModified = true;
+            }
+        });
+
+        // a 태그가 새로 생성되었다면, 기존의 다운로드 버튼 생성 함수를 즉시 호출하여 버튼을 붙여줍니다.
+        if (isModified && typeof injectDirectDownloadButtons === 'function') {
+            injectDirectDownloadButtons(globalAllowedDLs);
+        }
+    }
 }, 
 { 
     url: "hellkaiv.net", 
@@ -2370,6 +2404,20 @@ function applyStyles() {
     if (document.readyState === 'complete' && globalBoardJS2) {
         try {
             globalBoardJS2();
+        } catch (err) {}
+    }
+
+    if (document.readyState === 'complete') {
+        try {
+            if (globalBoardJS2) globalBoardJS2();
+            
+            // 이 부분을 추가!
+            const hostname = window.location.hostname;
+            let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
+            if (config && typeof config.customJS === 'function' && !config._customJS_executed) {
+                 config.customJS();
+                 config._customJS_executed = true; // 중복 실행 방지
+            }
         } catch (err) {}
     }
 }
