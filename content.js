@@ -194,7 +194,137 @@ const PRE_DEFINED_SITES = [
             .view-content img{max-width:calc(100% - 1.1%);}
         }
     `
-  },
+},
+{ 
+    url: "lamu.club", 
+    selector: ".board-hot-posts, #fboardlist .list-subject",
+    thumbSelector: "img", 
+    excludeThumbSelector: ".board-thumbnail",
+    hideSelector: "tr",
+    allowedDLs: ["giga", "gofile", "transfer"],
+    autoConfirmKeywords: ["포인트", "열람"], 
+    boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
+    boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001|D1106)(?:&|#|$)/i,
+    boardCss2: `
+        #fboardlist table { display: block !important; width: 100%; }
+        #fboardlist thead { display: none !important; }
+        #fboardlist tbody { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; padding: 10px 0; align-items: stretch !important; }
+        #fboardlist tr { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; align-content: flex-start !important; align-items: flex-start !important; background-color: #ffffff; border: 1px solid #e0e0e0 !important; border-radius: 8px; padding: 12px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); transition: transform 0.2s ease, box-shadow 0.2s ease; box-sizing: border-box !important; height: 100% !important; }
+
+        #fboardlist tr:hover { transform: translateY(-4px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1); }
+
+        #fboardlist td { display: block !important; text-align: left !important; border: none !important; padding: 0 !important; font-size: 13px; box-sizing: border-box !important; }
+        #fboardlist td:nth-child(1) { display: none !important; }
+
+        #fboardlist td:nth-child(3) { order: 1; width: 100% !important; flex-basis: 100% !important; margin-bottom: 8px !important; }
+
+        #fboardlist td:nth-child(3) > div,
+        #fboardlist td:nth-child(3) > a:has(img) { float: none !important; display: block !important; width: 100% !important; max-height: none !important; height: auto !important; overflow: visible !important; }
+
+        #fboardlist td:nth-child(3) span { display: inline !important; width: auto !important; float: none !important; margin-left: 4px !important; }
+        #fboardlist td:nth-child(3) img:not([src*="icon"]){ display: block !important; width: 100% !important; height: 220px !important; min-height: 220px !important; max-height: 220px !important; object-fit: cover !important; border-radius: 6px !important; background-color: #f5f5f5 !important; margin: 0 0 10px 0 !important; padding: 0 !important; border: none !important; flex-shrink: 0 !important; }
+
+        #fboardlist td:nth-child(3) img[src*="icon"]{ width: auto !important; height: auto !important; min-height: 0 !important; display: inline-block !important; margin: 0 2px !important; }
+
+        #fboardlist td:nth-child(3) a.bo_tit,
+        #fboardlist td:nth-child(3) a:not(:has(img)) { display: inline !important; font-weight: 600 !important; font-size: 14px !important; line-height: 1.4 !important; color: #333 !important; text-decoration: none !important; white-space: normal !important; }
+
+        #fboardlist td:nth-child(2),
+        #fboardlist td:nth-child(4),
+        #fboardlist td:nth-child(5),
+        #fboardlist td:nth-child(6),
+        #fboardlist td:nth-child(7) { order: 2; width: auto !important; flex-basis: auto !important; margin-right: 8px !important; font-size: 12px !important; display: inline-block !important; margin-top: 0 !important; margin-bottom: 0 !important; }
+
+        #fboardlist td:nth-child(2) { color: #007bff !important; font-weight: bold !important; }
+
+        #fboardlist td:nth-child(4),
+        #fboardlist td:nth-child(5),
+        #fboardlist td:nth-child(6),
+        #fboardlist td:nth-child(7) { color: #888888 !important; }
+
+        #fboardlist td:nth-child(6)::before { content: "조회 "; }
+        #fboardlist td:nth-child(7)::before { content: "추천 "; }        
+    `,
+    boardJS2: () => {
+        observeBoardJS2Targets();
+    },
+    commentSelector: ".media-content",
+    commentWrapperSelector: ".media",
+    
+    getHighResUrlAsync: async (thumb) => {
+        const link = thumb.closest('a');
+        if (!link || !link.href) return "";
+        if (thumb.dataset.cachedHighRes) return thumb.dataset.cachedHighRes;
+
+        try {
+            const res = await fetch(link.href);
+            const html = await res.text();
+            // 최적화: 무거운 DOMParser 대신 정규표현식을 사용하여 추출 속도 대폭 향상
+            const match = html.match(/class=["'][^"']*view-content[^"']*["'][\s\S]*?<img[^>]+src=["']([^"']+)["']/i);
+            if (match && match[1]) {
+                const absoluteUrl = new URL(match[1], link.href).href;
+                thumb.dataset.cachedHighRes = absoluteUrl; 
+                return absoluteUrl;
+            }
+        } catch (error) {
+            console.log("고화질 썸네일 추출 실패:", error);
+        }
+        return "";
+    },
+    customCss: `
+        .well { 
+            border-radius: 10px !important; 
+            padding: 20px !important; 
+            width: 100% !important;
+            max-width: 1200px !important;
+            background: rgba(255, 255, 255, 0.95) !important;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.15) !important;
+            backdrop-filter: blur(5px) !important;
+        }
+        body { padding-bottom: 120px !important; }
+        .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
+        .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 5px !important; width: auto !important; }
+        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
+
+
+
+
+        
+    `,
+    themeCss: `
+        @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+        
+        #fboardlist table th:nth-child(1),#fboardlist table td:nth-child(1),
+        #fboardlist table th:nth-child(4), #fboardlist table td:nth-child(4),
+        #fboardlist table th:nth-child(6), #fboardlist table td:nth-child(6),
+        #fboardlist table th:nth-child(7), #fboardlist table td:nth-child(7) {
+            display: none !important;
+        }
+            
+        .div-table.table > tbody > tr > td,
+        #fboardlist table  td{padding:12px 8px !important;border-bottom: 1px solid #ddd;}
+        table.list-pc .list-subject a,
+        #fboardlist .list-subject a{font-family: "Jua", sans-serif;}
+        #fboardlist .list-subject a button{font-weight:400 !important;}
+
+        .view-content{font-family: "Jua" !important, sans-serif !important;}
+        .view-img img,
+        .view-content img{display:block;width:98%;max-width:calc(400px - 1.1%);float:left;margin-right:1%;border-radius:15px;box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.1);border: 1px solid rgba(0, 0, 0, 0.11);}
+        .view-content a{display:contents}
+        .view-content:after{content:"";display:block;clear:both}
+
+        @media screen and (max-width: 1000px) {
+            .view-img img,
+            .view-content img{max-width:calc(50% - 1.1%);}
+        }
+
+
+        @media screen and (max-width: 480px) {
+           .view-img img,
+            .view-content img{max-width:calc(100% - 1.1%);}
+        }
+    `
+},
 { 
     url: "127.0.0.1", 
     selector: "#data_list",
@@ -223,7 +353,7 @@ const PRE_DEFINED_SITES = [
         }
         return "";
     },
-  },
+},
 {
     url: "ridibooks.com", 
     selector: "#books_contents h1, .infinite-scroll-component div>a", 
@@ -239,7 +369,7 @@ const PRE_DEFINED_SITES = [
     autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
     boardFilter: new RegExp([
         '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
-        '/게시판/남성향/(?:최신작|판타지|현판|무협-선협|번역|일반서적|만화-웹툰|애니|영화|드라마|라노벨|대체역사|성인소설)(?=/|[?#]|$)',
+        '/게시판/남성향/(?:전체|최신작|판타지|현대판타지|현판|무협-선협|무협/선협|번역|라노벨|일반서적|만화-웹툰|애니|영화|드라마|라노벨|대체역사|성인소설|일반서적)(?=/|[?#]|$)',
         '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰)(?=/|[?#]|$)'
     ].join('|'), 'i'),
     commentSelector: ".cw-comment-body",
