@@ -447,29 +447,121 @@
     .folder-rule-preview-popover {
       position: absolute;
       display: none;
+      --folder-rule-preview-accent: #1971c2;
+      --folder-rule-preview-accent-soft: rgba(25, 113, 194, 0.1);
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 10px;
+      border-radius: 10px;
+      padding: 10px;
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
       z-index: 12000;
-      max-width: 360px;
+      width: min(380px, calc(100vw - 16px));
+      max-width: 380px;
       box-sizing: border-box;
       font-size: 12px;
       color: var(--text);
-      line-height: 1.4;
+      line-height: 1.35;
       pointer-events: none;
       word-break: keep-all;
       overflow-wrap: anywhere;
       opacity: 0;
       transform: translateY(-4px);
-      transition: opacity 0.3s ease, transform 0.3s ease;
+      transition: opacity 0.16s ease, transform 0.16s ease;
       visibility: hidden;
+    }
+    body.dark-mode .folder-rule-preview-popover {
+      --folder-rule-preview-accent: #74c0fc;
+      --folder-rule-preview-accent-soft: rgba(116, 192, 252, 0.12);
     }
     .folder-rule-preview-popover.open {
       opacity: 1;
       transform: translateY(0);
       visibility: visible;
+    }
+    .folder-rule-preview-popover.is-above:not(.open) {
+      transform: translateY(4px);
+    }
+    .folder-rule-preview-heading {
+      margin-bottom: 7px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .folder-rule-preview-examples {
+      display: grid;
+      gap: 6px;
+    }
+    .folder-rule-preview-case {
+      min-width: 0;
+      padding: 7px 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border);
+      border-radius: 7px;
+    }
+    .folder-rule-preview-case.has-rule {
+      border-left-color: var(--folder-rule-preview-accent);
+      background: var(--folder-rule-preview-accent-soft);
+    }
+    .folder-rule-preview-label {
+      display: inline-block;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .folder-rule-preview-case.has-rule .folder-rule-preview-label {
+      color: var(--folder-rule-preview-accent);
+    }
+    .folder-rule-preview-path {
+      display: block;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.45;
+      white-space: normal;
+      word-break: break-all;
+    }
+    .folder-rule-preview-segment.is-rule {
+      color: var(--folder-rule-preview-accent);
+    }
+    .folder-rule-preview-segment.is-placeholder {
+      font-style: italic;
+      opacity: 0.85;
+    }
+    .folder-rule-preview-separator {
+      padding: 0 3px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+    .folder-rule-preview-guide {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 3px 5px;
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+    .folder-rule-preview-guide-label {
+      margin-right: 2px;
+      font-weight: 700;
+    }
+    .folder-rule-preview-guide code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+    }
+    .folder-rule-preview-guide-arrow {
+      color: var(--folder-rule-preview-accent);
+      font-weight: 700;
     }
     .folder-rule-preview-popover::before,
     .folder-rule-preview-popover::after {
@@ -488,6 +580,23 @@
       top: -8px;
       border-top: 0;
       border-bottom: 8px solid var(--panel);
+    }
+    .folder-rule-preview-popover.is-above::before {
+      top: auto;
+      bottom: -9px;
+      border-top: 9px solid var(--border);
+      border-bottom: 0;
+    }
+    .folder-rule-preview-popover.is-above::after {
+      top: auto;
+      bottom: -8px;
+      border-top: 8px solid var(--panel);
+      border-bottom: 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .folder-rule-preview-popover {
+        transition: none;
+      }
     }
 
     .sub-options{}

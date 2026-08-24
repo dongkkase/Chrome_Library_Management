@@ -128,53 +128,152 @@ function ensureFolderRulePreview() {
     folderRulePreview = document.createElement('div');
     folderRulePreview.id = 'folderRulePreview';
     folderRulePreview.className = 'folder-rule-preview-popover';
+    folderRulePreview.setAttribute('role', 'tooltip');
+    folderRulePreview.setAttribute('aria-hidden', 'true');
     document.body.appendChild(folderRulePreview);
 
     return folderRulePreview;
 }
 
-function getFolderRulePreviewPath(folderInput) {
-    if (!folderInput) return '';
+function sanitizeFolderRulePreviewSegment(value) {
+    return String(value || '')
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getFolderRulePreviewData(folderInput) {
+    if (!folderInput) {
+        return {
+            title: '책 제목',
+            ruleSegments: ['입력한 규칙'],
+            usesPlaceholder: true
+        };
+    }
 
     const row = folderInput.closest('tr');
-    const title = row ? (row.querySelector('.edit-title')?.value || '').trim() : '';
+    const rawTitle = row ? (row.querySelector('.edit-title')?.value || '').trim() : '';
+    const title = sanitizeFolderRulePreviewSegment(rawTitle) || '책 제목';
     const currentFolderRule = (folderInput.value || '').trim();
-    const inputExampleRule = currentFolderRule || '(입력값)';
-    const defaultFolderRule = '상위 폴더 명';
+    const ruleSegments = currentFolderRule
+        .replace(/\\/g, '/')
+        .split('/')
+        .map((segment) => sanitizeFolderRulePreviewSegment(segment))
+        .filter(Boolean);
 
-    const typedPath = `${inputExampleRule}/${title || '(책 제목)'}`;
-    const defaultPath = `${defaultFolderRule}/${title || '(책 제목)'}`;
+    return {
+        title,
+        ruleSegments: currentFolderRule ? ruleSegments : ['입력한 규칙'],
+        usesPlaceholder: !currentFolderRule
+    };
+}
 
-    return `${typedPath}|${defaultPath}`;
+function createFolderRulePreviewPath(ruleSegments, title, usesPlaceholder = false) {
+    const path = document.createElement('code');
+    path.className = 'folder-rule-preview-path';
+    const segments = [
+        ...ruleSegments.map((segment) => ({ text: segment, type: 'rule' })),
+        { text: title, type: 'title' }
+    ];
+
+    segments.forEach((segment, index) => {
+        if (index > 0) {
+            const separator = document.createElement('span');
+            separator.className = 'folder-rule-preview-separator';
+            separator.textContent = '/';
+            path.appendChild(separator);
+        }
+
+        const value = document.createElement('span');
+        value.className = `folder-rule-preview-segment is-${segment.type}`;
+        if (usesPlaceholder && segment.type === 'rule') {
+            value.classList.add('is-placeholder');
+        }
+        value.textContent = segment.text;
+        path.appendChild(value);
+    });
+
+    return path;
+}
+
+function createFolderRulePreviewCase(labelText, ruleSegments, title, options = {}) {
+    const item = document.createElement('div');
+    item.className = `folder-rule-preview-case ${options.className || ''}`.trim();
+
+    const label = document.createElement('span');
+    label.className = 'folder-rule-preview-label';
+    label.textContent = labelText;
+    item.appendChild(label);
+    item.appendChild(createFolderRulePreviewPath(ruleSegments, title, options.usesPlaceholder));
+
+    return item;
 }
 
 function updateFolderRulePreviewContent(folderInput) {
     const preview = ensureFolderRulePreview();
-    const paths = getFolderRulePreviewPath(folderInput);
-    const [typedPath, defaultPath] = paths ? paths.split('|') : ['', ''];
+    const data = getFolderRulePreviewData(folderInput);
 
-    preview.innerHTML = `
-      <div>입력했을 때: '${typedPath}'</div>
-      <div>입력하지 않았을 때: '${defaultPath}'</div>
-      <div style="margin-top:4px; color:var(--text-muted);">다운로드 시 최종 경로는 위 규칙을 따라 생성됩니다.</div>
-    `;
+    const heading = document.createElement('div');
+    heading.className = 'folder-rule-preview-heading';
+    heading.textContent = '저장 후 다운로드 폴더 예시';
+
+    const examples = document.createElement('div');
+    examples.className = 'folder-rule-preview-examples';
+    examples.appendChild(createFolderRulePreviewCase(
+        '규칙 입력',
+        data.ruleSegments,
+        data.title,
+        { className: 'has-rule', usesPlaceholder: data.usesPlaceholder }
+    ));
+    examples.appendChild(createFolderRulePreviewCase(
+        '규칙 미입력',
+        [],
+        data.title,
+        { className: 'has-no-rule' }
+    ));
+
+    const guide = document.createElement('div');
+    guide.className = 'folder-rule-preview-guide';
+
+    const guideLabel = document.createElement('span');
+    guideLabel.className = 'folder-rule-preview-guide-label';
+    guideLabel.textContent = '여러 단계 예시';
+
+    const guideInput = document.createElement('code');
+    guideInput.textContent = '장르/작가';
+
+    const guideArrow = document.createElement('span');
+    guideArrow.className = 'folder-rule-preview-guide-arrow';
+    guideArrow.textContent = '→';
+
+    const guideResult = document.createElement('code');
+    guideResult.textContent = '장르/작가/책 제목';
+
+    guide.append(guideLabel, guideInput, guideArrow, guideResult);
+    preview.replaceChildren(heading, examples, guide);
 }
 
 function updateFolderRulePreviewPosition(folderInput) {
+    if (!folderInput || !folderInput.isConnected) return false;
+
     const preview = ensureFolderRulePreview();
     const inputRect = folderInput.getBoundingClientRect();
 
     preview.style.display = 'block';
-    preview.classList.remove('open');
-
-    updateFolderRulePreviewContent(folderInput);
-
     const previewRect = preview.getBoundingClientRect();
+    const viewportTop = window.scrollY + 8;
+    const viewportBottom = window.scrollY + window.innerHeight - 8;
+    const roomBelow = window.innerHeight - inputRect.bottom;
+    const roomAbove = inputRect.top;
+    const placeAbove = roomBelow < previewRect.height + 12 && roomAbove > roomBelow;
+    const preferredTop = placeAbove
+        ? inputRect.top + window.scrollY - previewRect.height - 10
+        : inputRect.bottom + window.scrollY + 10;
 
-    let top = inputRect.bottom + window.scrollY + 10;
+    let top = preferredTop;
     let left = inputRect.left + window.scrollX + (inputRect.width / 2) - (previewRect.width / 2);
 
-    top = Math.max(window.scrollY + 6, top);
+    top = Math.max(viewportTop, Math.min(viewportBottom - previewRect.height, top));
     left = Math.max(window.scrollX + 8, Math.min(window.scrollX + window.innerWidth - previewRect.width - 8, left));
 
     const arrowLeft = Math.max(
@@ -185,34 +284,62 @@ function updateFolderRulePreviewPosition(folderInput) {
     preview.style.left = `${left}px`;
     preview.style.top = `${top}px`;
     preview.style.setProperty('--folder-rule-arrow-x', `${arrowLeft}px`);
+    preview.classList.toggle('is-above', placeAbove);
+
+    return true;
 }
 
 function showFolderRulePreview(folderInput) {
-    if (!folderInput || !(folderInput instanceof HTMLInputElement)) return;
-    activeFolderRuleInput = folderInput;
+    if (!folderInput || !(folderInput instanceof HTMLInputElement) || !folderInput.isConnected) return;
+    const preview = ensureFolderRulePreview();
+    const wasOpen = preview.classList.contains('open');
+
     if (folderRulePreviewHideTimer) {
         clearTimeout(folderRulePreviewHideTimer);
         folderRulePreviewHideTimer = null;
     }
-    folderRulePreview.classList.remove('open');
-    updateFolderRulePreviewPosition(folderInput);
-    requestAnimationFrame(() => {
-        if (folderRulePreview) folderRulePreview.classList.add('open');
-    });
+
+    updateFolderRulePreviewContent(folderInput);
+    if (!updateFolderRulePreviewPosition(folderInput)) return;
+
+    activeFolderRuleInput = folderInput;
+    const descriptionIds = new Set(
+        (folderInput.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+    );
+    descriptionIds.add(preview.id);
+    folderInput.setAttribute('aria-describedby', [...descriptionIds].join(' '));
+    preview.setAttribute('aria-hidden', 'false');
+    if (!wasOpen) {
+        preview.classList.add('open');
+    }
 }
 
 function hideFolderRulePreview() {
-    if (!folderRulePreview) return;
+    const describedInput = activeFolderRuleInput;
     activeFolderRuleInput = null;
+    if (describedInput) {
+        const descriptionIds = (describedInput.getAttribute('aria-describedby') || '')
+            .split(/\s+/)
+            .filter((id) => id && id !== 'folderRulePreview');
+        if (descriptionIds.length > 0) {
+            describedInput.setAttribute('aria-describedby', descriptionIds.join(' '));
+        } else {
+            describedInput.removeAttribute('aria-describedby');
+        }
+    }
+    if (!folderRulePreview) return;
+
     folderRulePreview.classList.remove('open');
+    folderRulePreview.setAttribute('aria-hidden', 'true');
     if (folderRulePreviewHideTimer) {
         clearTimeout(folderRulePreviewHideTimer);
     }
     folderRulePreviewHideTimer = setTimeout(() => {
-        if (!folderRulePreview.classList.contains('open')) {
+        if (!folderRulePreview.classList.contains('open') && !activeFolderRuleInput) {
             folderRulePreview.style.display = 'none';
         }
-    }, 300);
+        folderRulePreviewHideTimer = null;
+    }, 180);
 }
 
 function renderList(filter = "", resetPage = false) {
@@ -1518,7 +1645,7 @@ async function initVersionCheck() {
         manualBtn.textContent = isStoreInstall
             ? "업데이트 확인"
             : isManualInstall
-                ? "GitHub 업데이트 확인"
+                ? "업데이트 확인"
                 : "GitHub 버전 확인";
         manualBtn.style.display = 'inline-block';
     }
