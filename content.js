@@ -1011,7 +1011,18 @@ function processUselessComments() {
     }
 }
 
+function getChatingWikiListTitle(link) {
+    if (!link || !window.location.hostname.includes('chating.wiki')) return null;
+    if (typeof link.matches !== 'function' || !link.matches('a.cw-board-item')) return null;
+
+    const titleElement = link.querySelector(':scope > .cw-board-item__title > strong');
+    return titleElement ? titleElement.textContent.trim() : null;
+}
+
 function getPureLinkText(link) {
+    const chatingWikiTitle = getChatingWikiListTitle(link);
+    if (chatingWikiTitle !== null) return chatingWikiTitle;
+
   let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
   const temp = document.createElement('div');
   temp.innerHTML = safeHTML;
@@ -1858,7 +1869,8 @@ function applyStyleToSingleLink(link) {
         link.querySelector(':scope > .bm-quick-actions.list-actions')?.remove();
     }
 
-    const currentRawText = link.textContent || "";
+    const chatingWikiTitle = getChatingWikiListTitle(link);
+    const currentRawText = chatingWikiTitle !== null ? chatingWikiTitle : link.textContent || "";
     
     if (!link._bmData || link._bmData.raw !== currentRawText) {
         const originalText = getPureLinkText(link);
@@ -1906,7 +1918,15 @@ function applyStyleToSingleLink(link) {
     const hostname = window.location.hostname;
     const isTcafeSite = hostname.includes('lamu') || hostname.includes('tcafe') || hostname.includes('tcafed');
     const tcafeRow = isTcafeSite ? link.closest('tr') : null;
-    const translationText = tcafeRow ? tcafeRow.textContent || '' : originalText || '';
+    const isChatingWikiSite = hostname.includes('chating.wiki');
+    const chatingWikiTagText = isChatingWikiSite
+        ? Array.from(link.querySelectorAll('.cw-board-item__tags > i:not([data-kind])')).map(tag => tag.textContent || '').join(' ')
+        : '';
+    const translationText = tcafeRow
+        ? tcafeRow.textContent || ''
+        : isChatingWikiSite
+            ? `${originalText || ''} ${link.dataset.attributes || ''} ${chatingWikiTagText}`
+            : originalText || '';
     const hasTranslationTag = /번역|AI/i.test(translationText);
     const match = findMatchingBook(titleParts);
     const book = match.book;
@@ -2039,8 +2059,9 @@ function applyStyleToSingleLink(link) {
         const siteMatchKey = link._bmData.siteMatchKey;
         const matchBook = exactMatchCache[siteMatchKey] || (similarityCache[siteMatchKey] && similarityCache[siteMatchKey].book);
         const hasBook = !!matchBook;
+        const hasTitleChanged = chatingWikiTitle !== null && existingActions?.dataset.titleSignature !== link._bmData.raw;
 
-        if (!existingActions || existingActions.dataset.hasBook !== String(hasBook)) {
+        if (!existingActions || existingActions.dataset.hasBook !== String(hasBook) || hasTitleChanged) {
             if (existingBr) existingBr.remove();
             if (existingActions) existingActions.remove();
 
@@ -2053,6 +2074,7 @@ function applyStyleToSingleLink(link) {
             const actions = createQuickActions(link._bmData, hasBook);
             actions.classList.add('list-actions');
             actions.dataset.hasBook = String(hasBook);
+            if (chatingWikiTitle !== null) actions.dataset.titleSignature = link._bmData.raw;
             actions.style.marginLeft = "0";
             actions.style.marginTop = "4px";
             actions.style.display = renderTargets.usesSeparateTargets ? "flex" : "inline-flex";
