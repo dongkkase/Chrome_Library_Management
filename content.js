@@ -1796,6 +1796,19 @@ function createQuickActions(linkData, hasBook) {
     return container;
 }
 
+function getDisplayMatchScore(maxScore) {
+    return maxScore === 100 ? 100 : Math.min(99, Math.round(maxScore));
+}
+
+function createMatchScoreHtml(displayScore, useLightText = false) {
+    if (displayScore < 100) {
+        return `<span class="bm-match-score bm-match-score--partial" style="color:#5f3b00; background:#fff3bf; border:1px solid #e67700; font-size:10px; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:4px; vertical-align:middle; display:inline-block; line-height:1.15; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.12);" title="유사 매칭 ${displayScore}%: 등록된 책 제목을 확인하세요">유사 ${displayScore}%</span>`;
+    }
+
+    const textColor = useLightText ? 'rgba(255,255,255,0.8)' : '#868e96';
+    return `<span class="bm-match-score bm-match-score--exact" style="color:${textColor}; font-size:10px; margin-left:4px;" title="일치율: ${displayScore}%">(${displayScore}%)</span>`;
+}
+
 function getListRenderTargets(link) {
     const defaultTargets = {
         badgeTarget: link,
@@ -1940,7 +1953,7 @@ function applyStyleToSingleLink(link) {
     if (book) {
         const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
         const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
-        const displayScore = Math.round(maxScore);
+        const displayScore = getDisplayMatchScore(maxScore);
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
 
@@ -1980,7 +1993,7 @@ function applyStyleToSingleLink(link) {
           link.style.setProperty("font-weight", "normal", "important");
           link.style.setProperty("opacity", "0.5", "important");
           link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bdfont-size:10px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
           badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -1991,7 +2004,7 @@ function applyStyleToSingleLink(link) {
           link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -2004,12 +2017,12 @@ function applyStyleToSingleLink(link) {
               link.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
               badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               link.style.setProperty("color", "#0056b3", "important"); 
               link.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
               badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
@@ -2204,7 +2217,7 @@ function applyStyleToDetailElement(el) {
 
         const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
         const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
-        const displayScore = Math.round(maxScore);
+        const displayScore = getDisplayMatchScore(maxScore);
         const resText = book.resolution || '-';
         const volText = book.lastVol ? book.lastVol + '권' : '-';
 
@@ -2227,7 +2240,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("text-decoration", "line-through", "important");
           el.style.setProperty("color", "#aaaaaa", "important");
           el.style.setProperty("opacity", "0.5", "important");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + '<span style="color:#adb5bdfont-size:10px;margin-left:4px;" title="매칭률">(' + displayScore + '%)</span>';
+          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
           badgeStyle = "font-size:11px; font-weight:bold; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; text-decoration:none !important; opacity:1 !important;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
@@ -2236,7 +2249,7 @@ function applyStyleToDetailElement(el) {
           el.style.setProperty("font-weight", "800", "important");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
           let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
           let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
           badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
@@ -2247,12 +2260,12 @@ function applyStyleToDetailElement(el) {
               el.style.setProperty("font-weight", "800", "important");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + '<span style="color:rgba(255,255,255,0.8);font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
               badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
               el.style.setProperty("color", "#0056b3", "important"); 
               el.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + '<span style="color:#868e96font-size:10px;margin-left:4px;">(' + displayScore + '%)</span>';
+              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
               badgeStyle = "font-size:11px; background:#f0f7ff; border:1px solid #007bff; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
