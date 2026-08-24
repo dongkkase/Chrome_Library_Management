@@ -698,7 +698,7 @@ bulkInput.addEventListener('input', () => {
     const line = lines[0]; 
     
     const resMatch = line.match(/\d{3,4}\s*px/gi);
-    const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
+    const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
     const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
     const endNumMatch = line.match(/(\d+)\s*$/);
     
@@ -764,7 +764,7 @@ document.getElementById('saveBtn').onclick = () => {
         const resMatch = line.match(/\d{3,4}\s*px/gi);
         
         // 이전에 수정한 부(?!터) 정규식 그대로 유지
-        const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~-]\s*(\d+)/);
+        const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
         const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
         const endNumMatch = line.match(/(\d+)\s*$/);
         

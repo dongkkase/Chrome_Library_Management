@@ -369,7 +369,7 @@ function cleanSiteTitle(title) {
         .replace(/^\s*\[?웹툰\]?\s*/, '');
 
     // +가 공백을 대신하고 권수 범위 앞에도 사용된 제목만 제한적으로 정규화합니다.
-    const plusVolumeSeparatorRegex = /\+\s*(?=\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+)/;
+    const plusVolumeSeparatorRegex = /\+\s*(?=\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*\d+)/;
     if (plusVolumeSeparatorRegex.test(cleaned)) {
         cleaned = cleaned
             .replace(/([a-zA-Z]\+\+)\+\s*(?=[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥])/g, '$1 ')
@@ -384,7 +384,7 @@ function cleanSiteTitle(title) {
 
     // 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
     // 수정: 정규식에서 쉼표(,)를 제거하여 21,000과 같은 형태에서 제목이 잘리지 않도록 함
-    const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+|\(\s*(?:전|총)\s*\d+\s*(?:권|화)\s*\)|\[\s*(?:전|총)\s*\d+\s*(?:권|화)\s*\]|（\s*(?:전|총)\s*\d+\s*(?:권|화)\s*）|【\s*(?:전|총)\s*\d+\s*(?:권|화)\s*】|\s+(?:전|총)\s*\d+\s*(?:권|화)(?![가-힣a-zA-Z0-9])|\d+\s*(?:권|화|화씩)|완결|\s완(\s|$))/i;
+    const delimiterRegex = /(\d{3,4}\s*p(?:x)?|\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*\d+|\(\s*(?:전|총)\s*\d+\s*(?:권|화)\s*\)|\[\s*(?:전|총)\s*\d+\s*(?:권|화)\s*\]|（\s*(?:전|총)\s*\d+\s*(?:권|화)\s*）|【\s*(?:전|총)\s*\d+\s*(?:권|화)\s*】|\s+(?:전|총)\s*\d+\s*(?:권|화)(?![가-힣a-zA-Z0-9])|\d+\s*(?:권|화|화씩)|완결|\s완(\s|$))/i;
     const match = cleaned.match(delimiterRegex);
 
     if (match && match.index > 0) {
@@ -410,7 +410,7 @@ function cleanSiteTitle(title) {
         })
         .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
         // 수정: 하단 공백 치환 정규식에서도 쉼표(,)를 제거
-        .replace(/\d+\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+/g, ' ')
+        .replace(/\d+\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*\d+/g, ' ')
         .replace(/[：:—\-\/～〜〰∼~・·･_]/g, ' ')
         .replace(/\d+\s*(?:권|화)/g, ' ')
         .replace(/완결[!?.~]*/g, ' ')

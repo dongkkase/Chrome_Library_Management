@@ -1187,7 +1187,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     let lastVol = "";
 
     // [수정] 21,000과 같은 숫자에서 쉼표를 범위로 오인하지 않도록 정규식에서 쉼표(,) 제거
-    const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*(\d+)(?!\s*(?:px|p)\b)/i);
+    const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
     const volMatch = rawTitle.match(/(\d+)\s*(?:권|화)/);
     const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
 
