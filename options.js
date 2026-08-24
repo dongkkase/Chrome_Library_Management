@@ -1512,103 +1512,209 @@ async function initVersionCheck() {
     }
 
     const isManualInstall = extensionInfo.installType === 'development';
-    if (!isManualInstall) {
-        if (manualBtn) manualBtn.style.display = 'none';
-        if (updateLink) updateLink.style.display = 'none';
-        if (statusMsg) {
-            statusMsg.textContent = extensionInfo.installType === 'normal'
-                ? "Chrome 웹 스토어 자동 업데이트"
-                : "브라우저 관리 업데이트";
-            statusMsg.style.color = "#28a745";
-            statusMsg.style.display = 'inline-block';
-        }
-        return;
-    }
+    const isStoreInstall = extensionInfo.installType === 'normal';
 
     if (manualBtn) {
-        manualBtn.textContent = "GitHub 업데이트 확인";
+        manualBtn.textContent = isStoreInstall
+            ? "업데이트 확인"
+            : isManualInstall
+                ? "GitHub 업데이트 확인"
+                : "GitHub 버전 확인";
         manualBtn.style.display = 'inline-block';
     }
 
     const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
+    let statusHideTimer = null;
+    let storeUpdateUiTimeout = null;
+    let isApplyingStoreUpdate = false;
 
-    const checkVersion = (isManual = false) => {
-        if (isManual && statusMsg) {
-            statusMsg.textContent = "⏳ 확인 중...";
-            statusMsg.style.color = "#6c757d";
-            statusMsg.style.display = "inline-block";
-            if (updateLink) updateLink.style.display = "none";
+    const showStatus = (message, color = "#6c757d", hideAfter = 0) => {
+        if (!statusMsg) return;
+        if (statusHideTimer) clearTimeout(statusHideTimer);
+        statusMsg.textContent = message;
+        statusMsg.style.color = color;
+        statusMsg.style.display = "inline-block";
+
+        if (hideAfter > 0) {
+            statusHideTimer = setTimeout(() => {
+                statusMsg.style.display = "none";
+            }, hideAfter);
+        }
+    };
+
+    const hideUpdateAction = () => {
+        if (!updateLink) return;
+        updateLink.style.display = "none";
+        updateLink.onclick = null;
+    };
+
+    const setControlsBusy = (isBusy) => {
+        if (manualBtn) manualBtn.disabled = isBusy;
+        if (updateLink) {
+            updateLink.style.pointerEvents = isBusy ? "none" : "auto";
+            updateLink.style.opacity = isBusy ? "0.65" : "1";
+            updateLink.setAttribute("aria-disabled", String(isBusy));
+        }
+    };
+
+    const setNewVersionBadge = (hasNewVersion) => {
+        if (!chrome.action || !chrome.action.setBadgeText) return;
+        chrome.action.setBadgeText({ text: hasNewVersion ? "NEW" : "" });
+        if (hasNewVersion) chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+    };
+
+    const downloadGitHubUpdate = (latestVersion) => {
+        const zipUrl = `https://github.com/dongkkase/Chrome_Library_Management/releases/download/v${latestVersion}/libmanagement.zip`;
+        chrome.downloads.download({ url: zipUrl }, () => {
+            if (chrome.runtime.lastError) {
+                showStatus("업데이트 파일 다운로드에 실패했습니다.", "#dc3545");
+                return;
+            }
+
+            alert(`📥 [v${latestVersion}] 업데이트 파일(.zip) 다운로드가 시작되었습니다!\n\n[수동 업데이트 방법]\n1. 다운로드된 압축 파일을 풉니다.\n2. 기존 확장프로그램 폴더에 파일들을 모두 덮어씌웁니다.\n3. 크롬 '확장프로그램 관리(chrome://extensions)' 페이지에서 [↻ 새로고침] 버튼을 누르면 적용됩니다.`);
+        });
+    };
+
+    const requestStoreUpdate = async (latestVersion) => {
+        if (storeUpdateUiTimeout) {
+            clearTimeout(storeUpdateUiTimeout);
+            storeUpdateUiTimeout = null;
+        }
+        isApplyingStoreUpdate = true;
+        setControlsBusy(true);
+        showStatus(`Chrome 웹 스토어에서 v${latestVersion} 업데이트를 확인하는 중...`);
+
+        try {
+            const result = await chrome.runtime.sendMessage({ action: "REQUEST_STORE_UPDATE" });
+            if (!result || !result.ok) {
+                if (result && result.status === "unsupported_install_type") {
+                    showStatus("현재 설치 방식에서는 웹 스토어 자동 업데이트를 요청할 수 없습니다.", "#dc3545");
+                } else if (result && result.status === "unsupported_api") {
+                    showStatus("현재 브라우저는 즉시 업데이트 확인 기능을 지원하지 않습니다.", "#dc3545");
+                } else {
+                    showStatus("Chrome 웹 스토어 업데이트 확인에 실패했습니다.", "#dc3545");
+                }
+                isApplyingStoreUpdate = false;
+                return;
+            }
+
+            if (result.status === "update_available") {
+                const updateVersion = result.version || latestVersion;
+                showStatus(`v${updateVersion} 업데이트를 다운로드합니다. 준비되면 자동으로 적용됩니다.`, "#28a745");
+                storeUpdateUiTimeout = setTimeout(() => {
+                    isApplyingStoreUpdate = false;
+                    storeUpdateUiTimeout = null;
+                    setControlsBusy(false);
+                    showStatus("업데이트 준비가 지연되고 있습니다. 잠시 후 다시 확인해 주세요.", "#d9480f");
+                }, 2 * 60 * 1000);
+                return;
+            }
+
+            if (result.status === "no_update") {
+                showStatus(`GitHub에는 v${latestVersion}이 있지만 웹 스토어 배포가 아직 준비되지 않았습니다.`, "#d9480f");
+            } else if (result.status === "throttled") {
+                showStatus("Chrome이 업데이트 확인 요청을 제한했습니다. 잠시 후 다시 시도해 주세요.", "#d9480f");
+            } else {
+                showStatus("Chrome 웹 스토어에서 설치 가능한 업데이트를 찾지 못했습니다.", "#d9480f");
+            }
+            isApplyingStoreUpdate = false;
+        } catch (error) {
+            console.log("웹 스토어 업데이트 요청 실패:", error);
+            showStatus("Chrome 웹 스토어 업데이트 확인에 실패했습니다.", "#dc3545");
+            isApplyingStoreUpdate = false;
+        } finally {
+            if (!isApplyingStoreUpdate) setControlsBusy(false);
+        }
+    };
+
+    const configureUpdateAction = (latestVersion) => {
+        if (!updateLink) return;
+
+        if (isManualInstall) {
+            updateLink.textContent = `📥 최신 파일 받기 (v${latestVersion})`;
+            updateLink.onclick = (event) => {
+                event.preventDefault();
+                downloadGitHubUpdate(latestVersion);
+            };
+        } else if (isStoreInstall) {
+            updateLink.textContent = `웹 스토어 업데이트 (v${latestVersion})`;
+            updateLink.onclick = (event) => {
+                event.preventDefault();
+                requestStoreUpdate(latestVersion);
+            };
+        } else {
+            hideUpdateAction();
+            return;
         }
 
-        chrome.storage.local.get(['lastVersionCheckTime', 'latestVersionInfo'], async (data) => {
+        updateLink.style.display = "inline-block";
+    };
+
+    const checkVersion = async (isManual = false) => {
+        if (isManual) {
+            setControlsBusy(true);
+            hideUpdateAction();
+            showStatus("GitHub에서 최신 버전을 확인하는 중...");
+        }
+
+        try {
+            const data = await chrome.storage.local.get(['lastVersionCheckTime', 'latestVersionInfo']);
             const now = Date.now();
             const updateInterval = 2 * 60 * 60 * 1000;
             let latestData = data.latestVersionInfo;
             const shouldFetch = isManual || !data.lastVersionCheckTime || (now - data.lastVersionCheckTime > updateInterval);
 
             if (shouldFetch) {
-                try {
-                    const response = await fetch(GITHUB_RAW_URL + "?t=" + now);
-                    if (response.ok) {
-                        latestData = await response.json();
-                        chrome.storage.local.set({
-                            lastVersionCheckTime: now,
-                            latestVersionInfo: latestData
-                        });
-                    } else {
-                        throw new Error("서버 응답 오류");
-                    }
-                } catch (error) {
-                    console.log("버전 체크 실패:", error);
-                    if (isManual && statusMsg) {
-                        statusMsg.textContent = "⚠️ 확인 실패 (인터넷 연결 오류)";
-                        statusMsg.style.color = "#dc3545";
-                        setTimeout(() => statusMsg.style.display = "none", 3000);
-                    }
-                    return;
-                }
+                const response = await fetch(GITHUB_RAW_URL + "?t=" + now);
+                if (!response.ok) throw new Error("서버 응답 오류");
+
+                latestData = await response.json();
+                await chrome.storage.local.set({
+                    lastVersionCheckTime: now,
+                    latestVersionInfo: latestData
+                });
             }
 
-            if (latestData && latestData.latest_version) {
-                if (currentVersion !== latestData.latest_version) {
-                    if (updateLink) {
-                        updateLink.style.display = 'inline-block';
-                        updateLink.textContent = `📥 최신 파일 받기 (v${latestData.latest_version})`;
+            if (!latestData || !latestData.latest_version) throw new Error("버전 정보가 올바르지 않습니다.");
 
-                        updateLink.onclick = (e) => {
-                            e.preventDefault();
+            const latestVersion = latestData.latest_version;
+            const hasNewVersion = isNewerExtensionVersion(latestVersion, currentVersion);
+            setNewVersionBadge(hasNewVersion);
 
-                            const zipUrl = `https://github.com/dongkkase/Chrome_Library_Management/releases/download/v${latestData.latest_version}/libmanagement.zip`;
+            if (hasNewVersion) {
+                configureUpdateAction(latestVersion);
 
-                            chrome.downloads.download({ url: zipUrl }, () => {
-                                alert(`📥 [v${latestData.latest_version}] 업데이트 파일(.zip) 다운로드가 시작되었습니다!\n\n[수동 업데이트 방법]\n1. 다운로드된 압축 파일을 풉니다.\n2. 기존 확장프로그램 폴더에 파일들을 모두 덮어씌웁니다.\n3. 크롬 '확장프로그램 관리(chrome://extensions)' 페이지에서 [↻ 새로고침] 버튼을 누르면 적용됩니다.`);
-                            });
-                        };
-                    }
-                    if (statusMsg) statusMsg.style.display = "none";
-                    if (chrome.action && chrome.action.setBadgeText) {
-                        chrome.action.setBadgeText({ text: "NEW" });
-                        chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
-                    }
+                if (isStoreInstall) {
+                    if (isManual) await requestStoreUpdate(latestVersion);
+                    else showStatus(`GitHub에서 v${latestVersion} 신규 버전을 확인했습니다.`, "#dc3545");
+                } else if (isManualInstall) {
+                    showStatus(`GitHub에서 v${latestVersion} 신규 버전을 확인했습니다.`, "#dc3545");
                 } else {
-                    if (updateLink) updateLink.style.display = "none";
-                    if (isManual && statusMsg) {
-                        statusMsg.textContent = "✅ 최신 버전입니다.";
-                        statusMsg.style.color = "#28a745";
-                        setTimeout(() => statusMsg.style.display = "none", 3000);
-                    }
-                    if (chrome.action && chrome.action.setBadgeText) chrome.action.setBadgeText({ text: "" });
+                    showStatus(`GitHub에는 v${latestVersion}이 있습니다. 브라우저 관리 정책에서 업데이트해야 합니다.`, "#d9480f");
                 }
+                return;
             }
-        });
+
+            hideUpdateAction();
+            if (isManual) {
+                showStatus("최신 버전입니다.", "#28a745", 3000);
+            } else if (isStoreInstall) {
+                showStatus("Chrome 웹 스토어 설치본 · 최신 버전", "#28a745");
+            } else if (!isManualInstall) {
+                showStatus("브라우저 관리 설치본 · 최신 GitHub 버전", "#28a745");
+            }
+        } catch (error) {
+            console.log("버전 체크 실패:", error);
+            if (isManual) showStatus("버전 확인에 실패했습니다. 인터넷 연결을 확인해 주세요.", "#dc3545", 3000);
+        } finally {
+            if (!isApplyingStoreUpdate) setControlsBusy(false);
+        }
     };
 
     checkVersion(false);
 
     if (manualBtn) {
-        manualBtn.addEventListener('click', () => {
-            checkVersion(true);
-        });
+        manualBtn.addEventListener('click', () => checkVersion(true));
     }
 }
 

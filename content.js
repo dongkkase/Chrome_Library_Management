@@ -379,6 +379,13 @@ const PRE_DEFINED_SITES = [
         .cw-article-header .bm-quick-actions{background:none !important;border:0 !important;  padding-left: 0 !important}
         .cw-article-materials{margin-top:20px !important}
         .cw-article-material__copy h3{overflow:visible !important}
+        .cw-board-item__title > .book-badge {
+            display: inline-flex !important;
+            width: max-content !important;
+            max-width: 100% !important;
+            flex: 0 0 auto !important;
+            justify-self: start !important;
+        }
     `,
     themeCss: `
     `,
@@ -1845,31 +1852,24 @@ function getListRenderTargets(link) {
 
     const titleStyleTarget = titleTarget.querySelector(':scope > strong') || link;
 
-    const nestedTagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags');
-    if (nestedTagsTarget) {
+    const itemTarget = link.matches('a.cw-board-item') ? link : link.closest('a.cw-board-item');
+    const tagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags')
+        || itemTarget?.querySelector(':scope > .cw-board-item__tags');
+    if (tagsTarget) {
         return {
             badgeTarget: titleTarget,
-            actionsTarget: nestedTagsTarget,
+            actionsTarget: tagsTarget,
             titleStyleTarget,
             usesSeparateTargets: true
         };
     }
 
-    let itemContainer = titleTarget.parentElement;
-    while (itemContainer && itemContainer !== document.body && !itemContainer.matches('.cw-board-table')) {
-        const tagsTarget = itemContainer.querySelector('.cw-board-item__tags');
-        if (tagsTarget) {
-            return {
-                badgeTarget: titleTarget,
-                actionsTarget: tagsTarget,
-                titleStyleTarget,
-                usesSeparateTargets: true
-            };
-        }
-        itemContainer = itemContainer.parentElement;
-    }
-
-    return { ...defaultTargets, titleStyleTarget };
+    return {
+        badgeTarget: titleTarget,
+        actionsTarget: titleTarget,
+        titleStyleTarget,
+        usesSeparateTargets: true
+    };
 }
 
 function getDetailRenderTargets(detailElement) {
@@ -1902,9 +1902,13 @@ function applyStyleToSingleLink(link) {
     const titleStyleTarget = renderTargets.titleStyleTarget || link;
 
     if (renderTargets.usesSeparateTargets) {
-        link.querySelector(':scope > .book-badge')?.remove();
-        link.querySelector(':scope > .bm-badge-br.list-br')?.remove();
-        link.querySelector(':scope > .bm-quick-actions.list-actions')?.remove();
+        link.querySelectorAll('.book-badge').forEach(badge => {
+            if (badge.parentElement !== badgeTarget) badge.remove();
+        });
+        link.querySelectorAll('.bm-badge-br.list-br').forEach(br => br.remove());
+        link.querySelectorAll('.bm-quick-actions.list-actions').forEach(actions => {
+            if (actions.parentElement !== actionsTarget) actions.remove();
+        });
     }
 
     const chatingWikiTitle = getChatingWikiListTitle(link);
@@ -2062,8 +2066,13 @@ function applyStyleToSingleLink(link) {
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
     const existingBadge = badgeTarget.querySelector(':scope > .book-badge');
     if (newBadgeHTML) {
-        const shouldInsertBeforeTags = renderTargets.usesSeparateTargets && actionsTarget.parentElement === badgeTarget;
-        const shouldMoveBadge = existingBadge && shouldInsertBeforeTags && existingBadge.nextElementSibling !== actionsTarget;
+        const existingSharedActions = renderTargets.usesSeparateTargets && actionsTarget === badgeTarget
+            ? actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions')
+            : null;
+        const badgeAnchor = renderTargets.usesSeparateTargets && actionsTarget.parentElement === badgeTarget
+            ? actionsTarget
+            : existingSharedActions;
+        const shouldMoveBadge = existingBadge && badgeAnchor && existingBadge.nextElementSibling !== badgeAnchor;
         if (!existingBadge || existingBadge.dataset.html !== newBadgeHTML || shouldMoveBadge) {
             let badge = existingBadge;
             if (!badge || badge.dataset.html !== newBadgeHTML) {
@@ -2075,7 +2084,7 @@ function applyStyleToSingleLink(link) {
                 badge.dataset.html = newBadgeHTML;
             }
 
-            if (shouldInsertBeforeTags) badgeTarget.insertBefore(badge, actionsTarget);
+            if (badgeAnchor) badgeTarget.insertBefore(badge, badgeAnchor);
             else badgeTarget.appendChild(badge);
             
             // 기존에 있던 줄바꿈과 퀵버튼을 뱃지 뒤로 밀어내어 순서가 꼬이는 현상 완벽 해결

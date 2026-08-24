@@ -1,4 +1,32 @@
 // common.js (공통 정규식 관리 파일)
+function compareExtensionVersions(leftVersion, rightVersion) {
+    const normalizeVersion = (version) => String(version || '')
+        .replace(/^v/i, '')
+        .split('.')
+        .map(part => {
+            const match = part.match(/^\d+/);
+            return match ? Number(match[0]) : 0;
+        });
+
+    const leftParts = normalizeVersion(leftVersion);
+    const rightParts = normalizeVersion(rightVersion);
+    const maxLength = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < maxLength; index++) {
+        const leftPart = leftParts[index] || 0;
+        const rightPart = rightParts[index] || 0;
+        if (leftPart > rightPart) return 1;
+        if (leftPart < rightPart) return -1;
+    }
+
+    return 0;
+}
+
+function isNewerExtensionVersion(candidateVersion, currentVersion) {
+    if (!candidateVersion || !currentVersion) return false;
+    return compareExtensionVersions(candidateVersion, currentVersion) > 0;
+}
+
 let globalFilters = [
     "⁜",
     "＃","＆","＊","＠","§","※","☆","★",

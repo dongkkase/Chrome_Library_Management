@@ -224,6 +224,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return true;
   }
+
+  else if (message.action === "REQUEST_STORE_UPDATE") {
+      requestChromeStoreUpdate().then((result) => {
+          sendResponse(result);
+      }).catch((error) => {
+          sendResponse({
+              ok: false,
+              status: "error",
+              message: error && error.message ? error.message : "업데이트 확인에 실패했습니다."
+          });
+      });
+      return true;
+  }
   
   else if (message.action === "INJECT_BYPASS_SCRIPT") {
       if (sender.tab && sender.tab.id) {
@@ -1004,13 +1017,83 @@ async function getExtensionInstallType() {
     }
 }
 
-async function checkUpdateInBackground() {
-    const installType = await getExtensionInstallType();
-    if (installType !== 'development') {
-        chrome.action.setBadgeText({ text: "" });
-        return;
-    }
+let storeUpdateCheckPromise = null;
+let storeUpdateReloadTimer = null;
 
+function requestRuntimeUpdateCheck() {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.requestUpdateCheck((status, details) => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+                reject(new Error(error.message));
+                return;
+            }
+
+            resolve({
+                status,
+                version: details && details.version ? details.version : null
+            });
+        });
+    });
+}
+
+async function requestChromeStoreUpdate() {
+    if (storeUpdateCheckPromise) return storeUpdateCheckPromise;
+
+    const task = (async () => {
+        const installType = await getExtensionInstallType();
+        if (installType !== 'normal') {
+            return {
+                ok: false,
+                status: "unsupported_install_type",
+                installType
+            };
+        }
+
+        if (typeof chrome.runtime.requestUpdateCheck !== 'function') {
+            return {
+                ok: false,
+                status: "unsupported_api"
+            };
+        }
+
+        try {
+            const result = await requestRuntimeUpdateCheck();
+            return {
+                ok: true,
+                status: result.status,
+                version: result.version
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                status: "error",
+                message: error && error.message ? error.message : "업데이트 확인에 실패했습니다."
+            };
+        }
+    })();
+
+    storeUpdateCheckPromise = task;
+    try {
+        return await task;
+    } finally {
+        storeUpdateCheckPromise = null;
+    }
+}
+
+async function scheduleStoreUpdateReload() {
+    if (storeUpdateReloadTimer) return;
+
+    const installType = await getExtensionInstallType();
+    if (installType !== 'normal') return;
+
+    storeUpdateReloadTimer = setTimeout(() => {
+        storeUpdateReloadTimer = null;
+        chrome.runtime.reload();
+    }, 1000);
+}
+
+async function checkUpdateInBackground() {
     const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
     const currentVersion = chrome.runtime.getManifest().version;
     const now = Date.now();
@@ -1025,7 +1108,7 @@ async function checkUpdateInBackground() {
                 if (response.ok) {
                     const latestData = await response.json();
                     chrome.storage.local.set({ lastVersionCheckTime: now, latestVersionInfo: latestData });
-                    if (latestData && latestData.latest_version && latestData.latest_version !== currentVersion) {
+                    if (latestData && isNewerExtensionVersion(latestData.latest_version, currentVersion)) {
                         chrome.action.setBadgeText({ text: "NEW" });
                         chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
                     } else {
@@ -1033,18 +1116,17 @@ async function checkUpdateInBackground() {
                     }
                 }
             } catch (e) {}
-        } else if (data.latestVersionInfo && data.latestVersionInfo.latest_version && data.latestVersionInfo.latest_version !== currentVersion) {
+        } else if (data.latestVersionInfo && isNewerExtensionVersion(data.latestVersionInfo.latest_version, currentVersion)) {
             chrome.action.setBadgeText({ text: "NEW" });
             chrome.action.setBadgeBackgroundColor({ color: "#dc3545" });
+        } else {
+            chrome.action.setBadgeText({ text: "" });
         }
     });
 }
 
 chrome.runtime.onUpdateAvailable.addListener(() => {
-    chrome.management.getSelf((extensionInfo) => {
-        if (chrome.runtime.lastError || extensionInfo.installType !== 'normal') return;
-        chrome.runtime.reload();
-    });
+    scheduleStoreUpdateReload().catch(() => {});
 });
 
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
