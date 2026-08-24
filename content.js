@@ -2051,7 +2051,7 @@ function applyStyleToSingleLink(link) {
     }
 
     // 리스트 퀵 버튼 렌더링 (데이터가 없어도 표기하되, 작성자명 등 오작동 요소는 필터링)
-    const isLikelyTitle = !!newBadgeHTML || siteRes > 0 || siteVol > 0 || siteBodyOriginal.length > 3;
+    const isLikelyTitle = chatingWikiTitle !== null || !!newBadgeHTML || siteRes > 0 || siteVol > 0 || siteBodyOriginal.length > 3;
     if (isShowListQuickBtn && isLikelyTitle && isAllowedBoard) {
         let existingBr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br.list-br');
         let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');

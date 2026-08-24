@@ -310,6 +310,12 @@ function cleanSiteTitle(title) {
             .replace(/https?:\/\/[^\s"'<>]+/gi, ' ');
     }
 
+    // @, 전각 @, ⓒ 뒤의 저자명과 권수 메타데이터를 함께 제거합니다.
+    const authorMarkerMatch = cleaned.match(/[@＠ⓒ]\s*(?=\S)/);
+    if (authorMarkerMatch && authorMarkerMatch.index > 0 && cleaned.substring(0, authorMarkerMatch.index).trim()) {
+        cleaned = cleaned.substring(0, authorMarkerMatch.index);
+    }
+
     if (globalFilters && globalFilters.length > 0) {
         const sortedFilters = [...globalFilters].sort((a, b) => b.length - a.length);
 
