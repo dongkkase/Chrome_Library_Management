@@ -1447,8 +1447,27 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
     });
 }
 
-function removeBadge(link) {
-    if (link.style.textDecoration || link.querySelector(':scope > .book-badge')) {
+function setManagedTitleStyle(target, property, value) {
+    if (!target) return;
+    target.style.setProperty(property, value, "important");
+    target.dataset.bmTitleStyled = "true";
+}
+
+function clearManagedTitleStyles(target) {
+    if (!target || target.dataset.bmTitleStyled !== "true") return false;
+
+    target.style.removeProperty("text-decoration");
+    target.style.removeProperty("color");
+    target.style.removeProperty("font-weight");
+    delete target.dataset.bmTitleStyled;
+    return true;
+}
+
+function removeBadge(link, titleStyleTarget = link) {
+    const clearedLinkStyle = clearManagedTitleStyles(link);
+    const clearedTitleStyle = titleStyleTarget !== link && clearManagedTitleStyles(titleStyleTarget);
+
+    if (clearedLinkStyle || clearedTitleStyle || link.style.textDecoration || link.style.opacity || link.querySelector(':scope > .book-badge')) {
         link.style.removeProperty("text-decoration");
         link.style.removeProperty("color");
         link.style.removeProperty("opacity");
@@ -1813,6 +1832,7 @@ function getListRenderTargets(link) {
     const defaultTargets = {
         badgeTarget: link,
         actionsTarget: link,
+        titleStyleTarget: link,
         usesSeparateTargets: false
     };
 
@@ -1823,11 +1843,14 @@ function getListRenderTargets(link) {
         : link.closest('.cw-board-item__title');
     if (!titleTarget) return defaultTargets;
 
+    const titleStyleTarget = titleTarget.querySelector(':scope > strong') || link;
+
     const nestedTagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags');
     if (nestedTagsTarget) {
         return {
             badgeTarget: titleTarget,
             actionsTarget: nestedTagsTarget,
+            titleStyleTarget,
             usesSeparateTargets: true
         };
     }
@@ -1839,13 +1862,14 @@ function getListRenderTargets(link) {
             return {
                 badgeTarget: titleTarget,
                 actionsTarget: tagsTarget,
+                titleStyleTarget,
                 usesSeparateTargets: true
             };
         }
         itemContainer = itemContainer.parentElement;
     }
 
-    return defaultTargets;
+    return { ...defaultTargets, titleStyleTarget };
 }
 
 function getDetailRenderTargets(detailElement) {
@@ -1875,6 +1899,7 @@ function applyStyleToSingleLink(link) {
     const renderTargets = getListRenderTargets(link);
     const badgeTarget = renderTargets.badgeTarget;
     const actionsTarget = renderTargets.actionsTarget;
+    const titleStyleTarget = renderTargets.titleStyleTarget || link;
 
     if (renderTargets.usesSeparateTargets) {
         link.querySelector(':scope > .book-badge')?.remove();
@@ -1918,7 +1943,7 @@ function applyStyleToSingleLink(link) {
     }
 
     if (link._bmData.skip) {
-        removeBadge(link);
+        removeBadge(link, titleStyleTarget);
         if (renderTargets.usesSeparateTargets) {
             badgeTarget.querySelector(':scope > .book-badge')?.remove();
             actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions')?.remove();
@@ -1979,6 +2004,8 @@ function applyStyleToSingleLink(link) {
             missingHtml = '<span style="background:#7b1010; color:#fff; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px; margin-left:4px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,0.2);">누락:' + mStr + '</span>';
         }
 
+        clearManagedTitleStyles(link);
+        if (titleStyleTarget !== link) clearManagedTitleStyles(titleStyleTarget);
         link.style.removeProperty("background-color");
         link.style.removeProperty("padding");
         link.style.removeProperty("border-radius");
@@ -1988,18 +2015,18 @@ function applyStyleToSingleLink(link) {
         link.style.removeProperty("font-weight");
 
         if (book.type === "exclude") {
-          link.style.setProperty("text-decoration", "line-through", "important");
-          link.style.setProperty("color", "#aaaaaa", "important");
-          link.style.setProperty("font-weight", "normal", "important");
+          setManagedTitleStyle(titleStyleTarget, "text-decoration", "line-through");
+          setManagedTitleStyle(titleStyleTarget, "color", "#aaaaaa");
+          setManagedTitleStyle(titleStyleTarget, "font-weight", "normal");
           link.style.setProperty("opacity", "0.5", "important");
           link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
           newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
           badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
         } else if (book.type === "incomplete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          link.style.setProperty("text-decoration", "none", "important");
-          link.style.setProperty("color", "#d9480f", "important"); 
-          link.style.setProperty("font-weight", "800", "important");
+          setManagedTitleStyle(titleStyleTarget, "text-decoration", "none");
+          setManagedTitleStyle(titleStyleTarget, "color", "#d9480f");
+          setManagedTitleStyle(titleStyleTarget, "font-weight", "800");
           link.style.setProperty("opacity", "1", "important");
           link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
           let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
@@ -2009,25 +2036,25 @@ function applyStyleToSingleLink(link) {
           badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
         } else if (book.type === "complete") {
           const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          link.style.setProperty("text-decoration", "none", "important");
+          setManagedTitleStyle(titleStyleTarget, "text-decoration", "none");
           link.style.setProperty("opacity", "1", "important");
           link.setAttribute("title", "[완결] " + book.title + " (" + displayScore + "%)");
           if (hasUpgrade) {
-              link.style.setProperty("color", "#d9480f", "important"); 
-              link.style.setProperty("font-weight", "800", "important");
+              setManagedTitleStyle(titleStyleTarget, "color", "#d9480f");
+              setManagedTitleStyle(titleStyleTarget, "font-weight", "800");
               let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
               let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
               newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
               badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
           } else {
-              link.style.setProperty("color", "#0056b3", "important"); 
-              link.style.setProperty("font-weight", "600", "important");
+              setManagedTitleStyle(titleStyleTarget, "color", "#0056b3");
+              setManagedTitleStyle(titleStyleTarget, "font-weight", "600");
               newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
               badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
           }
         }
     } else {
-        removeBadge(link);
+        removeBadge(link, titleStyleTarget);
         if (isHideNew) shouldHide = true; // 어느 항목과도 매칭되지 않은 경우(미등록) 신작으로 간주하여 숨김 처리
         if (!shouldHide && isHideTranslate && hasTranslationTag) shouldHide = true;
     }

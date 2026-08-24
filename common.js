@@ -368,6 +368,15 @@ function cleanSiteTitle(title) {
         .replace(/업로드\s*$/g, '')
         .replace(/^\s*\[?웹툰\]?\s*/, '');
 
+    // +가 공백을 대신하고 권수 범위 앞에도 사용된 제목만 제한적으로 정규화합니다.
+    const plusVolumeSeparatorRegex = /\+\s*(?=\d+\s*(?:권|화)?\s*[\~\-～〜〰∼–—_\/&・·･]\s*\d+)/;
+    if (plusVolumeSeparatorRegex.test(cleaned)) {
+        cleaned = cleaned
+            .replace(/([a-zA-Z]\+\+)\+\s*(?=[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥])/g, '$1 ')
+            .replace(/([가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥])\+\s*(?=[a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣぁ-んァ-ヶー一-龥])/g, '$1 ')
+            .replace(plusVolumeSeparatorRegex, ' ');
+    }
+
     cleaned = cleaned.replace(/(?:\s|^)[가-힣a-zA-Z]+\s+(?:그림|글)(?=\s|$)|(?:\s|^)[가-힣a-zA-Z]+\s*(?:원작|지음|작화|번역)(?=\s|$)/g, ' ');
 
     // 권수나 해상도 뒤에 있는 판본명도 잘라내기 전에 별도로 보존합니다.
