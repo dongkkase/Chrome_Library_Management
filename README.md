@@ -1,16 +1,21 @@
 ### 사용가능한 브라우저
 크롬, 크로미움 기반의 모든 브라우저 (Edge, 웨일 등)
 
-### 최초 설치 방법
+### Chrome 웹 스토어 설치
+
+1. [Chrome 웹 스토어](https://chromewebstore.google.com/detail/kjfmielegfhljmjjmhjmidlfdponknpm)에서 확장 프로그램을 설치합니다.
+2. 웹 스토어 설치본은 브라우저의 확장 프로그램 업데이트 기능을 통해 자동으로 업데이트됩니다.
+
+### GitHub 직접 설치
 
 1. [릴리즈](https://github.com/dongkkase/Chrome_Library_Management/releases)에서 최신 버전의 `libmanagement.zip` 파일을 다운로드 받습니다.
-2. 받으신 `libmanagement.zip` 파일의 압축을 해제하여 `libmanagement` 폴더 아래 소스들이 위치하게 합니다..
+2. 받으신 `libmanagement.zip` 파일의 압축을 해제하여 `libmanagement` 폴더 아래 소스들이 위치하게 합니다.
 3. 크롬 주소창에 `chrome://extensions`를 입력하여 이동합니다.
 4. 오른쪽 상단의 `개발자 모드`를 ON으로 켭니다.
 5. 왼쪽 상단의 `압축해제된 확장 프로그램을 로드합니다` 버튼을 클릭합니다.
 6. 압축을 푼 폴더(manifest.json 파일이 있는 폴더)를 선택하면 설치가 완료됩니다.
 
-### 업데이트 방법 (새 버전이 나왔을 때)
+### GitHub 직접 설치본 업데이트
 
 1. [릴리즈](https://github.com/dongkkase/Chrome_Library_Management/releases)에서 최신 버전의 `libmanagement.zip` 파일을 다운로드 받습니다.
 2. 새로 받은 압축 파일의 내용을 기존에 설치했던 폴더에 덮어쓰기 합니다.
@@ -120,5 +125,3 @@
 - 지워지는 '필터 키워드'가 실제 제목인 경우
   - 원인: 프로그램은 지저분한 제목을 정리하기 위해 19금, 15금, 고화질, 완결, e북 같은 단어를 싹 다 지워버립니다.
   - 결과: 만약 실제 책 제목에 저 단어가 포함되어 있다면 (예: 만화 제목이 19금 남녀 인 경우), 19금이 지워지고 남녀만 남아 엉뚱한 작품과 매칭되거나 판별이 안 될 수 있습니다.
-
-

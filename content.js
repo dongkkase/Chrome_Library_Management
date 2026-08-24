@@ -1157,55 +1157,66 @@ function showInfoToast(msg, isError = false) {
   }, 7000);
 }
 
+function showActionToast(message, allowHTML = false) {
+    let container = document.getElementById('book-manager-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'book-manager-toast-container';
+        container.style.cssText = "position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    if (allowHTML) toast.innerHTML = message;
+    else toast.textContent = message;
+    toast.style.cssText = "background: rgba(33, 37, 41, 0.95); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transform: translateY(20px); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); white-space: nowrap; text-align: center;";
+    container.appendChild(toast);
+
+    void toast.offsetWidth;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350);
+    }, 5000);
+}
+
+function escapeToastText(value) {
+    const element = document.createElement('div');
+    element.textContent = String(value || '');
+    return element.innerHTML;
+}
+
 function showToast(book, isDelete = false) {
-  let container = document.getElementById('book-manager-toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'book-manager-toast-container';
-    container.style.cssText = "position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
-    document.body.appendChild(container);
-  }
-  const toast = document.createElement('div');
-  
-  let typeStr = '';
-  let typeColor = '';
+    let typeStr = '';
+    let typeColor = '';
 
-  if (isDelete) {
-      typeStr = '삭제됨';
-      typeColor = '#adb5bd';
-  } else if (book.type === 'exclude') {
-      typeStr = '제외';
-      typeColor = '#ff6b6b';
-  } else if (book.type === 'incomplete') {
-      typeStr = '미완';
-      typeColor = '#ff922b'; 
-  } else if (book.type === 'complete') {
-      typeStr = '완결';
-      typeColor = '#4dabf7'; 
-  }
+    if (isDelete) {
+        typeStr = '삭제됨';
+        typeColor = '#adb5bd';
+    } else if (book.type === 'exclude') {
+        typeStr = '제외';
+        typeColor = '#ff6b6b';
+    } else if (book.type === 'incomplete') {
+        typeStr = '미완';
+        typeColor = '#ff922b';
+    } else if (book.type === 'complete') {
+        typeStr = '완결';
+        typeColor = '#4dabf7';
+    }
 
-  let details = [];
-  if (book.resolution && !isDelete) details.push(book.resolution);
-  if (book.lastVol && !isDelete) details.push(book.lastVol + '권');
-  // 누락 정보 추가 로직
-  if (book.missingVols && book.missingVols.length > 0 && !isDelete) {
-      details.push('누락:' + book.missingVols.join(','));
-  }
-  const detailStr = details.length > 0 ? ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.join(' | ') + ')</span>' : '';
+    const details = [];
+    if (book.resolution && !isDelete) details.push(book.resolution);
+    if (book.lastVol && !isDelete) details.push(book.lastVol + '권');
+    if (book.missingVols && book.missingVols.length > 0 && !isDelete) {
+        details.push('누락:' + book.missingVols.join(','));
+    }
 
-  toast.innerHTML = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + book.title + detailStr;
-  toast.style.cssText = "background: rgba(33, 37, 41, 0.95); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transform: translateY(20px); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); white-space: nowrap; text-align: center;";
-  container.appendChild(toast);
-
-  void toast.offsetWidth;
-  toast.style.opacity = '1';
-  toast.style.transform = 'translateY(0)';
-  
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-10px)';
-    setTimeout(() => { if(toast.parentNode) toast.remove(); }, 350);
-  }, 5000);
+    const detailStr = details.length > 0 ? ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.join(' | ') + ')</span>' : '';
+    const message = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + book.title + detailStr;
+    showActionToast(message, true);
 }
 
 function getBookTypeForTitle(titleStr) {
@@ -1647,6 +1658,8 @@ function createQuickActions(linkData, hasBook) {
                 if (btnInfo.action === 'copy') {
                     const titleToCopy = linkData.pureTitle || (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText);
                     navigator.clipboard.writeText(titleToCopy).then(() => {
+                        const copyMessage = '<span style="color:#b197fc; margin-right:5px;">[복사됨]</span>' + escapeToastText(titleToCopy);
+                        showActionToast(copyMessage, true);
                         const originalText = btn.textContent;
                         const originalColor = btn.style.backgroundColor;
                         btn.textContent = '복사됨!';
@@ -1655,6 +1668,8 @@ function createQuickActions(linkData, hasBook) {
                             btn.textContent = originalText;
                             btn.style.backgroundColor = originalColor;
                         }, 1500);
+                    }).catch(() => {
+                        showInfoToast("제목 복사에 실패했습니다.", true);
                     });
                     return;
                 }

@@ -994,7 +994,23 @@ async function createDailySnapshot() {
     } catch (e) { console.error("Snapshot creation failed:", e); }
 }
 
-function checkUpdateInBackground() {
+async function getExtensionInstallType() {
+    try {
+        const extensionInfo = await chrome.management.getSelf();
+        return extensionInfo.installType;
+    } catch (error) {
+        console.warn("설치 유형 확인 실패:", error);
+        return null;
+    }
+}
+
+async function checkUpdateInBackground() {
+    const installType = await getExtensionInstallType();
+    if (installType !== 'development') {
+        chrome.action.setBadgeText({ text: "" });
+        return;
+    }
+
     const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
     const currentVersion = chrome.runtime.getManifest().version;
     const now = Date.now();
@@ -1023,6 +1039,13 @@ function checkUpdateInBackground() {
         }
     });
 }
+
+chrome.runtime.onUpdateAvailable.addListener(() => {
+    chrome.management.getSelf((extensionInfo) => {
+        if (chrome.runtime.lastError || extensionInfo.installType !== 'normal') return;
+        chrome.runtime.reload();
+    });
+});
 
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
 chrome.storage.onChanged.addListener((changes, areaName) => {

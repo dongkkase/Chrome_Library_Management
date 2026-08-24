@@ -1515,11 +1515,20 @@ async function initVersionCheck() {
     if (!isManualInstall) {
         if (manualBtn) manualBtn.style.display = 'none';
         if (updateLink) updateLink.style.display = 'none';
-        if (statusMsg) statusMsg.style.display = 'none';
+        if (statusMsg) {
+            statusMsg.textContent = extensionInfo.installType === 'normal'
+                ? "Chrome 웹 스토어 자동 업데이트"
+                : "브라우저 관리 업데이트";
+            statusMsg.style.color = "#28a745";
+            statusMsg.style.display = 'inline-block';
+        }
         return;
     }
 
-    if (manualBtn) manualBtn.style.display = 'inline-block';
+    if (manualBtn) {
+        manualBtn.textContent = "GitHub 업데이트 확인";
+        manualBtn.style.display = 'inline-block';
+    }
 
     const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
 
