@@ -1,5 +1,5 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
-const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], missingVolsMap: {}, editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], missingVolsMap: {}, titleCorrections: {}, editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
 
 function isExtensionContextValid() {
     try {
@@ -473,6 +473,7 @@ let isTargetSite = false;
 let exactMatchCache = {};
 let cachedBookList = [];
 let isDataLoaded = false;
+let titleCorrections = {};
 
 let similarityCache = {};
 let lastRightClickedLink = null; 
@@ -497,6 +498,73 @@ let isBoardJS2Scheduled = false;
 const boardJS2BatchSize = 4;
 const boardJS2ProcessDelay = 120;
 const boardJS2TargetSelector = ".board-thumbnail img, img.board-thumbnail, .list-subject>div>a>img";
+
+function normalizeTitleCorrectionKeyPart(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getTitleCorrectionKey(autoTitle) {
+    const host = window.location.hostname.replace(/^www\./i, '').toLowerCase();
+    const normalizedTitle = normalizeTitleCorrectionKeyPart(autoTitle);
+    return normalizedTitle ? `${host}::${normalizedTitle}` : '';
+}
+
+function getResolvedSiteTitle(originalText) {
+    const autoTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : String(originalText || '').trim();
+    const correctionKey = getTitleCorrectionKey(autoTitle);
+    const globalCorrectionKey = correctionKey ? correctionKey.replace(/^[^:]+::/, '*::') : '';
+    const siteCorrection = correctionKey && typeof titleCorrections[correctionKey] === 'string'
+        ? titleCorrections[correctionKey].trim()
+        : '';
+    const globalCorrection = globalCorrectionKey && typeof titleCorrections[globalCorrectionKey] === 'string'
+        ? titleCorrections[globalCorrectionKey].trim()
+        : '';
+    const correctedTitle = siteCorrection || globalCorrection;
+
+    return {
+        title: correctedTitle || autoTitle,
+        autoTitle,
+        correctionKey,
+        isCorrected: !!correctedTitle
+    };
+}
+
+function getResolvedLinkTitle(linkData) {
+    if (linkData && linkData.originalText !== undefined) {
+        return getResolvedSiteTitle(linkData.originalText);
+    }
+
+    const fallbackTitle = linkData && linkData.pureTitle ? linkData.pureTitle : '';
+    return {
+        title: fallbackTitle,
+        autoTitle: fallbackTitle,
+        correctionKey: getTitleCorrectionKey(fallbackTitle),
+        isCorrected: false
+    };
+}
+
+function invalidateTitleCorrectionRenderCache() {
+    similarityCache = {};
+    document.querySelectorAll(globalTargetSelector).forEach(el => {
+        if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
+        else if (el.querySelectorAll) {
+            el.querySelectorAll('a').forEach(a => {
+                if (a._bmData) a._bmData.raw = null;
+            });
+        }
+    });
+    if (globalDetailSelector) {
+        document.querySelectorAll(globalDetailSelector).forEach(el => {
+            if (el._bmDetailData) el._bmDetailData.raw = null;
+        });
+    }
+    document.querySelectorAll('.bm-quick-actions').forEach(actions => actions.remove());
+    debouncedApplyStyles();
+}
 
 function removeVQuery(query) {
     if (!query) return '';
@@ -726,6 +794,9 @@ function initDataCache(data) {
     const previousBoardJS2 = globalBoardJS2;
 
     setEditionKeywords(data.editionKeywords);
+    titleCorrections = data.titleCorrections && typeof data.titleCorrections === 'object'
+        ? data.titleCorrections
+        : {};
     const currentEditionSignature = getEditionKeywordsSignature();
     if (titleProcessingEditionSignature !== currentEditionSignature) {
         titleProcessingCache.clear();
@@ -1272,12 +1343,12 @@ function injectDirectDownloadButtons(allowedDLs) {
                 let rawText = temp.textContent;
                 // if (rawText.includes('번역')) hasTranslation = true;
                 if (/번역|AI/i.test(rawText)) hasTranslation = true;
-                let title = cleanSiteTitle(rawText);
+                let title = getResolvedSiteTitle(rawText).title;
                 let skip = false;
                 if (!title || title.length < 1) skip = true;
                 else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
                 else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
-                if (!skip) return { title: title, hasTranslation: hasTranslation };
+                if (!skip) return { title: title, hasTranslation: hasTranslation, sourceText: rawText };
             }
         }
 
@@ -1289,18 +1360,18 @@ function injectDirectDownloadButtons(allowedDLs) {
             let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
             // if (rawText.includes('번역')) hasTranslation = true;
             if (/번역|AI/i.test(rawText)) hasTranslation = true;
-            let title = cleanSiteTitle(rawText);
+            let title = getResolvedSiteTitle(rawText).title;
             let skip = false;
             if (!title || title.length < 1) skip = true;
             else if (!isSupportSingleCharEnabled && title.length < 2) skip = true;
             else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
-            if (!skip) return { title: title, hasTranslation: hasTranslation };
+            if (!skip) return { title: title, hasTranslation: hasTranslation, sourceText: rawText };
         }
 
         let pageTitle = document.title.split(/[-|]/)[0]; 
         // if (pageTitle.includes('번역')) hasTranslation = true;
         if (/번역|AI/i.test(pageTitle)) hasTranslation = true;
-        return { title: cleanSiteTitle(pageTitle) || "알수없는제목", hasTranslation: hasTranslation };
+        return { title: getResolvedSiteTitle(pageTitle).title || "알수없는제목", hasTranslation: hasTranslation, sourceText: pageTitle };
     }
 
     function extractPassword(element) {
@@ -1323,7 +1394,7 @@ function injectDirectDownloadButtons(allowedDLs) {
         return "";
     }
 
-function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTranslation) {
+function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTranslation, sourceTitleText) {
         if (insertAfterElement.nextElementSibling && insertAfterElement.nextElementSibling.classList.contains('auto-dl-btn')) return;
         
         const autoBtn = document.createElement('a');
@@ -1356,11 +1427,14 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
             showInfoToast(`🚀 ${platformName} 서버로 직접 다운로드를 요청합니다...`);
             
             try {
-                let finalTitle = bookTitle;
+                const effectiveBookTitle = sourceTitleText
+                    ? getResolvedSiteTitle(sourceTitleText).title || bookTitle
+                    : bookTitle;
+                let finalTitle = effectiveBookTitle;
                 if (hasTranslation) finalTitle += "(번역)";
-                let bType = getBookTypeForTitle(bookTitle);
+                let bType = getBookTypeForTitle(effectiveBookTitle);
                 if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
-                const match = bookTitle ? findMatchingBook(getTitleMatchParts(bookTitle)) : { book: null };
+                const match = effectiveBookTitle ? findMatchingBook(getTitleMatchParts(effectiveBookTitle)) : { book: null };
                 const matchedBook = match && match.book ? match.book : null;
                 const downloadFolder = buildDownloadFolder(matchedBook && matchedBook.folderRule, finalTitle);
                 sendRuntimeMessage({
@@ -1407,7 +1481,7 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
             if(targetType){
                 let pw = extractPassword(link);
                 let extracted = extractTargetBookTitle(link);
-                createButton(link, url, pw, targetType, extracted.title, extracted.hasTranslation);
+                createButton(link, url, pw, targetType, extracted.title, extracted.hasTranslation, extracted.sourceText);
             }
         }
     });
@@ -1448,7 +1522,7 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
             if(targetType){
                 let pw = extractPassword(btn);
                 let extracted = extractTargetBookTitle(btn);
-                createButton(btn, url, pw, targetType, extracted.title, extracted.hasTranslation);
+                createButton(btn, url, pw, targetType, extracted.title, extracted.hasTranslation, extracted.sourceText);
             }
         }
     });
@@ -1675,7 +1749,8 @@ function createQuickActions(linkData, hasBook) {
         { label: '누락관리', color: '#f06595', action: 'missing_vol', display: hasBook },
         { label: '구글검색', color: '#20c997', action: 'search' },
         { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
-        { label: '에브리띵검색', color: '#495057', action: 'everything_search', display: true }
+        { label: '에브리띵검색', color: '#495057', action: 'everything_search', display: true },
+        { label: '제목정정', color: '#5c7cfa', action: 'correct_title', display: hasBook }
     ];
 
     buttons.forEach(btnInfo => {
@@ -1692,8 +1767,53 @@ function createQuickActions(linkData, hasBook) {
             e.stopPropagation();
             
             try {
+                const resolvedTitle = getResolvedLinkTitle(linkData);
+                const actionTitle = resolvedTitle.title;
+
+                if (btnInfo.action === 'correct_title') {
+                    const matched = actionTitle ? findMatchingBook(getTitleMatchParts(actionTitle)) : { book: null };
+                    const suggestedTitle = matched && matched.book ? matched.book.title : actionTitle;
+                    const inputTitle = window.prompt(
+                        '정정할 제목을 입력하세요.\n빈 값으로 확인하면 저장된 정정 제목을 삭제합니다.',
+                        suggestedTitle || ''
+                    );
+                    if (inputTitle === null || !resolvedTitle.correctionKey) return;
+
+                    const correctedTitle = inputTitle.trim();
+                    safeStorageGet({ bookList: [], titleCorrections: {} }, (data) => {
+                        const nextCorrections = { ...(data.titleCorrections || {}) };
+                        if (correctedTitle) nextCorrections[resolvedTitle.correctionKey] = correctedTitle;
+                        else delete nextCorrections[resolvedTitle.correctionKey];
+
+                        let updatedBookList = Array.isArray(data.bookList) ? data.bookList : [];
+                        if (correctedTitle && matched && matched.book) {
+                            const matchedBookId = matched.book.id;
+                            const matchedBookKey = matched.book._matchKey || getTitleMatchParts(matched.book.title || '').matchKey;
+                            const now = new Date().toISOString();
+                            updatedBookList = updatedBookList.map(book => {
+                                const isSameBook = matchedBookId !== undefined && matchedBookId !== null
+                                    ? book.id === matchedBookId
+                                    : getTitleMatchParts(book.title || '').matchKey === matchedBookKey;
+                                return isSameBook ? { ...book, title: correctedTitle, date: now } : book;
+                            });
+                        }
+
+                        titleCorrections = nextCorrections;
+                        invalidateTitleCorrectionRenderCache();
+                        const valuesToSave = { titleCorrections: nextCorrections };
+                        if (correctedTitle) valuesToSave.bookList = updatedBookList;
+                        safeStorageSet(valuesToSave, () => {
+                            const message = correctedTitle
+                                ? '<span style="color:#74c0fc; margin-right:5px;">[제목 정정]</span>' + escapeToastText(correctedTitle)
+                                : '<span style="color:#adb5bd;">저장된 제목 정정을 삭제했습니다.</span>';
+                            showActionToast(message, true);
+                        });
+                    });
+                    return;
+                }
+
                 if (btnInfo.action === 'copy') {
-                    const titleToCopy = linkData.pureTitle || (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText);
+                    const titleToCopy = actionTitle;
                     navigator.clipboard.writeText(titleToCopy).then(() => {
                         const copyMessage = '<span style="color:#b197fc; margin-right:5px;">[복사됨]</span>' + escapeToastText(titleToCopy);
                         showActionToast(copyMessage, true);
@@ -1716,7 +1836,7 @@ function createQuickActions(linkData, hasBook) {
                         showInfoToast("⚠️ [사이트 및 설정] 탭에서 '에브리띵 연결' 옵션을 먼저 체크해주세요.", true);
                         return;
                     }
-                    const cleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const cleanTitle = actionTitle;
                     const everythingSearchTitle = stripEditionTagsForEverythingSearch(cleanTitle);
                     let iframe = document.getElementById('bm-everything-iframe');
                     if (!iframe) {
@@ -1730,7 +1850,7 @@ function createQuickActions(linkData, hasBook) {
                 }
 
                 if (btnInfo.action === 'missing_vol') {
-                    const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const pureCleanTitle = actionTitle;
                     const targetMatchKey = getTitleMatchParts(pureCleanTitle).matchKey;
                     openMissingPopoverContent(targetMatchKey, btn);
                     return;
@@ -1750,12 +1870,13 @@ function createQuickActions(linkData, hasBook) {
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         cleanTitle: btnInfo.action === 'everything_search'
-                            ? stripEditionTagsForEverythingSearch(typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
-                            : (typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText)
+                            ? stripEditionTagsForEverythingSearch(actionTitle)
+                            : actionTitle,
+                        useExactTitle: resolvedTitle.isCorrected
                     });
                 } else {
                     // [낙관적 UI] 삭제 포함 즉시 캐시 갱신
-                    const pureCleanTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(linkData.originalText) : linkData.originalText;
+                    const pureCleanTitle = actionTitle;
                     const titleParts = getTitleMatchParts(pureCleanTitle);
                     const targetMatchKey = titleParts.matchKey;
                     
@@ -1810,6 +1931,7 @@ function createQuickActions(linkData, hasBook) {
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         cleanTitle: pureCleanTitle,
+                        useExactTitle: resolvedTitle.isCorrected,
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
                     });
@@ -1916,7 +2038,8 @@ function applyStyleToSingleLink(link) {
     
     if (!link._bmData || link._bmData.raw !== currentRawText) {
         const originalText = getPureLinkText(link);
-        const pureTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : originalText;
+        const resolvedTitle = getResolvedSiteTitle(originalText);
+        const pureTitle = resolvedTitle.title;
         
         let skip = false;
         if (pureTitle.length < 1) skip = true;
@@ -1942,7 +2065,7 @@ function applyStyleToSingleLink(link) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            link._bmData = { skip: false, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
+            link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 
@@ -2188,7 +2311,8 @@ function applyStyleToDetailElement(el) {
     
     if (!el._bmDetailData || el._bmDetailData.raw !== currentRawText) {
         const originalText = getPureLinkText(el);
-        const pureTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : originalText;
+        const resolvedTitle = getResolvedSiteTitle(originalText);
+        const pureTitle = resolvedTitle.title;
         
         let skip = false;
         if (pureTitle.length < 1) skip = true;
@@ -2214,7 +2338,7 @@ function applyStyleToDetailElement(el) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            el._bmDetailData = { skip: false, pureTitle, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
+            el._bmDetailData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 

@@ -122,6 +122,14 @@ let folderRulePreview;
 let activeFolderRuleInput = null;
 let folderRulePreviewHideTimer;
 
+function normalizeTitleCorrectionKeyPart(value) {
+    return String(value || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function ensureFolderRulePreview() {
     if (folderRulePreview) return folderRulePreview;
 
@@ -483,7 +491,12 @@ function renderList(filter = "", resetPage = false) {
               <option value="complete" ${book.type==='complete'?'selected':''}>완결</option>
             </select>
           </td>
-          <td><input type="text" class="edit-title" value="${book.title}" data-id="${book.id}"></td>
+          <td>
+            <div class="title-correction-editor">
+              <input type="text" class="edit-title" value="${book.title}" data-id="${book.id}">
+              <button type="button" class="btn-title-correction-bulk" data-id="${book.id}">제목정정</button>
+            </div>
+          </td>
           <td>
             <div class="folder-rule-editor">
               <input type="text" class="edit-folder-rule" value="${book.folderRule || ''}" data-id="${book.id}" placeholder="상위 폴더 규칙">
@@ -561,10 +574,10 @@ function renderPagination() {
     container.appendChild(createBtn('»', totalPages, currentPage === totalPages));
 }
 
-function saveWithUndo(newList, successMsg) {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-        chrome.storage.local.set({ backupList: data.bookList }, () => {
-            chrome.storage.local.set({ bookList: newList }, () => {
+function saveWithUndo(newList, successMsg, additionalValues = {}) {
+    chrome.storage.local.get({ bookList: [], titleCorrections: {} }, (data) => {
+        chrome.storage.local.set({ backupList: data.bookList, backupTitleCorrections: data.titleCorrections }, () => {
+            chrome.storage.local.set({ bookList: newList, ...additionalValues }, () => {
                 if (successMsg) showInfoToast(successMsg);
                 // 수정/삭제 후 현재 페이지 유지 (false 전달)
                 renderList(document.getElementById('searchInput').value, false); 
@@ -578,9 +591,9 @@ function saveWithUndo(newList, successMsg) {
 }
 
 document.getElementById('undoBtn').onclick = () => {
-    chrome.storage.local.get({ backupList: null }, (data) => {
+    chrome.storage.local.get({ backupList: null, backupTitleCorrections: {} }, (data) => {
         if (data.backupList) {
-            chrome.storage.local.set({ bookList: data.backupList }, () => {
+            chrome.storage.local.set({ bookList: data.backupList, titleCorrections: data.backupTitleCorrections }, () => {
                 showInfoToast('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
                 renderList(document.getElementById('searchInput').value, false);
                 document.getElementById('undoBtn').style.display = 'none';
@@ -991,6 +1004,50 @@ document.body.onclick = (e) => {
         };
         saveWithUndo(list, '✅ 수정이 완료되었습니다.');
       }
+    });
+  } else if (id && e.target.classList.contains('btn-title-correction-bulk')) {
+    chrome.storage.local.get({ bookList: [], titleCorrections: {} }, (data) => {
+        const list = Array.isArray(data.bookList) ? data.bookList : [];
+        const baseIndex = list.findIndex(b => b.id === id);
+        if (baseIndex < 0) return;
+
+        const row = e.target.closest('tr');
+        if (!row) return;
+
+        const nextTitle = (row.querySelector('.edit-title')?.value || '').trim();
+        const baseTitle = String(list[baseIndex].title || '').trim();
+        if (!nextTitle) {
+            showInfoToast('❌ 제목은 비워둘 수 없습니다!', true);
+            return;
+        }
+        if (baseTitle === nextTitle) {
+            showInfoToast('⚠️ 변경값이 동일해 제목을 정정할 대상이 없습니다.');
+            return;
+        }
+
+        const targetCount = list.filter(book => String(book.title || '').trim() === baseTitle).length;
+        if (targetCount <= 0) return;
+        if (!confirm(`"${baseTitle}" 제목으로 등록된 ${targetCount}건을 "${nextTitle}"(으)로 정정할까요?`)) return;
+
+        const now = new Date().toISOString();
+        const updatedList = list.map(book => {
+            if (String(book.title || '').trim() !== baseTitle) return book;
+            return { ...book, title: nextTitle, date: now };
+        });
+        const nextCorrections = { ...(data.titleCorrections || {}) };
+        Object.keys(nextCorrections).forEach(key => {
+            if (String(nextCorrections[key] || '').trim() === baseTitle) {
+                nextCorrections[key] = nextTitle;
+            }
+        });
+        const globalCorrectionKey = `*::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
+        nextCorrections[globalCorrectionKey] = nextTitle;
+
+        saveWithUndo(
+            updatedList,
+            `✅ ${targetCount}건의 도서 제목을 "${nextTitle}"(으)로 정정했습니다.`,
+            { titleCorrections: nextCorrections }
+        );
     });
   } else if (id && e.target.classList.contains('btn-folder-rule-bulk')) {
     chrome.storage.local.get({ bookList: [] }, (data) => {

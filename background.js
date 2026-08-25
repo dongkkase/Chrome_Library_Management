@@ -311,7 +311,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   else if (message.action === "QUICK_ACTION") {
       const tabId = sender.tab ? sender.tab.id : null;
-      const sanitizedTitle = sanitizeBookTitleForStorage(message.cleanTitle);
+      const sanitizedTitle = message.useExactTitle
+          ? normalizeExactBookTitle(message.cleanTitle)
+          : sanitizeBookTitleForStorage(message.cleanTitle);
       
       if (message.type === "search") {
           chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(sanitizedTitle) }).catch(() => {});
@@ -1182,6 +1184,17 @@ function sanitizeBookTitleForStorage(title) {
             .replace(/</g, '(')
             .replace(/>/g, ')')
     );
+}
+
+function normalizeExactBookTitle(title) {
+    return String(title || '')
+        .replace(/&lt;/gi, '(')
+        .replace(/&gt;/gi, ')')
+        .replace(/</g, '(')
+        .replace(/>/g, ')')
+        .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function stripEditionTagsForEverythingSearch(title) {
