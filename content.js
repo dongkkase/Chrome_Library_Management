@@ -513,24 +513,68 @@ function getTitleCorrectionKey(autoTitle) {
     return normalizedTitle ? `${host}::${normalizedTitle}` : '';
 }
 
+function normalizeStoredTitleCorrection(value) {
+    if (typeof value === 'string') {
+        const correctedTitle = value.trim();
+        return correctedTitle ? { correctedTitle, bookId: null, editionKey: '' } : null;
+    }
+    if (!value || typeof value !== 'object') return null;
+
+    const correctedTitle = String(value.correctedTitle || value.title || '').trim();
+    if (!correctedTitle) return null;
+    return {
+        correctedTitle,
+        bookId: value.bookId ?? null,
+        editionKey: String(value.editionKey || '').trim()
+    };
+}
+
 function getResolvedSiteTitle(originalText) {
-    const autoTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : String(originalText || '').trim();
+    const cleanedAutoTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : String(originalText || '').trim();
+    const sourceTitleParts = getTitleMatchParts(String(originalText || ''));
+    const sourceEditionKeys = sourceTitleParts.editionKey ? sourceTitleParts.editionKey.split('|') : [];
+    const hasTranslationEdition = sourceEditionKeys.includes(TRANSLATION_EDITION_KEY);
+    const baseAutoTitle = hasTranslationEdition ? stripTranslationEditionMarkers(cleanedAutoTitle) : cleanedAutoTitle;
+    const autoTitle = hasTranslationEdition && baseAutoTitle
+        ? `${baseAutoTitle}(번역판)`
+        : baseAutoTitle;
     const correctionKey = getTitleCorrectionKey(autoTitle);
     const globalCorrectionKey = correctionKey ? correctionKey.replace(/^[^:]+::/, '*::') : '';
-    const siteCorrection = correctionKey && typeof titleCorrections[correctionKey] === 'string'
-        ? titleCorrections[correctionKey].trim()
-        : '';
-    const globalCorrection = globalCorrectionKey && typeof titleCorrections[globalCorrectionKey] === 'string'
-        ? titleCorrections[globalCorrectionKey].trim()
-        : '';
-    const correctedTitle = siteCorrection || globalCorrection;
+    const siteCorrection = correctionKey ? normalizeStoredTitleCorrection(titleCorrections[correctionKey]) : null;
+    const globalCorrection = globalCorrectionKey ? normalizeStoredTitleCorrection(titleCorrections[globalCorrectionKey]) : null;
+    const correction = siteCorrection || globalCorrection;
 
     return {
-        title: correctedTitle || autoTitle,
+        title: correction ? correction.correctedTitle : autoTitle,
         autoTitle,
         correctionKey,
-        isCorrected: !!correctedTitle
+        appliedCorrectionKey: siteCorrection ? correctionKey : (globalCorrection ? globalCorrectionKey : ''),
+        isCorrected: !!correction,
+        bookId: correction ? correction.bookId : null,
+        editionKey: correction && correction.editionKey ? correction.editionKey : sourceTitleParts.editionKey,
+        sourceEditionKey: sourceTitleParts.editionKey,
+        sourceEditionState: sourceTitleParts.editionState
     };
+}
+
+function getResolvedTitleMatchParts(resolvedTitle) {
+    const titleParts = getTitleMatchParts(resolvedTitle && resolvedTitle.title ? resolvedTitle.title : '');
+    const resolvedEditionKey = resolvedTitle && (resolvedTitle.editionKey || resolvedTitle.sourceEditionKey)
+        ? String(resolvedTitle.editionKey || resolvedTitle.sourceEditionKey)
+        : '';
+    if (resolvedEditionKey) {
+        const combinedEditionKeys = new Set([
+            ...(titleParts.editionKey ? titleParts.editionKey.split('|') : []),
+            ...resolvedEditionKey.split('|')
+        ].filter(Boolean));
+        titleParts.editionKey = Array.from(combinedEditionKeys).sort().join('|');
+        titleParts.editionState = 'positive';
+        titleParts.matchKey = `${titleParts.baseNoSpace}::${titleParts.editionKey}`;
+    }
+    if (titleParts.editionState === 'unknown' && resolvedTitle && resolvedTitle.sourceEditionState === 'standard') {
+        titleParts.editionState = 'standard';
+    }
+    return titleParts;
 }
 
 function getResolvedLinkTitle(linkData) {
@@ -543,7 +587,12 @@ function getResolvedLinkTitle(linkData) {
         title: fallbackTitle,
         autoTitle: fallbackTitle,
         correctionKey: getTitleCorrectionKey(fallbackTitle),
-        isCorrected: false
+        appliedCorrectionKey: '',
+        isCorrected: false,
+        bookId: null,
+        editionKey: '',
+        sourceEditionKey: '',
+        sourceEditionState: 'unknown'
     };
 }
 
@@ -875,24 +924,26 @@ function initDataCache(data) {
     similarityCache = {}; 
 
     cachedBookList = (Array.isArray(data.bookList) ? data.bookList : []).map(b => {
-        let processedOriginal, processedNoSpace, editionKey, matchKey;
+        let processedOriginal, processedNoSpace, editionKey, editionState, matchKey;
         
         if (titleProcessingCache.has(b.title)) {
             const cached = titleProcessingCache.get(b.title);
             processedOriginal = cached.original;
             processedNoSpace = cached.nospace;
             editionKey = cached.editionKey;
+            editionState = cached.editionState;
             matchKey = cached.matchKey;
         } else {
             const titleParts = getTitleMatchParts(b.title);
             processedOriginal = titleParts.baseOriginal;
             processedNoSpace = titleParts.baseNoSpace;
             editionKey = titleParts.editionKey;
+            editionState = titleParts.editionState === 'unknown' ? 'standard' : titleParts.editionState;
             matchKey = titleParts.matchKey;
-            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace, editionKey, matchKey });
+            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace, editionKey, editionState, matchKey });
         }
 
-        const enhanced = { ...b, missingVols: getBookMissingVols(b, data.missingVolsMap), _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _matchKey: matchKey };
+        const enhanced = { ...b, missingVols: getBookMissingVols(b, data.missingVolsMap), _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _editionState: editionState || 'standard', _matchKey: matchKey };
         if(!exactMatchCache[matchKey]) exactMatchCache[matchKey] = enhanced;
         return enhanced;
     });
@@ -1176,34 +1227,86 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
   return calculateLevenshtein(regBody, siteBody);
 }
 
-function findMatchingBook(titleParts) {
+function findMatchingBook(titleParts, preferredBookId = null) {
     const { baseOriginal, baseNoSpace, editionKey, matchKey } = titleParts;
+    const editionState = titleParts.editionState || (editionKey ? 'positive' : 'unknown');
 
-    if (exactMatchCache[matchKey]) {
+    if (preferredBookId !== null && preferredBookId !== undefined) {
+        const preferredBook = cachedBookList.find(candidate => String(candidate.id) === String(preferredBookId));
+        if (preferredBook) return { book: preferredBook, maxScore: 100, candidates: [] };
+    }
+
+    const exactBook = exactMatchCache[matchKey];
+    const isExactCompatible = exactBook && (
+        editionState === 'positive'
+            ? exactBook._editionKey === editionKey
+            : editionState === 'standard'
+                ? exactBook._editionState === 'standard'
+                : false
+    );
+    if (isExactCompatible) {
         return { book: exactMatchCache[matchKey], maxScore: 100 };
     }
-    if (similarityCache[matchKey] !== undefined) {
-        return similarityCache[matchKey];
+    const cacheKey = `${matchKey}::edition-state=${editionState}`;
+    if (similarityCache[cacheKey] !== undefined) {
+        return similarityCache[cacheKey];
     }
 
-    let book = null;
-    let maxScore = 0;
+    const isCompatibleEdition = candidate => {
+        if (editionState === 'positive') return candidate._editionKey === editionKey;
+        if (editionState === 'standard') return candidate._editionState === 'standard';
+        return true;
+    };
+    const getEditionGroup = candidate => candidate._editionKey || 'standard';
+    const exactBaseCandidates = cachedBookList.filter(candidate =>
+        candidate._regBodyNoSpace === baseNoSpace && isCompatibleEdition(candidate)
+    );
 
-    for (let i = cachedBookList.length - 1; i >= 0; i--) {
-        const candidate = cachedBookList[i];
-        if (candidate._editionKey !== editionKey) continue;
-        if (Math.abs(candidate._regBodyNoSpace.length - baseNoSpace.length) > Math.min(candidate._regBodyNoSpace.length, baseNoSpace.length) * 2.5) continue;
-
-        const score = getSimilarity(candidate._regBodyOriginal, baseOriginal);
-        if (score >= 85 && score > maxScore) {
-            maxScore = score;
-            book = candidate;
-            if (score === 100) break;
+    if (editionState === 'unknown' && exactBaseCandidates.length > 0) {
+        const editionGroups = new Map();
+        exactBaseCandidates.forEach(candidate => {
+            if (!editionGroups.has(getEditionGroup(candidate))) editionGroups.set(getEditionGroup(candidate), candidate);
+        });
+        if (editionGroups.size > 1) {
+            const result = { book: null, maxScore: 0, candidates: Array.from(editionGroups.values()), ambiguous: true };
+            similarityCache[cacheKey] = result;
+            return result;
         }
     }
 
-    const result = { book, maxScore };
-    similarityCache[matchKey] = result;
+    if (exactBaseCandidates.length > 0) {
+        const result = { book: exactBaseCandidates[exactBaseCandidates.length - 1], maxScore: 100, candidates: [] };
+        similarityCache[cacheKey] = result;
+        return result;
+    }
+
+    const bestByEdition = new Map();
+
+    for (let i = cachedBookList.length - 1; i >= 0; i--) {
+        const candidate = cachedBookList[i];
+        if (!isCompatibleEdition(candidate)) continue;
+        if (Math.abs(candidate._regBodyNoSpace.length - baseNoSpace.length) > Math.min(candidate._regBodyNoSpace.length, baseNoSpace.length) * 2.5) continue;
+
+        const score = getSimilarity(candidate._regBodyOriginal, baseOriginal);
+        if (score >= 85) {
+            const groupKey = getEditionGroup(candidate);
+            const currentBest = bestByEdition.get(groupKey);
+            if (!currentBest || score > currentBest.score) bestByEdition.set(groupKey, { book: candidate, score });
+        }
+    }
+
+    if (editionState === 'unknown' && bestByEdition.size > 1) {
+        const candidates = Array.from(bestByEdition.values())
+            .sort((a, b) => b.score - a.score)
+            .map(item => item.book);
+        const result = { book: null, maxScore: 0, candidates, ambiguous: true };
+        similarityCache[cacheKey] = result;
+        return result;
+    }
+
+    const bestMatch = Array.from(bestByEdition.values()).sort((a, b) => b.score - a.score)[0] || null;
+    const result = { book: bestMatch ? bestMatch.book : null, maxScore: bestMatch ? bestMatch.score : 0, candidates: [] };
+    similarityCache[cacheKey] = result;
     return result;
 }
 
@@ -1308,10 +1411,10 @@ function showToast(book, isDelete = false) {
     showActionToast(message, true);
 }
 
-function getBookTypeForTitle(titleStr) {
+function getBookTypeForTitle(titleStr, preferredBookId = null) {
     if (!isDataLoaded || !titleStr) return null;
 
-    const match = findMatchingBook(getTitleMatchParts(titleStr));
+    const match = findMatchingBook(getTitleMatchParts(titleStr), preferredBookId);
     return match.book ? match.book.type : null;
 }
 
@@ -1341,8 +1444,7 @@ function injectDirectDownloadButtons(allowedDLs) {
                 temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
                 temp.querySelectorAll('.bm-quick-actions, .book-badge, button, .auto-dl-btn').forEach(e => e.remove());
                 let rawText = temp.textContent;
-                // if (rawText.includes('번역')) hasTranslation = true;
-                if (/번역|AI/i.test(rawText)) hasTranslation = true;
+                if (hasTranslationEditionMarker(rawText)) hasTranslation = true;
                 let title = getResolvedSiteTitle(rawText).title;
                 let skip = false;
                 if (!title || title.length < 1) skip = true;
@@ -1358,8 +1460,7 @@ function injectDirectDownloadButtons(allowedDLs) {
             temp.innerHTML = container.innerHTML.replace(/<img[^>]*>/gi, '');
             temp.querySelectorAll('.bm-quick-actions, .book-badge, .auto-dl-btn, button, .count').forEach(e => e.remove());
             let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
-            // if (rawText.includes('번역')) hasTranslation = true;
-            if (/번역|AI/i.test(rawText)) hasTranslation = true;
+            if (hasTranslationEditionMarker(rawText)) hasTranslation = true;
             let title = getResolvedSiteTitle(rawText).title;
             let skip = false;
             if (!title || title.length < 1) skip = true;
@@ -1369,8 +1470,7 @@ function injectDirectDownloadButtons(allowedDLs) {
         }
 
         let pageTitle = document.title.split(/[-|]/)[0]; 
-        // if (pageTitle.includes('번역')) hasTranslation = true;
-        if (/번역|AI/i.test(pageTitle)) hasTranslation = true;
+        if (hasTranslationEditionMarker(pageTitle)) hasTranslation = true;
         return { title: getResolvedSiteTitle(pageTitle).title || "알수없는제목", hasTranslation: hasTranslation, sourceText: pageTitle };
     }
 
@@ -1427,15 +1527,23 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
             showInfoToast(`🚀 ${platformName} 서버로 직접 다운로드를 요청합니다...`);
             
             try {
-                const effectiveBookTitle = sourceTitleText
-                    ? getResolvedSiteTitle(sourceTitleText).title || bookTitle
-                    : bookTitle;
+                const resolvedDownloadTitle = sourceTitleText ? getResolvedSiteTitle(sourceTitleText) : null;
+                const effectiveBookTitle = resolvedDownloadTitle ? resolvedDownloadTitle.title || bookTitle : bookTitle;
+                let downloadTitleParts = resolvedDownloadTitle
+                    ? getResolvedTitleMatchParts(resolvedDownloadTitle)
+                    : getTitleMatchParts(effectiveBookTitle);
                 let finalTitle = effectiveBookTitle;
-                if (hasTranslation) finalTitle += "(번역)";
-                let bType = getBookTypeForTitle(effectiveBookTitle);
-                if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
-                const match = effectiveBookTitle ? findMatchingBook(getTitleMatchParts(effectiveBookTitle)) : { book: null };
+                const downloadEditionKeys = downloadTitleParts.editionKey ? downloadTitleParts.editionKey.split('|') : [];
+                if (hasTranslation && !downloadEditionKeys.includes(TRANSLATION_EDITION_KEY)) {
+                    finalTitle += "(번역판)";
+                    downloadTitleParts = getTitleMatchParts(finalTitle);
+                }
+                const match = effectiveBookTitle
+                    ? findMatchingBook(downloadTitleParts, resolvedDownloadTitle ? resolvedDownloadTitle.bookId : null)
+                    : { book: null };
                 const matchedBook = match && match.book ? match.book : null;
+                let bType = matchedBook ? matchedBook.type : null;
+                if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
                 const downloadFolder = buildDownloadFolder(matchedBook && matchedBook.folderRule, finalTitle);
                 sendRuntimeMessage({
                     action: "DOWNLOAD_" + targetType,
@@ -1740,6 +1848,7 @@ function createQuickActions(linkData, hasBook) {
 
     const btnStyle = "padding: 2px 5px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; border: none; text-decoration: none; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s; flex-shrink: 0;";
     
+    const canCorrectTitle = hasBook || (Array.isArray(linkData.matchCandidates) && linkData.matchCandidates.length > 0);
     const buttons = [
         { label: '복사', color: '#845ef7', action: 'copy' },
         { label: '제외', color: '#ff6b6b', action: 'exclude' },
@@ -1750,7 +1859,7 @@ function createQuickActions(linkData, hasBook) {
         { label: '구글검색', color: '#20c997', action: 'search' },
         { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
         { label: '에브리띵검색', color: '#495057', action: 'everything_search', display: true },
-        { label: '제목정정', color: '#5c7cfa', action: 'correct_title', display: hasBook }
+        { label: '제목정정', color: '#5c7cfa', action: 'correct_title', display: canCorrectTitle }
     ];
 
     buttons.forEach(btnInfo => {
@@ -1771,8 +1880,22 @@ function createQuickActions(linkData, hasBook) {
                 const actionTitle = resolvedTitle.title;
 
                 if (btnInfo.action === 'correct_title') {
-                    const matched = actionTitle ? findMatchingBook(getTitleMatchParts(actionTitle)) : { book: null };
-                    const suggestedTitle = matched && matched.book ? matched.book.title : actionTitle;
+                    const matched = actionTitle
+                        ? findMatchingBook(getResolvedTitleMatchParts(resolvedTitle), resolvedTitle.bookId)
+                        : { book: null, candidates: [] };
+                    let selectedBook = matched.book;
+                    if (!selectedBook && Array.isArray(matched.candidates) && matched.candidates.length > 0) {
+                        const candidateText = matched.candidates.map((candidate, index) => `${index + 1}. ${candidate.title}`).join('\n');
+                        const selectedIndexText = window.prompt(`매칭할 판본 번호를 입력하세요.\n${candidateText}`, '1');
+                        if (selectedIndexText === null) return;
+                        const selectedIndex = parseInt(selectedIndexText, 10) - 1;
+                        if (selectedIndex < 0 || selectedIndex >= matched.candidates.length) {
+                            showInfoToast('올바른 판본 번호를 입력해주세요.', true);
+                            return;
+                        }
+                        selectedBook = matched.candidates[selectedIndex];
+                    }
+                    const suggestedTitle = selectedBook ? selectedBook.title : actionTitle;
                     const inputTitle = window.prompt(
                         '정정할 제목을 입력하세요.\n빈 값으로 확인하면 저장된 정정 제목을 삭제합니다.',
                         suggestedTitle || ''
@@ -1782,13 +1905,19 @@ function createQuickActions(linkData, hasBook) {
                     const correctedTitle = inputTitle.trim();
                     safeStorageGet({ bookList: [], titleCorrections: {} }, (data) => {
                         const nextCorrections = { ...(data.titleCorrections || {}) };
-                        if (correctedTitle) nextCorrections[resolvedTitle.correctionKey] = correctedTitle;
-                        else delete nextCorrections[resolvedTitle.correctionKey];
+                        const correctionStorageKey = resolvedTitle.appliedCorrectionKey || resolvedTitle.correctionKey;
+                        if (correctedTitle) {
+                            nextCorrections[correctionStorageKey] = {
+                                correctedTitle,
+                                bookId: selectedBook ? selectedBook.id : null,
+                                editionKey: selectedBook ? selectedBook._editionKey || '' : ''
+                            };
+                        } else delete nextCorrections[correctionStorageKey];
 
                         let updatedBookList = Array.isArray(data.bookList) ? data.bookList : [];
-                        if (correctedTitle && matched && matched.book) {
-                            const matchedBookId = matched.book.id;
-                            const matchedBookKey = matched.book._matchKey || getTitleMatchParts(matched.book.title || '').matchKey;
+                        if (correctedTitle && selectedBook) {
+                            const matchedBookId = selectedBook.id;
+                            const matchedBookKey = selectedBook._matchKey || getTitleMatchParts(selectedBook.title || '').matchKey;
                             const now = new Date().toISOString();
                             updatedBookList = updatedBookList.map(book => {
                                 const isSameBook = matchedBookId !== undefined && matchedBookId !== null
@@ -2050,7 +2179,7 @@ function applyStyleToSingleLink(link) {
         if (skip) {
             link._bmData = { skip: true, raw: currentRawText };
         } else {
-            const titleParts = getTitleMatchParts(pureTitle);
+            const titleParts = getResolvedTitleMatchParts(resolvedTitle);
             
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
@@ -2065,7 +2194,7 @@ function applyStyleToSingleLink(link) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
+            link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 
@@ -2092,10 +2221,12 @@ function applyStyleToSingleLink(link) {
         : isChatingWikiSite
             ? `${originalText || ''} ${link.dataset.attributes || ''} ${chatingWikiTagText}`
             : originalText || '';
-    const hasTranslationTag = /번역|AI/i.test(translationText);
-    const match = findMatchingBook(titleParts);
+    const hasTranslationTag = hasTranslationEditionMarker(translationText);
+    const match = findMatchingBook(titleParts, link._bmData.correctionBookId);
     const book = match.book;
     const maxScore = match.maxScore;
+    link._bmData.matchCandidates = match.candidates || [];
+    link._bmData.matchedBookId = book ? book.id : null;
     
     let badgeStyle = '';
     let newBadgeHTML = '';
@@ -2228,9 +2359,7 @@ function applyStyleToSingleLink(link) {
         let existingBr = renderTargets.usesSeparateTargets ? null : actionsTarget.querySelector(':scope > .bm-badge-br.list-br');
         let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
         
-        const siteMatchKey = link._bmData.siteMatchKey;
-        const matchBook = exactMatchCache[siteMatchKey] || (similarityCache[siteMatchKey] && similarityCache[siteMatchKey].book);
-        const hasBook = !!matchBook;
+        const hasBook = !!book;
         const hasTitleChanged = chatingWikiTitle !== null && existingActions?.dataset.titleSignature !== link._bmData.raw;
 
         if (!existingActions || existingActions.dataset.hasBook !== String(hasBook) || hasTitleChanged) {
@@ -2323,7 +2452,7 @@ function applyStyleToDetailElement(el) {
         if (skip) {
             el._bmDetailData = { skip: true, raw: currentRawText };
         } else {
-            const titleParts = getTitleMatchParts(pureTitle);
+            const titleParts = getResolvedTitleMatchParts(resolvedTitle);
             
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
@@ -2338,7 +2467,7 @@ function applyStyleToDetailElement(el) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            el._bmDetailData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
+            el._bmDetailData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }
     }
 
@@ -2364,9 +2493,11 @@ function applyStyleToDetailElement(el) {
     }
 
     const { titleParts, siteRes, siteVol } = el._bmDetailData;
-    const match = findMatchingBook(titleParts);
+    const match = findMatchingBook(titleParts, el._bmDetailData.correctionBookId);
     const book = match.book;
     const maxScore = match.maxScore;
+    el._bmDetailData.matchCandidates = match.candidates || [];
+    el._bmDetailData.matchedBookId = book ? book.id : null;
     
     let badgeStyle = '';
     let newBadgeHTML = '';

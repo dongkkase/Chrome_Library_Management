@@ -68,8 +68,7 @@ let globalCustomFilters = [...defaultCustomFilters];
 
 const defaultEditionKeywords = [
     "신장판", "개정판", "애장판", "완전판", "개정 완전판", "특별합본판",
-    "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판", "소책자",
-    "번역",
+    "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판", "번역판", "소책자",
 ];
 
 let globalEditionKeywords = [...defaultEditionKeywords];
@@ -90,6 +89,33 @@ function normalizeTitleText(value) {
         .replace(/\s+/g, '');
 }
 
+const TRANSLATION_EDITION_KEY = normalizeTitleText('번역판');
+
+function isTranslationEditionToken(value) {
+    const normalizedValue = normalizeTitleText(value);
+    return normalizedValue === '번역' || normalizedValue === 'ai번역' || normalizedValue === 'ai';
+}
+
+function isTranslationEditionBracket(fullMatch, innerText) {
+    const openingBracket = String(fullMatch || '').trim().charAt(0);
+    return (openingBracket === '[' || openingBracket === '(') && isTranslationEditionToken(innerText);
+}
+
+function hasTranslationEditionMarker(value) {
+    const source = String(value || '');
+    const hasBracketMarker = /\[\s*(?:번역|AI\s*번역|AI)\s*\]|\(\s*(?:번역|AI\s*번역|AI)\s*\)/i.test(source);
+    if (hasBracketMarker) return true;
+    return /(^|[\s|\/_\-:：·・])번역(?=$|[\s|\/_\-:：·・])/i.test(source);
+}
+
+function stripTranslationEditionMarkers(value) {
+    return String(value || '')
+        .replace(/\[\s*(?:번역|AI\s*번역|AI)\s*\]|\(\s*(?:번역|AI\s*번역|AI)\s*\)/gi, ' ')
+        .replace(/(^|[\s|\/_\-:：·・])번역(?=$|[\s|\/_\-:：·・])/gi, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function getBookMissingVols(book, missingVolsMap) {
     if (!book) return [];
 
@@ -103,7 +129,7 @@ function getBookMissingVols(book, missingVolsMap) {
 }
 
 function setEditionKeywords(words) {
-    const source = Array.isArray(words) ? words : defaultEditionKeywords;
+    const source = Array.isArray(words) ? [...words, '번역판'] : defaultEditionKeywords;
     const uniqueWords = new Map();
 
     source.forEach(word => {
@@ -125,11 +151,31 @@ function getEditionKeywordsSignature() {
     return [...globalEditionKeywordKeys].sort().join('|');
 }
 
-function isEditionQualifier(value) {
+function getEditionQualifierInfo(value) {
     const normalizedValue = normalizeTitleText(value);
-    if (!normalizedValue) return false;
+    if (!normalizedValue) return { type: 'unknown', editionKey: '' };
 
-    return globalEditionKeywordKeys.some(keyword => normalizedValue.includes(keyword));
+    for (const entry of globalEditionKeywordEntries) {
+        const keywordIndex = normalizedValue.indexOf(entry.key);
+        if (keywordIndex < 0) continue;
+
+        const prefix = normalizedValue.slice(0, keywordIndex);
+        const suffix = normalizedValue.slice(keywordIndex + entry.key.length);
+        const hasNegativePrefix = /(?:아닌|비|非|not)$/.test(prefix);
+        const hasNegativeSuffix = /^(?:이?아님|이?아닌|아니|아닙|아니에요|아니오|제외|없음|미포함|비해당|not|x)/.test(suffix);
+
+        if (hasNegativePrefix || hasNegativeSuffix) {
+            return { type: 'negative', editionKey: '', negatedEditionKey: entry.key };
+        }
+
+        return { type: 'positive', editionKey: entry.key };
+    }
+
+    return { type: 'unknown', editionKey: '' };
+}
+
+function isEditionQualifier(value) {
+    return getEditionQualifierInfo(value).type === 'positive';
 }
 
 function escapeRegExp(value) {
@@ -179,9 +225,9 @@ function normalizeTrailingEditionTitle(value) {
 function replaceParentheticalSegments(value, replacer) {
     return (value || '').replace(
         /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g,
-        (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+        (fullMatch, round, square, fullWidthRound, lenticular, angle, offset, sourceText) => {
             const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
-            return replacer(fullMatch, innerText);
+            return replacer(fullMatch, innerText, { offset, sourceText, lenticular: lenticular !== undefined });
         }
     );
 }
@@ -192,9 +238,10 @@ function getEditionQualifiers(value) {
 
     replaceParentheticalSegments(value, (fullMatch, innerText) => {
         const displayQualifier = innerText.trim();
-        const qualifierKey = normalizeTitleText(displayQualifier);
+        const qualifierInfo = getEditionQualifierInfo(displayQualifier);
+        const qualifierKey = qualifierInfo.editionKey;
 
-        if (isEditionQualifier(displayQualifier) && qualifierKey && !qualifierKeys.has(qualifierKey)) {
+        if (qualifierInfo.type === 'positive' && qualifierKey && !qualifierKeys.has(qualifierKey)) {
             qualifierKeys.add(qualifierKey);
             qualifiers.push({ key: qualifierKey, display: displayQualifier });
         }
@@ -212,12 +259,25 @@ function getTitleMatchParts(title) {
         .replace(/</g, '(')
         .replace(/>/g, ')');
     const editionQualifiers = [];
-    let baseTitle = replaceParentheticalSegments(normalizedTitle, (fullMatch, innerText) => {
-        if (isEditionQualifier(innerText)) {
-            const normalizedQualifier = normalizeTitleText(innerText);
-            if (normalizedQualifier) editionQualifiers.push(normalizedQualifier);
+    let hasNegativeEditionQualifier = false;
+    let baseTitle = replaceParentheticalSegments(normalizedTitle, (fullMatch, innerText, segmentInfo) => {
+        if (isTranslationEditionBracket(fullMatch, innerText)) {
+            editionQualifiers.push(TRANSLATION_EDITION_KEY);
+            return ' ';
+        }
+        const qualifierInfo = getEditionQualifierInfo(innerText);
+        if (qualifierInfo.type === 'positive' && qualifierInfo.editionKey) editionQualifiers.push(qualifierInfo.editionKey);
+        else if (qualifierInfo.type === 'negative') hasNegativeEditionQualifier = true;
+        else if (segmentInfo.lenticular) {
+            const nextText = segmentInfo.sourceText.slice(segmentInfo.offset + fullMatch.length);
+            if (/^[의이가은는을를와과로께서]/.test(nextText)) return ` ${innerText} `;
         }
         return ' ';
+    });
+
+    baseTitle = baseTitle.replace(/(^|[\s|\/_\-:：·・])번역(?=$|[\s|\/_\-:：·・])/gi, (fullMatch, prefix) => {
+        editionQualifiers.push(TRANSLATION_EDITION_KEY);
+        return prefix;
     });
 
     let trailingEdition = getTrailingEditionQualifier(baseTitle);
@@ -234,11 +294,13 @@ function getTitleMatchParts(title) {
         .replace(/\s+/g, ' ');
     const baseNoSpace = baseOriginal.replace(/\s+/g, '');
     const editionKey = Array.from(new Set(editionQualifiers)).sort().join('|');
+    const editionState = editionKey ? 'positive' : (hasNegativeEditionQualifier ? 'standard' : 'unknown');
 
     return {
         baseOriginal,
         baseNoSpace,
         editionKey,
+        editionState,
         matchKey: editionKey ? `${baseNoSpace}::${editionKey}` : baseNoSpace
     };
 }
@@ -434,9 +496,14 @@ function cleanSiteTitle(title) {
         .replace(/스캔 단면|스캔단면|스캔 양면|스캔양면|스캔본|스캔판/g, '')
         .replace(/단편 만화|단편만화|단편집|단편|단행본/g, '')
         .replace(/권\~/gi, '')
-        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle) => {
+        .replace(/\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）|【([^【】]*)】|<([^<>]*)>/g, (fullMatch, round, square, fullWidthRound, lenticular, angle, offset, sourceText) => {
             const innerText = round ?? square ?? fullWidthRound ?? lenticular ?? angle ?? '';
-            return isEditionQualifier(innerText) ? ` (${innerText.trim()}) ` : ' ';
+            if (isEditionQualifier(innerText)) return ` (${innerText.trim()}) `;
+            if (lenticular !== undefined) {
+                const nextText = sourceText.slice(offset + fullMatch.length);
+                if (/^[의이가은는을를와과로께서]/.test(nextText)) return fullMatch;
+            }
+            return ' ';
         })
         .replace(/\d{3,4}\s*p(?:x)?/gi, ' ')
         // 수정: 하단 공백 치환 정규식에서도 쉼표(,)를 제거

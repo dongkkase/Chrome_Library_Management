@@ -130,6 +130,12 @@ function normalizeTitleCorrectionKeyPart(value) {
         .trim();
 }
 
+function getStoredCorrectionTitle(value) {
+    if (typeof value === 'string') return value.trim();
+    if (!value || typeof value !== 'object') return '';
+    return String(value.correctedTitle || value.title || '').trim();
+}
+
 function ensureFolderRulePreview() {
     if (folderRulePreview) return folderRulePreview;
 
@@ -1036,12 +1042,18 @@ document.body.onclick = (e) => {
         });
         const nextCorrections = { ...(data.titleCorrections || {}) };
         Object.keys(nextCorrections).forEach(key => {
-            if (String(nextCorrections[key] || '').trim() === baseTitle) {
-                nextCorrections[key] = nextTitle;
+            if (getStoredCorrectionTitle(nextCorrections[key]) === baseTitle) {
+                nextCorrections[key] = typeof nextCorrections[key] === 'object'
+                    ? { ...nextCorrections[key], correctedTitle: nextTitle, editionKey: getTitleMatchParts(nextTitle).editionKey }
+                    : nextTitle;
             }
         });
         const globalCorrectionKey = `*::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
-        nextCorrections[globalCorrectionKey] = nextTitle;
+        nextCorrections[globalCorrectionKey] = {
+            correctedTitle: nextTitle,
+            bookId: list[baseIndex].id,
+            editionKey: getTitleMatchParts(nextTitle).editionKey
+        };
 
         saveWithUndo(
             updatedList,
