@@ -101,6 +101,11 @@ function isTranslationEditionBracket(fullMatch, innerText) {
     return (openingBracket === '[' || openingBracket === '(') && isTranslationEditionToken(innerText);
 }
 
+function isOriginalEditionBracket(fullMatch, innerText) {
+    const openingBracket = String(fullMatch || '').trim().charAt(0);
+    return (openingBracket === '[' || openingBracket === '(') && normalizeTitleText(innerText) === '원본';
+}
+
 function hasTranslationEditionMarker(value) {
     const source = String(value || '');
     const hasBracketMarker = /\[\s*(?:번역|AI\s*번역|AI)\s*\]|\(\s*(?:번역|AI\s*번역|AI)\s*\)/i.test(source);
@@ -260,9 +265,14 @@ function getTitleMatchParts(title) {
         .replace(/>/g, ')');
     const editionQualifiers = [];
     let hasNegativeEditionQualifier = false;
+    let hasOriginalEditionMarker = false;
     let baseTitle = replaceParentheticalSegments(normalizedTitle, (fullMatch, innerText, segmentInfo) => {
         if (isTranslationEditionBracket(fullMatch, innerText)) {
             editionQualifiers.push(TRANSLATION_EDITION_KEY);
+            return ' ';
+        }
+        if (isOriginalEditionBracket(fullMatch, innerText)) {
+            hasOriginalEditionMarker = true;
             return ' ';
         }
         const qualifierInfo = getEditionQualifierInfo(innerText);
@@ -294,13 +304,16 @@ function getTitleMatchParts(title) {
         .replace(/\s+/g, ' ');
     const baseNoSpace = baseOriginal.replace(/\s+/g, '');
     const editionKey = Array.from(new Set(editionQualifiers)).sort().join('|');
-    const editionState = editionKey ? 'positive' : (hasNegativeEditionQualifier ? 'standard' : 'unknown');
+    const editionState = editionKey ? 'positive' : (hasNegativeEditionQualifier || hasOriginalEditionMarker ? 'standard' : 'unknown');
 
     return {
         baseOriginal,
         baseNoSpace,
         editionKey,
         editionState,
+        translationState: editionQualifiers.includes(TRANSLATION_EDITION_KEY)
+            ? 'translated'
+            : (hasOriginalEditionMarker ? 'original' : 'unknown'),
         matchKey: editionKey ? `${baseNoSpace}::${editionKey}` : baseNoSpace
     };
 }
