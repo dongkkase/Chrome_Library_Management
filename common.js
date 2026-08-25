@@ -69,6 +69,7 @@ let globalCustomFilters = [...defaultCustomFilters];
 const defaultEditionKeywords = [
     "신장판", "개정판", "애장판", "완전판", "개정 완전판", "특별합본판",
     "합본판", "특장판", "증보판", "컬러판", "리마스터판", "리뉴얼판", "소책자",
+    "번역",
 ];
 
 let globalEditionKeywords = [...defaultEditionKeywords];
