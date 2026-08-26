@@ -11,6 +11,7 @@ import os
 import random
 import re
 import signal
+import ssl
 import stat
 import sys
 import tempfile
@@ -19,6 +20,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -50,6 +52,11 @@ DEFAULT_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
 MAX_COMPRESSED_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_HTML_RESPONSE_BYTES = 5 * 1024 * 1024
+SYSTEM_CA_FILE_CANDIDATES = (
+    Path("/etc/ssl/cert.pem"),
+    Path("/etc/ssl/certs/ca-certificates.crt"),
+    Path("/etc/pki/tls/certs/ca-bundle.crt"),
+)
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 "
@@ -186,6 +193,39 @@ def _get_header_value(headers: object, name: str) -> str:
     return str(getter(name, "") or "")
 
 
+def create_ssl_context(ca_file: Optional[Path] = None) -> ssl.SSLContext:
+    if ca_file is not None:
+        resolved_ca_file = ca_file.expanduser().resolve()
+        if not resolved_ca_file.is_file():
+            raise ConfigurationError(f"CA 인증서 파일을 찾을 수 없습니다: {resolved_ca_file}")
+        try:
+            return ssl.create_default_context(cafile=str(resolved_ca_file))
+        except (OSError, ssl.SSLError) as error:
+            raise ConfigurationError(f"CA 인증서 파일을 읽을 수 없습니다: {error}") from error
+
+    try:
+        default_context = ssl.create_default_context()
+        if default_context.cert_store_stats().get("x509", 0) > 0:
+            return default_context
+    except (OSError, ssl.SSLError):
+        pass
+
+    for candidate in SYSTEM_CA_FILE_CANDIDATES:
+        if not candidate.is_file():
+            continue
+        try:
+            fallback_context = ssl.create_default_context(cafile=str(candidate))
+        except (OSError, ssl.SSLError):
+            continue
+        if fallback_context.cert_store_stats().get("x509", 0) > 0:
+            print(f"시스템 CA 인증서 사용: {candidate}", file=sys.stderr)
+            return fallback_context
+
+    raise ConfigurationError(
+        "신뢰할 CA 인증서를 찾지 못했습니다. --ca-file로 CA 인증서 파일을 지정하세요."
+    )
+
+
 def _decode_response_body(response: object) -> str:
     compressed_body = response.read(MAX_COMPRESSED_RESPONSE_BYTES + 1)
     if len(compressed_body) > MAX_COMPRESSED_RESPONSE_BYTES:
@@ -222,6 +262,7 @@ def fetch_author_names(
     author_id: int,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     opener: Callable[..., object] = urlopen,
+    ssl_context: Optional[ssl.SSLContext] = None,
 ) -> List[str]:
     url = AUTHOR_URL_TEMPLATE.format(author_id=author_id)
     request = Request(
@@ -234,8 +275,19 @@ def fetch_author_names(
         },
     )
 
+    active_ssl_context = ssl_context
+    if opener is urlopen and active_ssl_context is None:
+        active_ssl_context = create_ssl_context()
+
     try:
-        response_context = opener(request, timeout=timeout_seconds)
+        if opener is urlopen:
+            response_context = opener(
+                request,
+                timeout=timeout_seconds,
+                context=active_ssl_context,
+            )
+        else:
+            response_context = opener(request, timeout=timeout_seconds)
         with response_context as response:
             response_status = getattr(response, "status", None)
             status_code = int(response_status if response_status is not None else response.getcode())
@@ -268,7 +320,13 @@ def fetch_author_names(
         if error.code in {401, 403, 429, 503} or retry_after:
             raise StopCollectionError(f"HTTP {error.code}{retry_message}") from error
         raise CollectorError(f"HTTP {error.code}{retry_message}") from error
-    except (TimeoutError, URLError, OSError) as error:
+    except URLError as error:
+        if isinstance(error.reason, ssl.SSLCertVerificationError):
+            raise CollectorError(
+                "SSL 인증서 검증에 실패했습니다. --ca-file로 신뢰할 CA 파일을 지정하세요."
+            ) from error
+        raise CollectorError(f"네트워크 오류: {error}") from error
+    except (TimeoutError, OSError) as error:
         raise CollectorError(f"네트워크 오류: {error}") from error
 
     names = extract_author_names(html_text)
@@ -592,6 +650,7 @@ def parse_arguments(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("-n", "--count", dest="count_option", type=positive_integer, help="수집할 페이지 수")
     parser.add_argument("--checklist", type=Path, default=DEFAULT_CHECKLIST_PATH, help="체크리스트 경로")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH, help="author.json 경로")
+    parser.add_argument("--ca-file", type=Path, help="사용할 CA 인증서 PEM 파일 경로")
     parser.add_argument(
         "--timeout",
         type=positive_float,
@@ -653,6 +712,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         stop_event = threading.Event()
         install_signal_handlers(stop_event)
+        ssl_context = create_ssl_context(args.ca_file)
         with CollectorLock(DEFAULT_LOCK_PATH):
             return run_collection(
                 request_count=request_count,
@@ -662,6 +722,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 max_consecutive_failures=args.max_consecutive_failures,
                 rng=rng,
                 stop_event=stop_event,
+                fetcher=partial(fetch_author_names, ssl_context=ssl_context),
             )
     except ConfigurationError as error:
         print(f"설정 오류: {error}", file=sys.stderr)

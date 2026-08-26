@@ -99,6 +99,16 @@ class AuthorParserTests(unittest.TestCase):
 
 
 class FetchTests(unittest.TestCase):
+    def test_creates_a_verified_ssl_context(self):
+        context = COLLECTOR.create_ssl_context()
+        self.assertGreater(context.cert_store_stats().get("x509", 0), 0)
+
+    def test_rejects_a_missing_explicit_ca_file(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            missing_path = Path(temporary_directory) / "missing.pem"
+            with self.assertRaises(COLLECTOR.ConfigurationError):
+                COLLECTOR.create_ssl_context(missing_path)
+
     def test_fetches_and_decodes_gzip_html(self):
         body = gzip.compress(
             '<span class="lang_kor">조앤.K.롤링</span><span class="lang_other">Joan K. Rowling</span>'.encode(

@@ -56,3 +56,15 @@ python3 scripts/collect_ridi_authors.py --help
 ```
 
 `--timeout`은 전체 실행 시간이 아니라 개별 네트워크 소켓의 대기 제한 시간입니다.
+
+## SSL 인증서 오류
+
+수집기는 Python 기본 인증서 저장소가 비어 있으면 macOS와 Linux의 일반적인 시스템
+CA 인증서 파일을 자동으로 사용합니다. 별도의 CA 인증서가 필요한 환경에서는 PEM
+파일을 직접 지정할 수 있습니다.
+
+```bash
+python3 scripts/collect_ridi_authors.py --count 10 --ca-file /path/to/cert.pem
+```
+
+인증서 검증은 비활성화하지 않습니다.

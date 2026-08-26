@@ -10,3 +10,7 @@ memo.md
 __pycache__/
 *.py[cod]
 .author-collector.lock
+*.py
+scripts/collect_ridi_authors.py
+test/test_collect_ridi_authors.py
+scripts/README.md
