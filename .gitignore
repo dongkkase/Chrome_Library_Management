@@ -7,3 +7,6 @@ build.sh
 demo_site/
 memo.md
 .DS_Store
+__pycache__/
+*.py[cod]
+.author-collector.lock

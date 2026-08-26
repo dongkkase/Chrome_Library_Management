@@ -214,6 +214,73 @@ async function getGofileCredentials(forceRefresh = false) {
     }
 }
 
+async function handleQuickAction(message, sender) {
+    await customFiltersReady;
+
+    const tabId = sender.tab ? sender.tab.id : null;
+    const sanitizedTitle = message.useExactTitle
+        ? normalizeExactBookTitle(message.cleanTitle)
+        : sanitizeBookTitleForStorage(message.cleanTitle);
+
+    if (message.type === "search") {
+        chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(sanitizedTitle) }).catch(() => {});
+        return;
+    }
+
+    if (message.type === "everything_search") {
+        executeEverythingSearch(stripEditionTagsForEverythingSearch(sanitizedTitle), tabId);
+        return;
+    }
+
+    console.log(message.type);
+    if (message.type === "ridi_preview") {
+        performRidiSearch(sanitizedTitle);
+        return;
+    }
+
+    if (message.type === "delete") {
+        chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+            setEditionKeywords(data.editionKeywords);
+            let list = Array.isArray(data.bookList) ? data.bookList : [];
+            let targetTitleStr = getTitleMatchParts(sanitizedTitle).matchKey;
+
+            // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
+            let existingIndex = -1;
+            for (let i = list.length - 1; i >= 0; i--) {
+                if (getTitleMatchParts(list[i].title || "").matchKey === targetTitleStr) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (existingIndex > -1) {
+                let deletedBook = list.splice(existingIndex, 1)[0];
+
+                bgListMapCache = null; // [추가] 삭제 시 백그라운드 캐시 무효화
+
+                chrome.storage.local.set({ bookList: list }, () => {
+                    sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
+                });
+            } else {
+                sendTabMessage(tabId, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
+            }
+        });
+        return;
+    }
+
+    pendingTasks.push({
+        cleanTitle: sanitizedTitle,
+        resolution: message.resolution,
+        lastVol: message.lastVol,
+        type: message.type,
+        dateString: new Date().toISOString(),
+        tabId
+    });
+
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(processSaveQueue, 10);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "RIGHT_CLICK_TITLE") {
     lastRightClickedTitle = message.title;
@@ -312,68 +379,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   else if (message.action === "QUICK_ACTION") {
-      const tabId = sender.tab ? sender.tab.id : null;
-      const sanitizedTitle = message.useExactTitle
-          ? normalizeExactBookTitle(message.cleanTitle)
-          : sanitizeBookTitleForStorage(message.cleanTitle);
-      
-      if (message.type === "search") {
-          chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(sanitizedTitle) }).catch(() => {});
-          return true;
-      }
-
-      if (message.type === "everything_search") {
-          executeEverythingSearch(stripEditionTagsForEverythingSearch(sanitizedTitle), tabId);
-          return true;
-      }
-
-      console.log(message.type);
-      if (message.type === "ridi_preview") {
-          performRidiSearch(sanitizedTitle);
-          return true;
-      }
-      
-      if (message.type === "delete") {
-          chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
-              setEditionKeywords(data.editionKeywords);
-              let list = Array.isArray(data.bookList) ? data.bookList : [];
-              let targetTitleStr = getTitleMatchParts(sanitizedTitle).matchKey;
-
-              // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
-              let existingIndex = -1;
-              for (let i = list.length - 1; i >= 0; i--) {
-                  if (getTitleMatchParts(list[i].title || "").matchKey === targetTitleStr) {
-                      existingIndex = i;
-                      break;
-                  }
-              }
-
-              if (existingIndex > -1) {
-                  let deletedBook = list.splice(existingIndex, 1)[0];
-                  
-                  bgListMapCache = null; // [추가] 삭제 시 백그라운드 캐시 무효화
-                  
-                  chrome.storage.local.set({ bookList: list }, () => {
-                      sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
-                  });
-              } else {
-                  sendTabMessage(tabId, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
-              }
-          });
-          return true;
-      }
-
-      pendingTasks.push({
-          cleanTitle: sanitizedTitle, 
-          resolution: message.resolution, 
-          lastVol: message.lastVol, 
-          type: message.type, 
-          dateString: new Date().toISOString(), 
-          tabId: tabId
-      });
-
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = setTimeout(processSaveQueue, 10);
+      void handleQuickAction(message, sender).catch(error => console.error('빠른 작업 처리 실패:', error));
       return true;
   }
   
@@ -1209,7 +1215,7 @@ function stripEditionTagsForEverythingSearch(title) {
         .trim();
 }
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const menuId = info.menuItemId;
 
   if (menuId === "registerDetailSelector") {
@@ -1218,6 +1224,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       }
       return;
   }
+
+  await customFiltersReady;
 
   let rawTitle = (info.selectionText || lastRightClickedTitle || info.linkText || "").trim();
   if (!rawTitle) return;
@@ -1330,7 +1338,8 @@ function executeEverythingSearch(cleanTitle, tabId) {
     }
 }
 
-function processSaveQueue() {
+async function processSaveQueue() {
+    await customFiltersReady;
     if (pendingTasks.length === 0) return;
     if (isSaving) {
         setTimeout(processSaveQueue, 10); 

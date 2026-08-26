@@ -833,7 +833,8 @@ async function renderSnapshots() {
 const bulkInput = document.getElementById('bulkInput');
 const bulkPreview = document.getElementById('bulkPreview');
 
-bulkInput.addEventListener('input', () => {
+bulkInput.addEventListener('input', async () => {
+    await customFiltersReady;
     const lines = bulkInput.value.split('\n').filter(t => t.trim());
     if (lines.length === 0) { 
         bulkPreview.style.display = 'none'; 
@@ -873,7 +874,8 @@ bulkInput.addEventListener('input', () => {
     `;
 });
 
-document.getElementById('saveBtn').onclick = () => {
+document.getElementById('saveBtn').onclick = async () => {
+  await customFiltersReady;
   const lines = document.getElementById('bulkInput').value.split('\n').filter(t => t.trim());
   const selectedTypeSelect = document.getElementById('bulkTypeSelect');
   const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';

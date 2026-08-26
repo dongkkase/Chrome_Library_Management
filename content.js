@@ -35,6 +35,10 @@ function safeStorageGet(defaults, callback) {
     }
 }
 
+function safeStorageGetWhenCustomFiltersReady(defaults, callback) {
+    return customFiltersReady.then(() => safeStorageGet(defaults, callback));
+}
+
 function safeStorageSet(values, callback) {
     if (!isExtensionContextValid()) return false;
     try {
@@ -2820,7 +2824,7 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
     initDataCache(data);
 
     if (isTargetSite) {
@@ -3062,7 +3066,7 @@ try {
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
           
-          safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+          safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
               initDataCache(data);
               getGlobalTargetElements().forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
@@ -3117,7 +3121,7 @@ let isTabStale = true;
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+        safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -3129,7 +3133,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("focus", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+        safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
             initDataCache(data);
             debouncedApplyStyles();
         });
@@ -3146,7 +3150,7 @@ try {
                     return;
                 }
 
-                safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
+                safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
                     initDataCache(data);
                     updateQuickHidePanel();
 

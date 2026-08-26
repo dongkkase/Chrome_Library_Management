@@ -25,6 +25,12 @@
     "https://*.userstorage.mega.co.nz/*",
     "<all_urls>"
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["author.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "background": {
     "service_worker": "background.js"
   },
