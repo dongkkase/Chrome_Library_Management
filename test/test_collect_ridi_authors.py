@@ -118,7 +118,22 @@ class FetchTests(unittest.TestCase):
 
         def opener(request, timeout):
             self.assertEqual(timeout, 7)
-            self.assertEqual(request.headers["Accept-encoding"], "gzip")
+            self.assertEqual(request.full_url, "https://ridibooks.com/author/68726")
+            self.assertEqual(
+                {key.casefold(): value for key, value in request.header_items()},
+                {
+                    "user-agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36"
+                    ),
+                    "accept": (
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    ),
+                    "accept-encoding": "gzip",
+                    "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+                    "referer": "https://ridibooks.com/",
+                },
+            )
             return FakeResponse(body, "https://ridibooks.com/author/68726", content_encoding="gzip")
 
         self.assertEqual(

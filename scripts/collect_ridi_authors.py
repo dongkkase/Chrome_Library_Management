@@ -57,11 +57,7 @@ SYSTEM_CA_FILE_CANDIDATES = (
     Path("/etc/ssl/certs/ca-certificates.crt"),
     Path("/etc/pki/tls/certs/ca-bundle.crt"),
 )
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 "
-    "BookManagerAuthorCollector/1.0"
-)
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 
 class CollectorError(Exception):
@@ -186,6 +182,16 @@ def extract_author_names(html_text: str) -> List[str]:
     return parser.get_names()
 
 
+def ridi_author_headers() -> Dict[str, str]:
+    return {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Encoding": "gzip",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+        "Referer": "https://ridibooks.com/",
+    }
+
+
 def _get_header_value(headers: object, name: str) -> str:
     getter = getattr(headers, "get", None)
     if not callable(getter):
@@ -267,12 +273,7 @@ def fetch_author_names(
     url = AUTHOR_URL_TEMPLATE.format(author_id=author_id)
     request = Request(
         url,
-        headers={
-            "Accept": "text/html,application/xhtml+xml",
-            "Accept-Encoding": "gzip",
-            "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.7",
-            "User-Agent": USER_AGENT,
-        },
+        headers=ridi_author_headers(),
     )
 
     active_ssl_context = ssl_context
