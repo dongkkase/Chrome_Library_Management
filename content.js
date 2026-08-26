@@ -202,6 +202,10 @@ const PRE_DEFINED_SITES = [
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
     hideSelector: "tr",
+    translationDetector: link => {
+        const rowText = link.closest('tr')?.textContent || '';
+        return /번역|(^|[^a-z])ai(?=$|[^a-z])/i.test(rowText);
+    },
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
@@ -367,12 +371,13 @@ const PRE_DEFINED_SITES = [
     selector: "a.cw-board-item",
     detailSelector: ".cw-article-header > h1",
     hideSelector: "a",
+    translationDetector: link => /번역/.test(link.getAttribute('data-attributes') || ''),
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
     boardFilter: new RegExp([
         '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
         '/게시판/남성향/(?:전체|최신작|판타지|현대판타지|현판|무협-선협|무협/선협|번역|라노벨|일반서적|만화-웹툰|애니|영화|드라마|라노벨|대체역사|성인소설|일반서적)(?=/|[?#]|$)',
-        '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰|BL)(?=/|[?#]|$)'
+        '/게시판/여성향/(?:전체|최신작|로맨스-로판|BELL|만화-웹툰|BL)(?=/|[?#]|$)'
     ].join('|'), 'i'),
     commentSelector: ".cw-comment-body",
     commentWrapperSelector: ".cw-comment-list > article",
@@ -524,6 +529,20 @@ function getGlobalTargetElements() {
     return document.querySelectorAll(globalTargetSelector);
 }
 
+function hasSiteTranslationEdition(link) {
+    if (!link) return false;
+
+    const hostname = window.location.hostname;
+    const config = PRE_DEFINED_SITES.find(site => hostname.includes(site.url));
+    if (!config || typeof config.translationDetector !== 'function') return false;
+
+    try {
+        return !!config.translationDetector(link);
+    } catch (error) {
+        return false;
+    }
+}
+
 function normalizeTitleCorrectionKeyPart(value) {
     return String(value || '')
         .normalize('NFKC')
@@ -554,11 +573,13 @@ function normalizeStoredTitleCorrection(value) {
     };
 }
 
-function getResolvedSiteTitle(originalText) {
+function getResolvedSiteTitle(originalText, hasContextTranslationEdition = false) {
     const cleanedAutoTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : String(originalText || '').trim();
     const sourceTitleParts = getTitleMatchParts(String(originalText || ''));
-    const sourceEditionKeys = sourceTitleParts.editionKey ? sourceTitleParts.editionKey.split('|') : [];
-    const hasTranslationEdition = sourceEditionKeys.includes(TRANSLATION_EDITION_KEY);
+    const sourceEditionKeys = new Set(sourceTitleParts.editionKey ? sourceTitleParts.editionKey.split('|') : []);
+    if (hasContextTranslationEdition) sourceEditionKeys.add(TRANSLATION_EDITION_KEY);
+    const sourceEditionKey = Array.from(sourceEditionKeys).filter(Boolean).sort().join('|');
+    const hasTranslationEdition = sourceEditionKeys.has(TRANSLATION_EDITION_KEY);
     const baseAutoTitle = hasTranslationEdition ? stripTranslationEditionMarkers(cleanedAutoTitle) : cleanedAutoTitle;
     const autoTitle = hasTranslationEdition && baseAutoTitle
         ? `${baseAutoTitle}(번역판)`
@@ -576,9 +597,9 @@ function getResolvedSiteTitle(originalText) {
         appliedCorrectionKey: siteCorrection ? correctionKey : (globalCorrection ? globalCorrectionKey : ''),
         isCorrected: !!correction,
         bookId: correction ? correction.bookId : null,
-        editionKey: correction && correction.editionKey ? correction.editionKey : sourceTitleParts.editionKey,
-        sourceEditionKey: sourceTitleParts.editionKey,
-        sourceEditionState: sourceTitleParts.editionState
+        editionKey: correction && correction.editionKey ? correction.editionKey : sourceEditionKey,
+        sourceEditionKey,
+        sourceEditionState: sourceEditionKey ? 'positive' : sourceTitleParts.editionState
     };
 }
 
@@ -604,7 +625,7 @@ function getResolvedTitleMatchParts(resolvedTitle) {
 
 function getResolvedLinkTitle(linkData) {
     if (linkData && linkData.originalText !== undefined) {
-        return getResolvedSiteTitle(linkData.originalText);
+        return getResolvedSiteTitle(linkData.originalText, !!linkData.hasSiteTranslationEdition);
     }
 
     const fallbackTitle = linkData && linkData.pureTitle ? linkData.pureTitle : '';
@@ -2189,10 +2210,13 @@ function applyStyleToSingleLink(link) {
 
     const chatingWikiTitle = getChatingWikiListTitle(link);
     const currentRawText = chatingWikiTitle !== null ? chatingWikiTitle : link.textContent || "";
+    const hasContextTranslationEdition = hasSiteTranslationEdition(link);
     
-    if (!link._bmData || link._bmData.raw !== currentRawText) {
+    if (!link._bmData
+        || link._bmData.raw !== currentRawText
+        || link._bmData.hasSiteTranslationEdition !== hasContextTranslationEdition) {
         const originalText = getPureLinkText(link);
-        const resolvedTitle = getResolvedSiteTitle(originalText);
+        const resolvedTitle = getResolvedSiteTitle(originalText, hasContextTranslationEdition);
         const pureTitle = resolvedTitle.title;
         
         let skip = false;
@@ -2202,7 +2226,7 @@ function applyStyleToSingleLink(link) {
         else if (/^[ㄱ-ㅎㅏ-ㅣ\s]+$/.test(pureTitle)) skip = true;
         
         if (skip) {
-            link._bmData = { skip: true, raw: currentRawText };
+            link._bmData = { skip: true, raw: currentRawText, hasSiteTranslationEdition: hasContextTranslationEdition };
         } else {
             const titleParts = getResolvedTitleMatchParts(resolvedTitle);
             
@@ -2219,7 +2243,7 @@ function applyStyleToSingleLink(link) {
             else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
             else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
 
-            link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
+            link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText, hasSiteTranslationEdition: hasContextTranslationEdition };
         }
     }
 
@@ -2246,7 +2270,7 @@ function applyStyleToSingleLink(link) {
         : isChatingWikiSite
             ? `${originalText || ''} ${link.dataset.attributes || ''} ${chatingWikiTagText}`
             : originalText || '';
-    const hasTranslationTag = hasTranslationEditionMarker(translationText);
+    const hasTranslationTag = link._bmData.hasSiteTranslationEdition || hasTranslationEditionMarker(translationText);
     const match = findMatchingBook(titleParts, link._bmData.correctionBookId);
     const book = match.book;
     const maxScore = match.maxScore;
@@ -2340,6 +2364,10 @@ function applyStyleToSingleLink(link) {
         removeBadge(link, titleStyleTarget);
         if (isHideNew) shouldHide = true; // 어느 항목과도 매칭되지 않은 경우(미등록) 신작으로 간주하여 숨김 처리
         if (!shouldHide && isHideTranslate && hasTranslationTag) shouldHide = true;
+    }
+
+    if (isHideTranslate && isChatingWikiSite && link._bmData.hasSiteTranslationEdition) {
+        shouldHide = true;
     }
 
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
@@ -2850,9 +2878,17 @@ safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
                 const link = e.target.closest('a');
                 if (link) { 
                     lastRightClickedLink = link; 
-                    sendRuntimeMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(link) });
+                    sendRuntimeMessage({
+                        type: "RIGHT_CLICK_TITLE",
+                        title: getPureLinkText(link),
+                        hasTranslationEdition: hasSiteTranslationEdition(link)
+                    });
                 } else if (e.target) {
-                    sendRuntimeMessage({ type: "RIGHT_CLICK_TITLE", title: getPureLinkText(e.target) });
+                    sendRuntimeMessage({
+                        type: "RIGHT_CLICK_TITLE",
+                        title: getPureLinkText(e.target),
+                        hasTranslationEdition: false
+                    });
                 }
             } catch (err) {}
         }, true);

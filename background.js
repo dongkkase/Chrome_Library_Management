@@ -1,6 +1,7 @@
 importScripts('dexie.min.js', 'db.js', 'common.js');
 
 let lastRightClickedTitle = "";
+let lastRightClickedHasTranslationEdition = false;
 let downloadTitlesMap = {}; // 다운로드 ID와 폴더 경로 매핑
 let urlToTitleMap = {};
 let gofileAuthLock = null;
@@ -216,6 +217,7 @@ async function getGofileCredentials(forceRefresh = false) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "RIGHT_CLICK_TITLE") {
     lastRightClickedTitle = message.title;
+    lastRightClickedHasTranslationEdition = !!message.hasTranslationEdition;
   }
   
   else if (message.action === "CLOSE_ME") {
@@ -1221,6 +1223,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!rawTitle) return;
 
   let cleanTitle = sanitizeBookTitleForStorage(rawTitle);
+
+  if (lastRightClickedHasTranslationEdition || hasTranslationEditionMarker(rawTitle)) {
+      const baseTitle = stripTranslationEditionMarkers(cleanTitle);
+      if (baseTitle) cleanTitle = `${baseTitle}(번역판)`;
+  }
 
   if (!cleanTitle) {
       if (tab && tab.id) {

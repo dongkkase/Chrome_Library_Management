@@ -90,15 +90,28 @@ function normalizeTitleText(value) {
 }
 
 const TRANSLATION_EDITION_KEY = normalizeTitleText('번역판');
+const LEADING_TRANSLATION_EDITION_MARKER_REGEX = /^\s*번역\s*\)(?=\s|$)\s*/;
+const TRANSLATION_EDITION_TOKEN_KEYS = new Set(['번역', 'ai번역', 'ai', TRANSLATION_EDITION_KEY]);
+const TRANSLATION_METADATA_TOKEN_KEYS = new Set([...TRANSLATION_EDITION_TOKEN_KEYS, '워마', '워터마크']);
 
-function isTranslationEditionToken(value) {
+function isTranslationEditionToken(value, allowCompoundMetadata = false) {
     const normalizedValue = normalizeTitleText(value);
-    return normalizedValue === '번역' || normalizedValue === 'ai번역' || normalizedValue === 'ai';
+    if (TRANSLATION_EDITION_TOKEN_KEYS.has(normalizedValue)) return true;
+    if (!allowCompoundMetadata) return false;
+
+    const tagTokens = String(value || '')
+        .split(/[,，、]/)
+        .map(token => token.toLowerCase().replace(/\s+/g, '').trim())
+        .filter(Boolean);
+    return tagTokens.length > 1
+        && tagTokens.some(token => TRANSLATION_EDITION_TOKEN_KEYS.has(token))
+        && tagTokens.every(token => TRANSLATION_METADATA_TOKEN_KEYS.has(token));
 }
 
 function isTranslationEditionBracket(fullMatch, innerText) {
     const openingBracket = String(fullMatch || '').trim().charAt(0);
-    return (openingBracket === '[' || openingBracket === '(') && isTranslationEditionToken(innerText);
+    if (openingBracket !== '[' && openingBracket !== '(') return false;
+    return isTranslationEditionToken(innerText, openingBracket === '[');
 }
 
 function isOriginalEditionBracket(fullMatch, innerText) {
@@ -108,14 +121,24 @@ function isOriginalEditionBracket(fullMatch, innerText) {
 
 function hasTranslationEditionMarker(value) {
     const source = String(value || '');
-    const hasBracketMarker = /\[\s*(?:번역|AI\s*번역|AI)\s*\]|\(\s*(?:번역|AI\s*번역|AI)\s*\)/i.test(source);
+    if (LEADING_TRANSLATION_EDITION_MARKER_REGEX.test(source)) return true;
+
+    let hasBracketMarker = false;
+    replaceParentheticalSegments(source, (fullMatch, innerText) => {
+        if (isTranslationEditionBracket(fullMatch, innerText)) hasBracketMarker = true;
+        return fullMatch;
+    });
     if (hasBracketMarker) return true;
     return /(^|[\s|\/_\-:：·・])번역(?=$|[\s|\/_\-:：·・])/i.test(source);
 }
 
 function stripTranslationEditionMarkers(value) {
-    return String(value || '')
-        .replace(/\[\s*(?:번역|AI\s*번역|AI)\s*\]|\(\s*(?:번역|AI\s*번역|AI)\s*\)/gi, ' ')
+    const withoutLeadingMarker = String(value || '').replace(LEADING_TRANSLATION_EDITION_MARKER_REGEX, '');
+    const withoutBracketMarkers = replaceParentheticalSegments(withoutLeadingMarker, (fullMatch, innerText) => {
+        return isTranslationEditionBracket(fullMatch, innerText) ? ' ' : fullMatch;
+    });
+
+    return withoutBracketMarkers
         .replace(/(^|[\s|\/_\-:：·・])번역(?=$|[\s|\/_\-:：·・])/gi, '$1')
         .replace(/\s+/g, ' ')
         .trim();
@@ -266,7 +289,11 @@ function getTitleMatchParts(title) {
     const editionQualifiers = [];
     let hasNegativeEditionQualifier = false;
     let hasOriginalEditionMarker = false;
-    let baseTitle = replaceParentheticalSegments(normalizedTitle, (fullMatch, innerText, segmentInfo) => {
+    const hasLeadingTranslationEditionMarker = LEADING_TRANSLATION_EDITION_MARKER_REGEX.test(normalizedTitle);
+    if (hasLeadingTranslationEditionMarker) editionQualifiers.push(TRANSLATION_EDITION_KEY);
+
+    const titleWithoutLeadingTranslationMarker = normalizedTitle.replace(LEADING_TRANSLATION_EDITION_MARKER_REGEX, ' ');
+    let baseTitle = replaceParentheticalSegments(titleWithoutLeadingTranslationMarker, (fullMatch, innerText, segmentInfo) => {
         if (isTranslationEditionBracket(fullMatch, innerText)) {
             editionQualifiers.push(TRANSLATION_EDITION_KEY);
             return ' ';
@@ -402,7 +429,8 @@ function cleanSiteTitle(title) {
         .replace(/&lt;/gi, '(')
         .replace(/&gt;/gi, ')')
         .replace(/</g, '(')
-        .replace(/>/g, ')');
+        .replace(/>/g, ')')
+        .replace(/\\~/g, '~');
 
     const hasMarkdownLink = /\[[^\]]+\]\((?:https?:\/\/|\/)[^)]+\)/i.test(title);
 
