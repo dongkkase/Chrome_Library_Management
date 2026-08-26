@@ -358,6 +358,7 @@ const PRE_DEFINED_SITES = [
 {
     url: "ridibooks.com", 
     selector: "#books_contents h1, .infinite-scroll-component div>a", 
+    excludeSelectorPaths: ["/notification"],
     hideSelector: "li, .rigrid-31l7gp", 
     allowedDLs: []
 },
@@ -371,7 +372,7 @@ const PRE_DEFINED_SITES = [
     boardFilter: new RegExp([
         '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
         '/게시판/남성향/(?:전체|최신작|판타지|현대판타지|현판|무협-선협|무협/선협|번역|라노벨|일반서적|만화-웹툰|애니|영화|드라마|라노벨|대체역사|성인소설|일반서적)(?=/|[?#]|$)',
-        '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰)(?=/|[?#]|$)'
+        '/게시판/여성향/(?:최신작|로맨스-로판|BELL|만화-웹툰|BL)(?=/|[?#]|$)'
     ].join('|'), 'i'),
     commentSelector: ".cw-comment-body",
     commentWrapperSelector: ".cw-comment-list > article",
@@ -499,6 +500,30 @@ const boardJS2BatchSize = 4;
 const boardJS2ProcessDelay = 120;
 const boardJS2TargetSelector = ".board-thumbnail img, img.board-thumbnail, .list-subject>div>a>img";
 
+function isSelectorPathExcluded(config, pathname) {
+    if (!config || !Array.isArray(config.excludeSelectorPaths)) return false;
+
+    return config.excludeSelectorPaths.some(excludedPath => {
+        if (typeof excludedPath !== 'string' || !excludedPath.trim()) return false;
+
+        const pathWithLeadingSlash = excludedPath.startsWith('/') ? excludedPath : `/${excludedPath}`;
+        const normalizedPath = pathWithLeadingSlash.length > 1
+            ? pathWithLeadingSlash.replace(/\/+$/, '')
+            : pathWithLeadingSlash;
+
+        return pathname === normalizedPath
+            || (normalizedPath !== '/' && pathname.startsWith(`${normalizedPath}/`));
+    });
+}
+
+function getGlobalTargetElements() {
+    const hostname = window.location.hostname;
+    const config = PRE_DEFINED_SITES.find(site => hostname.includes(site.url));
+    if (isSelectorPathExcluded(config, window.location.pathname)) return [];
+
+    return document.querySelectorAll(globalTargetSelector);
+}
+
 function normalizeTitleCorrectionKeyPart(value) {
     return String(value || '')
         .normalize('NFKC')
@@ -598,7 +623,7 @@ function getResolvedLinkTitle(linkData) {
 
 function invalidateTitleCorrectionRenderCache() {
     similarityCache = {};
-    document.querySelectorAll(globalTargetSelector).forEach(el => {
+    getGlobalTargetElements().forEach(el => {
         if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
         else if (el.querySelectorAll) {
             el.querySelectorAll('a').forEach(a => {
@@ -2042,7 +2067,7 @@ function createQuickActions(linkData, hasBook) {
 
                     similarityCache[targetMatchKey] = undefined;
                     
-                    document.querySelectorAll(globalTargetSelector).forEach(el => {
+                    getGlobalTargetElements().forEach(el => {
                         if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
                         else if (el.querySelectorAll) {
                             el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
@@ -2719,7 +2744,7 @@ function applyStyles() {
       for(let i=0; i<detailEls.length; i++) applyStyleToDetailElement(detailEls[i]);
   }
 
-  const targetAreas = document.querySelectorAll(globalTargetSelector);
+  const targetAreas = getGlobalTargetElements();
   let allLinks = [];
 
   targetAreas.forEach(area => {
@@ -3003,7 +3028,7 @@ try {
           
           safeStorageGet(BM_STORAGE_DEFAULTS, (data) => {
               initDataCache(data);
-              document.querySelectorAll(globalTargetSelector).forEach(el => {
+              getGlobalTargetElements().forEach(el => {
                   if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
                   else if (el.querySelectorAll) {
                       el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
@@ -3101,7 +3126,7 @@ try {
                     }
 
                     // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
-                    document.querySelectorAll(globalTargetSelector).forEach(el => {
+                    getGlobalTargetElements().forEach(el => {
                         if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
                         else if (el.querySelectorAll) {
                             el.querySelectorAll('a').forEach(a => { if (a._bmData) a._bmData.raw = null; });
