@@ -1317,6 +1317,14 @@ function findMatchingBook(titleParts, preferredBookId = null) {
         exactBaseCandidates.forEach(candidate => {
             if (!editionGroups.has(getEditionGroup(candidate))) editionGroups.set(getEditionGroup(candidate), candidate);
         });
+
+        const standardCandidates = exactBaseCandidates.filter(candidate => !candidate._editionKey);
+        if (standardCandidates.length > 0) {
+            const result = { book: standardCandidates[standardCandidates.length - 1], maxScore: 100, candidates: [] };
+            similarityCache[cacheKey] = result;
+            return result;
+        }
+
         if (editionGroups.size > 1) {
             const result = { book: null, maxScore: 0, candidates: Array.from(editionGroups.values()), ambiguous: true };
             similarityCache[cacheKey] = result;
