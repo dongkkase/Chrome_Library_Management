@@ -489,7 +489,20 @@ let similarityCache = {};
 let lastRightClickedLink = null; 
 let lastRightClickedElement = null; 
 
-let isDownloadUIEnabled = true; 
+let isDownloadUIEnabled = false;
+
+function setDownloadUIEnabled(enabled) {
+    isDownloadUIEnabled = enabled;
+    if (isDownloadUIEnabled) return;
+
+    const container = document.getElementById('book-manager-dl-overlay');
+    if (container) container.style.display = 'none';
+}
+
+safeStorageGet({ showDownloadUI: true }, (data) => {
+    setDownloadUIEnabled(data.showDownloadUI !== false);
+});
+
 let titleProcessingCache = new Map(); 
 let titleProcessingEditionSignature = '';
 let isEverythingEnabled = false;
@@ -902,7 +915,6 @@ function initDataCache(data) {
         titleProcessingEditionSignature = currentEditionSignature;
     }
 
-    isDownloadUIEnabled = data.showDownloadUI !== false; 
     isEverythingEnabled = !!data.connectEverything;
     isShowListQuickBtn = !!data.showListQuickBtn;
     isShowListQuickBtnHover = !!data.showListQuickBtnHover;
@@ -3039,6 +3051,10 @@ function updateDownloadUI(downloads) {
     });
 }
 
+function handleDownloadProgress(downloads) {
+    updateDownloadUI(isDownloadUIEnabled ? downloads : []);
+}
+
 try {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (!isExtensionContextValid()) return;
@@ -3092,7 +3108,7 @@ try {
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
-          if (isDownloadUIEnabled) updateDownloadUI(request.downloads);
+          handleDownloadProgress(request.downloads);
       } else if (request.action === "DOWNLOAD_COMPLETE_TOAST") {
           if (isDownloadUIEnabled) {
               const fname = request.filename.split(/[\\/]/).pop();
@@ -3152,6 +3168,10 @@ try {
     if (isExtensionContextValid()) {
         chrome.storage.onChanged.addListener((changes, namespace) => {
             if (namespace === 'local') {
+                if (changes.showDownloadUI) {
+                    setDownloadUIEnabled(changes.showDownloadUI.newValue !== false);
+                }
+
                 if (changes.missingVolsMap && changes.missingVolsUpdate) {
                     applyMissingVolUpdateToCache(changes.missingVolsUpdate.newValue);
                     debouncedApplyStyles();
