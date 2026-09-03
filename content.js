@@ -1,5 +1,5 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
-const BM_STORAGE_DEFAULTS = { allowedSites: [], bookList: [], missingVolsMap: {}, titleCorrections: {}, editionKeywords: getDefaultEditionKeywords(), showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+const BM_STORAGE_DEFAULTS = { allowedSites: [], missingVolsMap: {}, titleCorrections: {}, editionKeywords: getDefaultEditionKeywords(), filterWords: [], bookStoreChange: null, showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
 
 function isExtensionContextValid() {
     try {
@@ -43,12 +43,77 @@ function safeStorageSet(values, callback) {
     if (!isExtensionContextValid()) return false;
     try {
         chrome.storage.local.set(values, () => {
-            ignoreLastError();
-            if (callback && isExtensionContextValid()) callback();
+            let succeeded = true;
+            try {
+                succeeded = !chrome.runtime.lastError;
+            } catch (e) {
+                succeeded = false;
+            }
+            if (callback && isExtensionContextValid()) callback(succeeded);
         });
         return true;
     } catch (e) {
         return false;
+    }
+}
+
+function requestRuntimeResponse(message, callback) {
+    if (!isExtensionContextValid()) {
+        callback(null);
+        return false;
+    }
+
+    try {
+        chrome.runtime.sendMessage(message, (response) => {
+            let hasError = false;
+            try {
+                hasError = !!chrome.runtime.lastError;
+            } catch (e) {
+                hasError = true;
+            }
+            callback(hasError ? null : response);
+        });
+        return true;
+    } catch (e) {
+        callback(null);
+        return false;
+    }
+}
+
+function loadBookListWithLegacyFallback(callback, allowLegacy = false) {
+    requestRuntimeResponse({ action: 'GET_BOOK_LIST' }, (response) => {
+        if (response && response.ok === true && Array.isArray(response.bookList)) {
+            callback(response.bookList, false, normalizeBookStoreRevision(response.revision));
+            return;
+        }
+
+        if (!allowLegacy) {
+            callback(null, false, null);
+            return;
+        }
+
+        if (!safeStorageGet({ bookList: [] }, (legacyData) => {
+            const legacyList = legacyData && Array.isArray(legacyData.bookList) ? legacyData.bookList : [];
+            callback(legacyList, true, null);
+        })) {
+            callback([], true, null);
+        }
+    });
+}
+
+function loadInitialContentData(callback) {
+    const loadBooks = (markerTokenBeforeBooks) => {
+        loadBookListWithLegacyFallback((bookList, usedLegacy, revision) => {
+            safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (settings) => {
+                callback({ ...settings, bookList, bookStoreRevision: revision }, usedLegacy, markerTokenBeforeBooks);
+            });
+        }, true);
+    };
+
+    if (!safeStorageGet({ bookStoreChange: null }, (data) => {
+        loadBooks(getBookStoreToken(data && data.bookStoreChange));
+    })) {
+        loadBooks(null);
     }
 }
 
@@ -482,6 +547,19 @@ let isBoardJS2Executed = false;
 let isTargetSite = false;
 let exactMatchCache = {};
 let cachedBookList = [];
+let currentBookList = [];
+let currentStorageData = { ...BM_STORAGE_DEFAULTS };
+let lastBookStoreToken = null;
+let lastBookStoreRevision = null;
+let bookListReloadInProgress = false;
+let bookListReloadPending = false;
+const BOOK_LIST_RELOAD_RETRY_DELAYS = [250, 1000, 3000];
+let bookListReloadRetryIndex = 0;
+let bookListReloadRetryTimer = null;
+let suppressMutationStyleRefresh = false;
+let suppressMutationStyleRefreshTimer = null;
+let pendingOptimisticChanges = new Map();
+let optimisticRecoveryTimer = null;
 let isDataLoaded = false;
 let titleCorrections = {};
 
@@ -902,12 +980,97 @@ function getBoardTableFromUrl(url) {
     }
 }
 
-function initDataCache(data) {
+function getBookStoreToken(marker) {
+    if (!marker || marker.token === undefined || marker.token === null) return null;
+    return String(marker.token);
+}
+
+function normalizeBookStoreRevision(value) {
+    const revision = typeof value === 'number'
+        ? value
+        : typeof value === 'string' && value.trim()
+            ? Number(value)
+            : NaN;
+    return Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
+}
+
+function getStoredBookData(book) {
+    if (!book || typeof book !== 'object') return null;
+
+    const storedBook = { ...book };
+    delete storedBook.cleanTitleStr;
+    Object.keys(storedBook).forEach((key) => {
+        if (key.startsWith('_')) delete storedBook[key];
+    });
+    return storedBook;
+}
+
+function createEnhancedBook(book) {
+    if (!book || typeof book !== 'object') return null;
+
+    const title = String(book.title || '');
+    let processedOriginal;
+    let processedNoSpace;
+    let editionKey;
+    let editionState;
+    let matchKey;
+
+    if (titleProcessingCache.has(title)) {
+        const cached = titleProcessingCache.get(title);
+        processedOriginal = cached.original;
+        processedNoSpace = cached.nospace;
+        editionKey = cached.editionKey;
+        editionState = cached.editionState;
+        matchKey = cached.matchKey;
+    } else {
+        const titleParts = getTitleMatchParts(title);
+        processedOriginal = titleParts.baseOriginal;
+        processedNoSpace = titleParts.baseNoSpace;
+        editionKey = titleParts.editionKey;
+        editionState = titleParts.editionState === 'unknown' ? 'standard' : titleParts.editionState;
+        matchKey = titleParts.matchKey;
+        titleProcessingCache.set(title, {
+            original: processedOriginal,
+            nospace: processedNoSpace,
+            editionKey,
+            editionState,
+            matchKey
+        });
+    }
+
+    return {
+        ...book,
+        missingVols: getBookMissingVols(book, currentStorageData.missingVolsMap),
+        _regBodyOriginal: processedOriginal,
+        _regBodyNoSpace: processedNoSpace,
+        _editionKey: editionKey,
+        _editionState: editionState || 'standard',
+        _matchKey: matchKey
+    };
+}
+
+function replaceBookCache(bookList) {
+    currentBookList = Array.isArray(bookList)
+        ? bookList.filter(book => book && typeof book === 'object')
+        : [];
+    exactMatchCache = {};
+    similarityCache = {};
+    cachedBookList = currentBookList.map(createEnhancedBook).filter(Boolean);
+
+    cachedBookList.forEach((book) => {
+        exactMatchCache[book._matchKey] = book;
+    });
+    isDataLoaded = true;
+}
+
+function applyDataSettings(data) {
+    currentStorageData = { ...currentStorageData, ...(data || {}) };
+    const settings = currentStorageData;
     const previousBoardJS2 = globalBoardJS2;
 
-    setEditionKeywords(data.editionKeywords);
-    titleCorrections = data.titleCorrections && typeof data.titleCorrections === 'object'
-        ? data.titleCorrections
+    setEditionKeywords(settings.editionKeywords);
+    titleCorrections = settings.titleCorrections && typeof settings.titleCorrections === 'object'
+        ? settings.titleCorrections
         : {};
     const currentEditionSignature = getEditionKeywordsSignature();
     if (titleProcessingEditionSignature !== currentEditionSignature) {
@@ -915,22 +1078,22 @@ function initDataCache(data) {
         titleProcessingEditionSignature = currentEditionSignature;
     }
 
-    isEverythingEnabled = !!data.connectEverything;
-    isShowListQuickBtn = !!data.showListQuickBtn;
-    isShowListQuickBtnHover = !!data.showListQuickBtnHover;
-    isCustomThemeEnabled = !!data.useCustomTheme;
-    isSupportSingleCharEnabled = !!data.supportSingleChar;
-    isHideUselessCommentsEnabled = data.hideUselessComments !== false;
-    isHideExclude = !!data.hideExclude;
-    isHideComplete = !!data.hideComplete;
-    isHideIncomplete = !!data.hideIncomplete;
-    isHideTranslate = !!data.hideTranslate;
-    isHideNew = !!data.hideNew;
-    isHideQuickMenu = !!data.hideQuickMenu;
+    isEverythingEnabled = !!settings.connectEverything;
+    isShowListQuickBtn = !!settings.showListQuickBtn;
+    isShowListQuickBtnHover = !!settings.showListQuickBtnHover;
+    isCustomThemeEnabled = !!settings.useCustomTheme;
+    isSupportSingleCharEnabled = !!settings.supportSingleChar;
+    isHideUselessCommentsEnabled = settings.hideUselessComments !== false;
+    isHideExclude = !!settings.hideExclude;
+    isHideComplete = !!settings.hideComplete;
+    isHideIncomplete = !!settings.hideIncomplete;
+    isHideTranslate = !!settings.hideTranslate;
+    isHideNew = !!settings.hideNew;
+    isHideQuickMenu = !!settings.hideQuickMenu;
 
     const hostname = window.location.hostname;
     let config = PRE_DEFINED_SITES.find(s => hostname.includes(s.url));
-    const userSites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
+    const userSites = Array.isArray(settings.allowedSites) ? settings.allowedSites : [];
     const matchedUserSite = userSites.find(s => {
         const sUrl = typeof s === 'string' ? s : s.url;
         return hostname.includes(sUrl);
@@ -981,36 +1144,367 @@ function initDataCache(data) {
 
     globalDetailSelector = (matchedUserSite && typeof matchedUserSite === 'object' && matchedUserSite.detailSelector) 
         ? matchedUserSite.detailSelector : (config && config.detailSelector ? config.detailSelector : '');
+}
 
-    exactMatchCache = {};
-    similarityCache = {}; 
+function initDataCache(data) {
+    const initialData = data || {};
+    const { bookList, bookStoreRevision, ...settings } = initialData;
+    applyDataSettings(settings);
+    const markerToken = getBookStoreToken(data && data.bookStoreChange);
+    if (markerToken !== null && lastBookStoreToken === null) lastBookStoreToken = markerToken;
+    const initialRevision = normalizeBookStoreRevision(bookStoreRevision);
+    if (initialRevision !== null) lastBookStoreRevision = initialRevision;
+    replaceBookCache(Array.isArray(bookList) ? bookList : []);
+}
 
-    cachedBookList = (Array.isArray(data.bookList) ? data.bookList : []).map(b => {
-        let processedOriginal, processedNoSpace, editionKey, editionState, matchKey;
-        
-        if (titleProcessingCache.has(b.title)) {
-            const cached = titleProcessingCache.get(b.title);
-            processedOriginal = cached.original;
-            processedNoSpace = cached.nospace;
-            editionKey = cached.editionKey;
-            editionState = cached.editionState;
-            matchKey = cached.matchKey;
-        } else {
-            const titleParts = getTitleMatchParts(b.title);
-            processedOriginal = titleParts.baseOriginal;
-            processedNoSpace = titleParts.baseNoSpace;
-            editionKey = titleParts.editionKey;
-            editionState = titleParts.editionState === 'unknown' ? 'standard' : titleParts.editionState;
-            matchKey = titleParts.matchKey;
-            titleProcessingCache.set(b.title, { original: processedOriginal, nospace: processedNoSpace, editionKey, editionState, matchKey });
+function createBookChangeImpact() {
+    return {
+        ids: new Set(),
+        matchKeys: new Set(),
+        books: [],
+        structural: false
+    };
+}
+
+function addBookToImpact(impact, book) {
+    if (!book) return;
+    if (book.id !== undefined && book.id !== null) impact.ids.add(String(book.id));
+    if (book._matchKey) impact.matchKeys.add(book._matchKey);
+    impact.books.push(book);
+}
+
+function mergeBookChangeImpact(target, source) {
+    source.ids.forEach(id => target.ids.add(id));
+    source.matchKeys.forEach(matchKey => target.matchKeys.add(matchKey));
+    target.books.push(...source.books);
+    target.structural = target.structural || source.structural;
+    return target;
+}
+
+function areBookIdsEqual(firstId, secondId) {
+    if (firstId === undefined || firstId === null || secondId === undefined || secondId === null) return false;
+    return String(firstId) === String(secondId);
+}
+
+function refreshExactMatchCache(matchKeys) {
+    if (!matchKeys || matchKeys.size === 0) return;
+
+    matchKeys.forEach(matchKey => {
+        delete exactMatchCache[matchKey];
+    });
+    cachedBookList.forEach((book) => {
+        if (matchKeys.has(book._matchKey)) {
+            exactMatchCache[book._matchKey] = book;
+        }
+    });
+}
+
+function isBookCompatibleWithTitleParts(book, titleParts) {
+    if (!book || !titleParts) return false;
+
+    const editionState = titleParts.editionState || (titleParts.editionKey ? 'positive' : 'unknown');
+    if (editionState === 'positive' && book._editionKey !== titleParts.editionKey) return false;
+    if (editionState === 'standard' && book._editionState !== 'standard') return false;
+    if (book._regBodyNoSpace === titleParts.baseNoSpace) return true;
+
+    const shorterLength = Math.min(book._regBodyNoSpace.length, titleParts.baseNoSpace.length);
+    if (Math.abs(book._regBodyNoSpace.length - titleParts.baseNoSpace.length) > shorterLength * 2.5) return false;
+    return getSimilarity(book._regBodyOriginal, titleParts.baseOriginal) >= 85;
+}
+
+function getTitlePartsFromSimilarityCacheKey(cacheKey) {
+    const editionStateSeparator = '::edition-state=';
+    const separatorIndex = cacheKey.lastIndexOf(editionStateSeparator);
+    if (separatorIndex < 0) return null;
+
+    const matchKey = cacheKey.slice(0, separatorIndex);
+    const editionState = cacheKey.slice(separatorIndex + editionStateSeparator.length);
+    const editionSeparatorIndex = matchKey.indexOf('::');
+    const baseNoSpace = editionSeparatorIndex < 0 ? matchKey : matchKey.slice(0, editionSeparatorIndex);
+    const editionKey = editionSeparatorIndex < 0 ? '' : matchKey.slice(editionSeparatorIndex + 2);
+    return {
+        baseOriginal: baseNoSpace,
+        baseNoSpace,
+        editionKey,
+        editionState,
+        matchKey
+    };
+}
+
+function similarityResultReferencesImpact(result, impact) {
+    if (!result || typeof result !== 'object') return false;
+    if (result.book && result.book.id !== undefined && impact.ids.has(String(result.book.id))) return true;
+    return Array.isArray(result.candidates) && result.candidates.some(candidate => {
+        return candidate && candidate.id !== undefined && impact.ids.has(String(candidate.id));
+    });
+}
+
+function invalidateRelatedSimilarityCache(impact) {
+    if (!impact.structural) return;
+
+    Object.keys(similarityCache).forEach((cacheKey) => {
+        const result = similarityCache[cacheKey];
+        if (similarityResultReferencesImpact(result, impact)) {
+            delete similarityCache[cacheKey];
+            return;
         }
 
-        const enhanced = { ...b, missingVols: getBookMissingVols(b, data.missingVolsMap), _regBodyOriginal: processedOriginal, _regBodyNoSpace: processedNoSpace, _editionKey: editionKey, _editionState: editionState || 'standard', _matchKey: matchKey };
-        if(!exactMatchCache[matchKey]) exactMatchCache[matchKey] = enhanced;
-        return enhanced;
+        const titleParts = getTitlePartsFromSimilarityCacheKey(cacheKey);
+        if (titleParts && impact.books.some(book => isBookCompatibleWithTitleParts(book, titleParts))) {
+            delete similarityCache[cacheKey];
+        }
     });
+}
 
-    isDataLoaded = true;
+function upsertCachedBook(book, optimistic = false) {
+    const impact = createBookChangeImpact();
+    const storedBook = getStoredBookData(book);
+    const enhancedBook = createEnhancedBook(storedBook);
+    if (!enhancedBook || !enhancedBook.title) return { applied: false, impact };
+
+    let existingIndex = -1;
+    if (enhancedBook.id !== undefined && enhancedBook.id !== null) {
+        existingIndex = cachedBookList.findIndex(candidate => areBookIdsEqual(candidate.id, enhancedBook.id));
+    }
+    if (existingIndex < 0 && !optimistic) {
+        existingIndex = cachedBookList.findIndex(candidate => {
+            return candidate._optimistic === true && candidate._matchKey === enhancedBook._matchKey;
+        });
+    }
+
+    if (existingIndex >= 0) {
+        const existingBook = cachedBookList[existingIndex];
+        const previousBook = { ...existingBook };
+        const titleChanged = previousBook.title !== enhancedBook.title;
+        const matchKeyChanged = previousBook._matchKey !== enhancedBook._matchKey;
+
+        Object.assign(existingBook, enhancedBook);
+        if (optimistic) existingBook._optimistic = true;
+        else delete existingBook._optimistic;
+        currentBookList[existingIndex] = storedBook;
+
+        impact.structural = titleChanged || matchKeyChanged;
+        addBookToImpact(impact, previousBook);
+        addBookToImpact(impact, existingBook);
+        return { applied: true, impact, book: existingBook };
+    }
+
+    if (optimistic) enhancedBook._optimistic = true;
+    currentBookList.push(storedBook);
+    cachedBookList.push(enhancedBook);
+    impact.structural = true;
+    addBookToImpact(impact, enhancedBook);
+    return { applied: true, impact, book: enhancedBook };
+}
+
+function deleteCachedBook(change) {
+    const impact = createBookChangeImpact();
+    const markerBook = change && change.book ? createEnhancedBook(getStoredBookData(change.book)) : null;
+    const targetId = change && change.id !== undefined ? change.id : (markerBook ? markerBook.id : null);
+    let existingIndex = -1;
+
+    if (targetId !== undefined && targetId !== null) {
+        existingIndex = cachedBookList.findIndex(candidate => areBookIdsEqual(candidate.id, targetId));
+    }
+    if (existingIndex < 0 && markerBook) {
+        existingIndex = cachedBookList.findIndex(candidate => candidate._matchKey === markerBook._matchKey);
+    }
+    if (existingIndex < 0) {
+        return {
+            applied: (targetId !== undefined && targetId !== null) || !!markerBook,
+            impact
+        };
+    }
+
+    const deletedBook = cachedBookList.splice(existingIndex, 1)[0];
+    currentBookList.splice(existingIndex, 1);
+    impact.structural = true;
+    addBookToImpact(impact, deletedBook);
+    if (markerBook) addBookToImpact(impact, markerBook);
+    return { applied: true, impact, book: deletedBook };
+}
+
+function finalizeBookChangeImpact(impact) {
+    if (!impact || (impact.ids.size === 0 && impact.matchKeys.size === 0 && impact.books.length === 0)) return;
+    if (impact.structural) refreshExactMatchCache(impact.matchKeys);
+    invalidateRelatedSimilarityCache(impact);
+    refreshRelatedBookElements(impact);
+}
+
+function applyBookStoreDelta(change, optimistic = false) {
+    if (!change || typeof change !== 'object') return { applied: false, impact: createBookChangeImpact() };
+    if (change.type === 'upsert' && change.book) return upsertCachedBook(change.book, optimistic);
+    if (change.type === 'delete') return deleteCachedBook(change);
+    return { applied: false, impact: createBookChangeImpact() };
+}
+
+function getBookChangeMatchKey(change) {
+    if (!change || !change.book || !change.book.title) return '';
+    return getTitleMatchParts(String(change.book.title)).matchKey;
+}
+
+function clearOptimisticRecoveryTimer() {
+    if (!optimisticRecoveryTimer) return;
+    clearTimeout(optimisticRecoveryTimer);
+    optimisticRecoveryTimer = null;
+}
+
+function clearPendingOptimisticChanges() {
+    pendingOptimisticChanges.clear();
+    clearOptimisticRecoveryTimer();
+}
+
+function scheduleOptimisticRecovery() {
+    if (optimisticRecoveryTimer || pendingOptimisticChanges.size === 0) return;
+
+    optimisticRecoveryTimer = setTimeout(() => {
+        optimisticRecoveryTimer = null;
+        if (pendingOptimisticChanges.size === 0) return;
+        pendingOptimisticChanges.clear();
+        reloadBookListFromSource();
+    }, 8000);
+}
+
+function markPendingOptimisticChange(matchKey) {
+    if (!matchKey) return;
+    pendingOptimisticChanges.set(matchKey, (pendingOptimisticChanges.get(matchKey) || 0) + 1);
+    scheduleOptimisticRecovery();
+}
+
+function settlePendingOptimisticChange(change) {
+    const matchKey = getBookChangeMatchKey(change);
+    if (!matchKey || !pendingOptimisticChanges.has(matchKey)) return;
+
+    const remainingCount = pendingOptimisticChanges.get(matchKey) - 1;
+    if (remainingCount > 0) pendingOptimisticChanges.set(matchKey, remainingCount);
+    else pendingOptimisticChanges.delete(matchKey);
+
+    if (pendingOptimisticChanges.size === 0) clearOptimisticRecoveryTimer();
+}
+
+function settlePendingOptimisticMarker(marker) {
+    if (!marker || typeof marker !== 'object') return;
+    if (marker.type === 'reload') {
+        clearPendingOptimisticChanges();
+        return;
+    }
+
+    const changes = marker.type === 'batch' ? marker.changes : [marker];
+    if (!Array.isArray(changes)) return;
+    changes.forEach(settlePendingOptimisticChange);
+}
+
+function recoverPendingOptimisticChanges(forceReload = false) {
+    if (pendingOptimisticChanges.size === 0 && !forceReload) return;
+    clearPendingOptimisticChanges();
+    reloadBookListFromSource();
+}
+
+function resetBookListReloadRetry() {
+    if (bookListReloadRetryTimer) clearTimeout(bookListReloadRetryTimer);
+    bookListReloadRetryTimer = null;
+    bookListReloadRetryIndex = 0;
+}
+
+function scheduleBookListReloadRetry() {
+    if (bookListReloadRetryTimer
+        || bookListReloadRetryIndex >= BOOK_LIST_RELOAD_RETRY_DELAYS.length
+        || !isExtensionContextValid()) {
+        return;
+    }
+
+    const retryDelay = BOOK_LIST_RELOAD_RETRY_DELAYS[bookListReloadRetryIndex];
+    bookListReloadRetryIndex++;
+    bookListReloadRetryTimer = setTimeout(() => {
+        bookListReloadRetryTimer = null;
+        reloadBookListFromSource(true);
+    }, retryDelay);
+}
+
+function reloadBookListFromSource(isRetry = false) {
+    if (!isRetry) resetBookListReloadRetry();
+    if (bookListReloadInProgress) {
+        bookListReloadPending = true;
+        return;
+    }
+
+    bookListReloadInProgress = true;
+    const reloadStartToken = lastBookStoreToken;
+    loadBookListWithLegacyFallback((bookList, _usedLegacy, revision) => {
+        const reloadSucceeded = Array.isArray(bookList);
+        if (reloadSucceeded) {
+            replaceBookCache(bookList);
+            if (revision !== null) lastBookStoreRevision = revision;
+            debouncedApplyStyles();
+            resetBookListReloadRetry();
+        }
+        bookListReloadInProgress = false;
+
+        if (bookListReloadPending || reloadStartToken !== lastBookStoreToken) {
+            bookListReloadPending = false;
+            reloadBookListFromSource();
+            return;
+        }
+
+        if (!reloadSucceeded) scheduleBookListReloadRetry();
+    });
+}
+
+function applyBookStoreMarker(marker) {
+    if (!marker || typeof marker !== 'object') return;
+
+    const markerToken = getBookStoreToken(marker);
+    if (markerToken !== null && markerToken === lastBookStoreToken) return;
+    if (markerToken !== null) lastBookStoreToken = markerToken;
+    currentStorageData.bookStoreChange = marker;
+
+    const markerRevision = normalizeBookStoreRevision(marker.revision);
+    if (markerRevision !== null) {
+        if (lastBookStoreRevision === null) {
+            clearPendingOptimisticChanges();
+            reloadBookListFromSource();
+            return;
+        }
+        if (markerRevision < lastBookStoreRevision) return;
+        if (markerRevision === lastBookStoreRevision) {
+            settlePendingOptimisticMarker(marker);
+            return;
+        }
+        if (markerRevision > lastBookStoreRevision + 1) {
+            clearPendingOptimisticChanges();
+            reloadBookListFromSource();
+            return;
+        }
+    }
+
+    if (marker.type === 'reload') {
+        settlePendingOptimisticMarker(marker);
+        reloadBookListFromSource();
+        return;
+    }
+
+    const changes = marker.type === 'batch' ? marker.changes : [marker];
+    if (!Array.isArray(changes) || changes.some(change => {
+        return !change || !['upsert', 'delete'].includes(change.type) || (change.type === 'upsert' && !change.book);
+    })) {
+        clearPendingOptimisticChanges();
+        reloadBookListFromSource();
+        return;
+    }
+
+    const combinedImpact = createBookChangeImpact();
+    for (const change of changes) {
+        const result = applyBookStoreDelta(change);
+        if (!result.applied) {
+            clearPendingOptimisticChanges();
+            reloadBookListFromSource();
+            return;
+        }
+        mergeBookChangeImpact(combinedImpact, result.impact);
+        settlePendingOptimisticChange(change);
+    }
+    if (markerRevision !== null) lastBookStoreRevision = markerRevision;
+    finalizeBookChangeImpact(combinedImpact);
 }
 
 function injectQuickHidePanel() {
@@ -1380,6 +1874,67 @@ function findMatchingBook(titleParts, preferredBookId = null) {
     return result;
 }
 
+function renderDataReferencesImpact(renderData, impact) {
+    if (!renderData || renderData.skip) return false;
+
+    if (renderData.matchedBookId !== undefined
+        && renderData.matchedBookId !== null
+        && impact.ids.has(String(renderData.matchedBookId))) {
+        return true;
+    }
+    if (renderData.correctionBookId !== undefined
+        && renderData.correctionBookId !== null
+        && impact.ids.has(String(renderData.correctionBookId))) {
+        return true;
+    }
+    if (renderData.siteMatchKey && impact.matchKeys.has(renderData.siteMatchKey)) return true;
+    if (Array.isArray(renderData.matchCandidates) && renderData.matchCandidates.some(candidate => {
+        return candidate && candidate.id !== undefined && impact.ids.has(String(candidate.id));
+    })) {
+        return true;
+    }
+
+    return impact.structural
+        && renderData.titleParts
+        && impact.books.some(book => isBookCompatibleWithTitleParts(book, renderData.titleParts));
+}
+
+function suppressManagedMutationRefresh() {
+    suppressMutationStyleRefresh = true;
+    if (suppressMutationStyleRefreshTimer) clearTimeout(suppressMutationStyleRefreshTimer);
+    suppressMutationStyleRefreshTimer = setTimeout(() => {
+        suppressMutationStyleRefresh = false;
+        suppressMutationStyleRefreshTimer = null;
+    }, 0);
+}
+
+function refreshRelatedBookElements(impact) {
+    if (!impact || !isDataLoaded || !isTargetSite) return;
+
+    const relatedLinks = [];
+    const seenLinks = new Set();
+    getGlobalTargetElements().forEach((area) => {
+        const links = area.tagName === 'A' ? [area] : Array.from(area.querySelectorAll('a'));
+        links.forEach((link) => {
+            if (seenLinks.has(link) || !renderDataReferencesImpact(link._bmData, impact)) return;
+            seenLinks.add(link);
+            relatedLinks.push(link);
+        });
+    });
+
+    const relatedDetails = [];
+    if (globalDetailSelector) {
+        document.querySelectorAll(globalDetailSelector).forEach((element) => {
+            if (renderDataReferencesImpact(element._bmDetailData, impact)) relatedDetails.push(element);
+        });
+    }
+
+    if (relatedLinks.length === 0 && relatedDetails.length === 0) return;
+    suppressManagedMutationRefresh();
+    relatedLinks.forEach(applyStyleToSingleLink);
+    relatedDetails.forEach(applyStyleToDetailElement);
+}
+
 function showInfoToast(msg, isError = false) {
   let container = document.getElementById('book-manager-info-toast-container');
   if (!container) {
@@ -1747,16 +2302,25 @@ let pendingContentMissingVolSave = null;
 let contentMissingVolSaveQueue = Promise.resolve();
 
 function applyMissingVolUpdateToCache(update) {
-    if (!update || update.bookId === undefined) return;
-    const cachedBook = cachedBookList.find(book => book.id === update.bookId);
+    if (!update || update.bookId === undefined) return null;
+
+    const missingVols = Array.isArray(update.missingVols) ? [...update.missingVols] : [];
+    currentStorageData.missingVolsMap = {
+        ...(currentStorageData.missingVolsMap || {}),
+        [String(update.bookId)]: missingVols
+    };
+    const cachedBook = cachedBookList.find(book => areBookIdsEqual(book.id, update.bookId));
     if (cachedBook) {
-        cachedBook.missingVols = Array.isArray(update.missingVols) ? [...update.missingVols] : [];
+        cachedBook.missingVols = missingVols;
+        const impact = createBookChangeImpact();
+        addBookToImpact(impact, cachedBook);
+        return impact;
     }
+    return null;
 }
 
-function scheduleContentMissingVolSave(missingVolsMap, bookId, missingVols) {
+function scheduleContentMissingVolSave(bookId, missingVols) {
     pendingContentMissingVolSave = {
-        missingVolsMap,
         bookId,
         missingVols: [...missingVols].sort((a, b) => a - b)
     };
@@ -1776,23 +2340,20 @@ function flushPendingContentMissingVolSave() {
     pendingContentMissingVolSave = null;
 
     const save = () => new Promise(resolve => {
-        const updatedMissingVolsMap = { ...pending.missingVolsMap };
-        updatedMissingVolsMap[String(pending.bookId)] = pending.missingVols;
-
-        const marker = {
+        requestRuntimeResponse({
+            action: 'UPDATE_MISSING_VOLS',
             bookId: pending.bookId,
-            missingVols: pending.missingVols,
-            timestamp: Date.now()
-        };
-
-        if (!safeStorageSet({ missingVolsMap: updatedMissingVolsMap, missingVolsUpdate: marker }, resolve)) resolve();
+            missingVols: pending.missingVols
+        }, response => {
+            resolve(!!response && response.ok === true);
+        });
     });
 
     contentMissingVolSaveQueue = contentMissingVolSaveQueue.then(save, save);
     return contentMissingVolSaveQueue;
 }
 
-function openMissingPopoverContent(targetMatchKey, badgeElement) {
+function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId = null) {
     if (!contentVolPopover) {
         contentVolPopover = document.createElement('div');
         contentVolPopover.id = 'bm-missing-popover';
@@ -1837,10 +2398,14 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
         });
     }
 
-    flushPendingContentMissingVolSave().then(() => safeStorageGet({ bookList: [], missingVolsMap: {} }, (data) => {
-        const list = data.bookList;
-        const bookIndex = list.findIndex(b => getTitleMatchParts(b.title).matchKey === targetMatchKey);
-        const dbBook = bookIndex > -1 ? list[bookIndex] : null;
+    flushPendingContentMissingVolSave().then(() => {
+        const preferredBook = preferredBookId !== null && preferredBookId !== undefined
+            ? cachedBookList.find(book => areBookIdsEqual(book.id, preferredBookId))
+            : null;
+        const dbBook = preferredBook
+            || exactMatchCache[targetMatchKey]
+            || cachedBookList.find(book => book._matchKey === targetMatchKey)
+            || null;
 
         if (!dbBook) {
             showInfoToast('도서 데이터가 아직 저장되지 않았습니다. 잠시 후 다시 시도해주세요.', true);
@@ -1853,7 +2418,7 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
             return;
         }
 
-        const missingVolSet = new Set(getBookMissingVols(dbBook, data.missingVolsMap));
+        const missingVolSet = new Set(getBookMissingVols(dbBook, currentStorageData.missingVolsMap));
 
         contentVolPopover.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:bold; border-bottom:1px solid #dee2e6; padding-bottom:8px; margin-bottom:8px; color:#333;">
@@ -1903,10 +2468,11 @@ function openMissingPopoverContent(targetMatchKey, badgeElement) {
             }
 
             const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
-            applyMissingVolUpdateToCache({ bookId: dbBook.id, missingVols });
-            scheduleContentMissingVolSave(data.missingVolsMap, dbBook.id, missingVols);
+            const impact = applyMissingVolUpdateToCache({ bookId: dbBook.id, missingVols });
+            if (impact) finalizeBookChangeImpact(impact);
+            scheduleContentMissingVolSave(dbBook.id, missingVols);
         };
-    }));
+    });
 }
 
 window.addEventListener('pagehide', flushPendingContentMissingVolSave);
@@ -1950,8 +2516,11 @@ function createQuickActions(linkData, hasBook) {
                 const actionTitle = resolvedTitle.title;
 
                 if (btnInfo.action === 'correct_title') {
+                    const preferredCorrectionBookId = resolvedTitle.bookId
+                        ?? linkData.matchedBookId
+                        ?? null;
                     const matched = actionTitle
-                        ? findMatchingBook(getResolvedTitleMatchParts(resolvedTitle), resolvedTitle.bookId)
+                        ? findMatchingBook(getResolvedTitleMatchParts(resolvedTitle), preferredCorrectionBookId)
                         : { book: null, candidates: [] };
                     let selectedBook = matched.book;
                     if (!selectedBook && Array.isArray(matched.candidates) && matched.candidates.length > 0) {
@@ -1973,8 +2542,8 @@ function createQuickActions(linkData, hasBook) {
                     if (inputTitle === null || !resolvedTitle.correctionKey) return;
 
                     const correctedTitle = inputTitle.trim();
-                    safeStorageGet({ bookList: [], titleCorrections: {} }, (data) => {
-                        const nextCorrections = { ...(data.titleCorrections || {}) };
+                    safeStorageGet({ titleCorrections: {} }, (data) => {
+                        const nextCorrections = { ...((data && data.titleCorrections) || {}) };
                         const correctionStorageKey = resolvedTitle.appliedCorrectionKey || resolvedTitle.correctionKey;
                         if (correctedTitle) {
                             nextCorrections[correctionStorageKey] = {
@@ -1984,29 +2553,44 @@ function createQuickActions(linkData, hasBook) {
                             };
                         } else delete nextCorrections[correctionStorageKey];
 
-                        let updatedBookList = Array.isArray(data.bookList) ? data.bookList : [];
-                        if (correctedTitle && selectedBook) {
-                            const matchedBookId = selectedBook.id;
-                            const matchedBookKey = selectedBook._matchKey || getTitleMatchParts(selectedBook.title || '').matchKey;
-                            const now = new Date().toISOString();
-                            updatedBookList = updatedBookList.map(book => {
-                                const isSameBook = matchedBookId !== undefined && matchedBookId !== null
-                                    ? book.id === matchedBookId
-                                    : getTitleMatchParts(book.title || '').matchKey === matchedBookKey;
-                                return isSameBook ? { ...book, title: correctedTitle, date: now } : book;
-                            });
-                        }
+                        const saveTitleCorrection = () => {
+                            const saveStarted = safeStorageSet({ titleCorrections: nextCorrections }, (succeeded) => {
+                                if (!succeeded) {
+                                    showInfoToast('제목 정정 설정을 저장하지 못했습니다.', true);
+                                    return;
+                                }
 
-                        titleCorrections = nextCorrections;
-                        invalidateTitleCorrectionRenderCache();
-                        const valuesToSave = { titleCorrections: nextCorrections };
-                        if (correctedTitle) valuesToSave.bookList = updatedBookList;
-                        safeStorageSet(valuesToSave, () => {
-                            const message = correctedTitle
-                                ? '<span style="color:#74c0fc; margin-right:5px;">[제목 정정]</span>' + escapeToastText(correctedTitle)
-                                : '<span style="color:#adb5bd;">저장된 제목 정정을 삭제했습니다.</span>';
-                            showActionToast(message, true);
-                        });
+                                titleCorrections = nextCorrections;
+                                currentStorageData.titleCorrections = nextCorrections;
+                                const message = correctedTitle
+                                    ? '<span style="color:#74c0fc; margin-right:5px;">[제목 정정]</span>' + escapeToastText(correctedTitle)
+                                    : '<span style="color:#adb5bd;">저장된 제목 정정을 삭제했습니다.</span>';
+                                showActionToast(message, true);
+                            });
+                            if (!saveStarted) showInfoToast('제목 정정 설정을 저장하지 못했습니다.', true);
+                        };
+
+                        if (correctedTitle && selectedBook) {
+                            const selectedMatchKey = selectedBook._matchKey
+                                || getTitleMatchParts(selectedBook.title || '').matchKey;
+                            requestRuntimeResponse({
+                                action: 'CONTENT_UPDATE_BOOK',
+                                bookId: selectedBook.id,
+                                matchKey: selectedMatchKey,
+                                changes: {
+                                    title: correctedTitle,
+                                    date: new Date().toISOString()
+                                }
+                            }, (response) => {
+                                if (!response || response.ok !== true) {
+                                    showInfoToast('도서 제목을 수정하지 못했습니다.', true);
+                                    return;
+                                }
+                                saveTitleCorrection();
+                            });
+                        } else {
+                            saveTitleCorrection();
+                        }
                     });
                     return;
                 }
@@ -2051,7 +2635,7 @@ function createQuickActions(linkData, hasBook) {
                 if (btnInfo.action === 'missing_vol') {
                     const pureCleanTitle = actionTitle;
                     const targetMatchKey = getTitleMatchParts(pureCleanTitle).matchKey;
-                    openMissingPopoverContent(targetMatchKey, btn);
+                    openMissingPopoverContent(targetMatchKey, btn, linkData.matchedBookId);
                     return;
                 }
 
@@ -2074,65 +2658,68 @@ function createQuickActions(linkData, hasBook) {
                         useExactTitle: resolvedTitle.isCorrected
                     });
                 } else {
-                    // [낙관적 UI] 삭제 포함 즉시 캐시 갱신
                     const pureCleanTitle = actionTitle;
                     const titleParts = getTitleMatchParts(pureCleanTitle);
                     const targetMatchKey = titleParts.matchKey;
-                    
+                    const matchingBooks = cachedBookList.filter(book => book._matchKey === targetMatchKey);
+                    const hasPreferredBookId = linkData.matchedBookId !== null
+                        && linkData.matchedBookId !== undefined;
+                    const preferredBook = hasPreferredBookId
+                        ? cachedBookList.find(book => areBookIdsEqual(book.id, linkData.matchedBookId)) || null
+                        : null;
+                    const existingBook = hasPreferredBookId
+                        ? preferredBook
+                        : exactMatchCache[targetMatchKey] || matchingBooks[matchingBooks.length - 1] || null;
+                    const targetBookId = hasPreferredBookId
+                        ? linkData.matchedBookId
+                        : existingBook && existingBook.id;
+                    const optimisticMatchKey = existingBook && existingBook._matchKey
+                        ? existingBook._matchKey
+                        : targetMatchKey;
+                    const canApplyOptimistically = !!targetMatchKey
+                        && !!optimisticMatchKey
+                        && (hasPreferredBookId ? !!preferredBook : matchingBooks.length <= 1);
+                    let optimisticResult = null;
+
                     if (btnInfo.action === 'delete') {
-                        if (exactMatchCache[targetMatchKey]) delete exactMatchCache[targetMatchKey];
-                        cachedBookList = cachedBookList.filter(b => b._matchKey !== targetMatchKey);
-                    } else {
-                        if (exactMatchCache[targetMatchKey]) {
-                            exactMatchCache[targetMatchKey].type = btnInfo.action;
-                        } else {
-                            let found = false;
-                            for (let i = 0; i < cachedBookList.length; i++) {
-                                if (cachedBookList[i]._matchKey === targetMatchKey) {
-                                    cachedBookList[i].type = btnInfo.action;
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found) { 
-                                const newBook = {
-                                    title: pureCleanTitle, type: btnInfo.action,
-                                    resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
-                                    lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
-                                    _regBodyOriginal: titleParts.baseOriginal,
-                                    _regBodyNoSpace: titleParts.baseNoSpace,
-                                    _editionKey: titleParts.editionKey,
-                                    _matchKey: targetMatchKey
-                                };
-                                cachedBookList.push(newBook);
-                                exactMatchCache[targetMatchKey] = newBook;
-                            }
+                        if (existingBook && canApplyOptimistically) {
+                            optimisticResult = applyBookStoreDelta({
+                                type: 'delete',
+                                book: existingBook,
+                                id: existingBook.id
+                            }, true);
                         }
+                    } else if (canApplyOptimistically) {
+                        const optimisticBook = existingBook
+                            ? {
+                                ...getStoredBookData(existingBook),
+                                type: btnInfo.action
+                            }
+                            : {
+                                title: pureCleanTitle,
+                                type: btnInfo.action,
+                                resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
+                                lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
+                                date: new Date().toISOString()
+                            };
+                        optimisticResult = applyBookStoreDelta({ type: 'upsert', book: optimisticBook }, true);
                     }
 
-                    similarityCache[targetMatchKey] = undefined;
-                    
-                    getGlobalTargetElements().forEach(el => {
-                        if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
-                        else if (el.querySelectorAll) {
-                            el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
-                        }
-                    });
-                    if (globalDetailSelector) {
-                        document.querySelectorAll(globalDetailSelector).forEach(el => {
-                            if (el._bmDetailData) el._bmDetailData.raw = null;
-                        });
+                    if (optimisticResult && optimisticResult.applied) {
+                        markPendingOptimisticChange(optimisticMatchKey);
+                        finalizeBookChangeImpact(optimisticResult.impact);
                     }
-                    
-                    debouncedApplyStyles();
 
-                    sendRuntimeMessage({
+                    requestRuntimeResponse({
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
+                        bookId: targetBookId,
                         cleanTitle: pureCleanTitle,
                         useExactTitle: resolvedTitle.isCorrected,
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
+                    }, (response) => {
+                        if (!response || response.ok !== true) recoverPendingOptimisticChanges(true);
                     });
                     
                 }
@@ -2844,8 +3431,17 @@ function generateOptimalSelector(el) {
     return el.tagName.toLowerCase();
 }
 
-safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
+const bookStoreTokenBeforeInitialLoad = lastBookStoreToken;
+loadInitialContentData((data, usedLegacyBookList, markerTokenBeforeBooks) => {
+    const initialMarkerToken = getBookStoreToken(data.bookStoreChange);
+    const initialRevision = normalizeBookStoreRevision(data.bookStoreRevision);
+    const markerChangedDuringLoad = markerTokenBeforeBooks !== initialMarkerToken
+        || bookStoreTokenBeforeInitialLoad !== lastBookStoreToken
+        || (lastBookStoreToken !== null && initialMarkerToken !== lastBookStoreToken)
+        || (lastBookStoreRevision !== null && initialRevision !== lastBookStoreRevision);
     initDataCache(data);
+    if (markerChangedDuringLoad) reloadBookListFromSource();
+    else if (usedLegacyBookList) scheduleBookListReloadRetry();
 
     if (isTargetSite) {
         const initPanel = () => {
@@ -2892,6 +3488,7 @@ safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
         
         new MutationObserver(() => {
             if (!isExtensionContextValid()) return;
+            if (suppressMutationStyleRefresh) return;
             debouncedApplyStyles(); 
         }).observe(document.body, { childList: true, subtree: true });
 
@@ -3089,22 +3686,6 @@ try {
           });
       } else if (request.action === "SHOW_TOAST" && request.book) {
           showToast(request.book, request.isDelete);
-          
-          safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
-              initDataCache(data);
-              getGlobalTargetElements().forEach(el => {
-                  if(el.tagName === 'A' && el._bmData) el._bmData.raw = null;
-                  else if (el.querySelectorAll) {
-                      el.querySelectorAll('a').forEach(a => { if(a._bmData) a._bmData.raw = null; });
-                  }
-              });
-              if (globalDetailSelector) {
-                  document.querySelectorAll(globalDetailSelector).forEach(el => {
-                      if (el._bmDetailData) el._bmDetailData.raw = null;
-                  });
-              }
-              debouncedApplyStyles();
-          });
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
@@ -3140,76 +3721,152 @@ safeStorageGet({ autoConfirm: true }, (data) => {
     }
 });
 
-let isTabStale = true; 
+let isTabStale = false;
+let markerTokenCheckInProgress = false;
+
+const BM_CONTENT_SETTING_KEYS = [
+    'allowedSites',
+    'titleCorrections',
+    'editionKeywords',
+    'filterWords',
+    'hideUselessComments',
+    'connectEverything',
+    'showListQuickBtn',
+    'showListQuickBtnHover',
+    'useCustomTheme',
+    'supportSingleChar',
+    'hideExclude',
+    'hideComplete',
+    'hideIncomplete',
+    'hideTranslate',
+    'hideNew',
+    'hideQuickMenu'
+];
+
+function updateManagedStyleSheet() {
+    const fixStyle = document.getElementById('bm-custom-style');
+    if (!fixStyle) return;
+
+    let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
+    if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
+    if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
+    if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
+    if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
+    fixStyle.textContent = styleContent;
+}
+
+function invalidateAllRenderedTitleData() {
+    similarityCache = {};
+    getGlobalTargetElements().forEach((element) => {
+        if (element.tagName === 'A' && element._bmData) {
+            element._bmData.raw = null;
+        } else if (element.querySelectorAll) {
+            element.querySelectorAll('a').forEach((link) => {
+                if (link._bmData) link._bmData.raw = null;
+            });
+        }
+    });
+    if (globalDetailSelector) {
+        document.querySelectorAll(globalDetailSelector).forEach((element) => {
+            if (element._bmDetailData) element._bmDetailData.raw = null;
+        });
+    }
+    debouncedApplyStyles();
+}
+
+function checkBookStoreToken() {
+    if (markerTokenCheckInProgress || !isExtensionContextValid()) return;
+    markerTokenCheckInProgress = true;
+
+    requestRuntimeResponse({ action: 'GET_BOOK_STORE_REVISION' }, (response) => {
+        const currentRevision = response && response.ok === true
+            ? normalizeBookStoreRevision(response.revision)
+            : null;
+        if (currentRevision !== null && currentRevision !== lastBookStoreRevision) {
+            markerTokenCheckInProgress = false;
+            clearPendingOptimisticChanges();
+            reloadBookListFromSource();
+            return;
+        }
+
+        if (!safeStorageGet({ bookStoreChange: null }, (data) => {
+            markerTokenCheckInProgress = false;
+            const marker = data.bookStoreChange;
+            const markerToken = getBookStoreToken(marker);
+            if (markerToken === null || markerToken === lastBookStoreToken) return;
+            applyBookStoreMarker(marker);
+        })) {
+            markerTokenCheckInProgress = false;
+        }
+    });
+}
 
 document.addEventListener("visibilitychange", () => {
     if (!document.hidden && isTabStale) {
         isTabStale = false;
-        safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
-            initDataCache(data);
-            debouncedApplyStyles();
-        });
+        checkBookStoreToken();
     } else if (document.hidden) {
-        isTabStale = true; 
+        isTabStale = true;
     }
 });
 
 window.addEventListener("focus", () => {
-    if (!document.hidden && isTabStale) {
-        isTabStale = false;
-        safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
-            initDataCache(data);
-            debouncedApplyStyles();
-        });
-    }
+    if (document.hidden) return;
+    isTabStale = false;
+    checkBookStoreToken();
 });
 
 try {
     if (isExtensionContextValid()) {
         chrome.storage.onChanged.addListener((changes, namespace) => {
-            if (namespace === 'local') {
-                if (changes.showDownloadUI) {
-                    setDownloadUIEnabled(changes.showDownloadUI.newValue !== false);
-                }
+            if (namespace !== 'local') return;
 
-                if (changes.missingVolsMap && changes.missingVolsUpdate) {
-                    applyMissingVolUpdateToCache(changes.missingVolsUpdate.newValue);
-                    debouncedApplyStyles();
-                    return;
-                }
-
-                safeStorageGetWhenCustomFiltersReady(BM_STORAGE_DEFAULTS, (data) => {
-                    initDataCache(data);
-                    updateQuickHidePanel();
-
-                    // 실시간 테마 토글 적용/해제
-                    let fixStyle = document.getElementById('bm-custom-style');
-                    if (fixStyle) {
-                        let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
-                        if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
-                        if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
-                        if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
-                        if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
-                        fixStyle.textContent = styleContent;
-                    }
-
-                    // 기존 렌더링 캐시 강제 초기화하여 즉시 변경사항 반영 유도
-                    getGlobalTargetElements().forEach(el => {
-                        if (el.tagName === 'A' && el._bmData) el._bmData.raw = null;
-                        else if (el.querySelectorAll) {
-                            el.querySelectorAll('a').forEach(a => { if (a._bmData) a._bmData.raw = null; });
-                        }
-                    });
-
-                    if (globalDetailSelector) {
-                        document.querySelectorAll(globalDetailSelector).forEach(el => {
-                            if (el._bmDetailData) el._bmDetailData.raw = null;
-                        });
-                    }
-
-                    debouncedApplyStyles();
-                });
+            if (changes.showDownloadUI) {
+                setDownloadUIEnabled(changes.showDownloadUI.newValue !== false);
             }
+            if (changes.showDownloadUI) currentStorageData.showDownloadUI = changes.showDownloadUI.newValue !== false;
+
+            const hasBookStoreMarker = !!changes.bookStoreChange;
+            if (hasBookStoreMarker) applyBookStoreMarker(changes.bookStoreChange.newValue);
+
+            if (changes.missingVolsMap) {
+                currentStorageData.missingVolsMap = changes.missingVolsMap.newValue
+                    && typeof changes.missingVolsMap.newValue === 'object'
+                    ? changes.missingVolsMap.newValue
+                    : {};
+            }
+            if (changes.missingVolsUpdate) {
+                const impact = applyMissingVolUpdateToCache(changes.missingVolsUpdate.newValue);
+                if (impact) finalizeBookChangeImpact(impact);
+            } else if (changes.missingVolsMap) {
+                cachedBookList.forEach((book) => {
+                    book.missingVols = getBookMissingVols(book, currentStorageData.missingVolsMap);
+                });
+                debouncedApplyStyles();
+            }
+
+            const changedSettingKeys = BM_CONTENT_SETTING_KEYS.filter(key => !!changes[key]);
+            if (changedSettingKeys.length === 0) return;
+
+            const settingsPatch = {};
+            changedSettingKeys.forEach((key) => {
+                settingsPatch[key] = changes[key].newValue === undefined
+                    ? BM_STORAGE_DEFAULTS[key]
+                    : changes[key].newValue;
+            });
+            const editionKeywordsChanged = changedSettingKeys.includes('editionKeywords');
+            const parsedTitleSettingsChanged = editionKeywordsChanged
+                || changedSettingKeys.includes('titleCorrections')
+                || changedSettingKeys.includes('filterWords')
+                || changedSettingKeys.includes('supportSingleChar');
+
+            applyDataSettings(settingsPatch);
+            if (editionKeywordsChanged) replaceBookCache(currentBookList);
+            updateQuickHidePanel();
+            updateManagedStyleSheet();
+
+            if (parsedTitleSettingsChanged) invalidateAllRenderedTitleData();
+            else debouncedApplyStyles();
         });
     }
 } catch (e) {}

@@ -1,5 +1,53 @@
 const listBody = document.getElementById('listBody');
 
+function storageLocalGet(defaults) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(defaults, data => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+                reject(new Error(error.message));
+                return;
+            }
+            resolve(data);
+        });
+    });
+}
+
+function storageLocalSet(values) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set(values, () => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+                reject(new Error(error.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+function requestRuntimeResult(message) {
+    return new Promise(resolve => {
+        try {
+            chrome.runtime.sendMessage(message, response => {
+                const error = chrome.runtime.lastError;
+                resolve(!error && !!response && response.ok === true);
+            });
+        } catch (error) {
+            resolve(false);
+        }
+    });
+}
+
+function runOptionsAsyncTask(task, actionLabel = '도서 목록 처리') {
+    return Promise.resolve()
+        .then(task)
+        .catch(error => {
+            showInfoToast(`❌ ${actionLabel} 중 오류가 발생했습니다.`, true);
+            console.error(`${actionLabel} 실패:`, error);
+        });
+}
+
 function showInfoToast(msg, isError = false) {
   let container = document.getElementById('book-manager-info-toast-container');
   if (!container) {
@@ -356,14 +404,21 @@ function hideFolderRulePreview() {
     }, 180);
 }
 
-function renderList(filter = "", resetPage = false) {
-  if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
+let renderListGeneration = 0;
 
-  chrome.storage.local.get({ bookList: [], missingVolsMap: {}, sortOption: 'id_desc' }, (data) => {
+async function renderList(filter = "", resetPage = false) {
+    const generation = ++renderListGeneration;
+    if (resetPage) currentPage = 1; // 검색/정렬 시 페이지 1로 리셋
+
+    await ensureBookStoreReady();
+    const [list, data] = await Promise.all([
+        bookStoreGetAll(),
+        storageLocalGet({ missingVolsMap: {}, sortOption: 'id_desc' })
+    ]);
+    if (generation !== renderListGeneration) return;
+
     listBody.innerHTML = '';
     hideFolderRulePreview();
-    
-    let list = Array.isArray(data.bookList) ? data.bookList : [];
     
     const completeCount = list.filter(b => b.type === 'complete').length;
     const incompleteCount = list.filter(b => b.type === 'incomplete').length;
@@ -533,7 +588,6 @@ function renderList(filter = "", resetPage = false) {
     
     // 페이지네이션 버튼 렌더링 호출
     renderPagination();
-  });
 }
 
 // 하단 페이지네이션 버튼 생성 로직
@@ -553,7 +607,10 @@ function renderPagination() {
         if (!disabled && !active) {
             btn.onclick = () => {
                 currentPage = targetPage;
-                renderList(document.getElementById('searchInput').value, false);
+                void runOptionsAsyncTask(
+                    () => renderList(document.getElementById('searchInput').value, false),
+                    '도서 목록 페이지 이동'
+                );
                 window.scrollTo({ top: 0, behavior: 'smooth' }); // 페이지 이동 시 맨 위로
             };
         }
@@ -580,35 +637,221 @@ function renderPagination() {
     container.appendChild(createBtn('»', totalPages, currentPage === totalPages));
 }
 
-function saveWithUndo(newList, successMsg, additionalValues = {}) {
-    chrome.storage.local.get({ bookList: [], titleCorrections: {} }, (data) => {
-        chrome.storage.local.set({ backupList: data.bookList, backupTitleCorrections: data.titleCorrections }, () => {
-            chrome.storage.local.set({ bookList: newList, ...additionalValues }, () => {
-                if (successMsg) showInfoToast(successMsg);
-                // 수정/삭제 후 현재 페이지 유지 (false 전달)
-                renderList(document.getElementById('searchInput').value, false); 
-                
-                const undoBtn = document.getElementById('undoBtn');
-                undoBtn.style.display = 'block';
-                setTimeout(() => { undoBtn.style.display = 'none'; }, 15000);
-            });
-        });
+const undoButton = document.getElementById('undoBtn');
+let pendingBookUndo = null;
+let undoHideTimer = null;
+
+function cloneUndoValue(value) {
+    if (typeof structuredClone === 'function') return structuredClone(value);
+    return JSON.parse(JSON.stringify(value));
+}
+
+function hydrateRestoredBookMissingVols(bookList, missingVolsMap) {
+    if (!Array.isArray(bookList) || !missingVolsMap || typeof missingVolsMap !== 'object') {
+        return bookList;
+    }
+
+    return bookList.map(book => {
+        if (!book || typeof book !== 'object' || Array.isArray(book.missingVols)) return book;
+        const mappedMissingVols = missingVolsMap[String(book.id)];
+        return Array.isArray(mappedMissingVols)
+            ? { ...book, missingVols: [...mappedMissingVols] }
+            : book;
     });
 }
 
-document.getElementById('undoBtn').onclick = () => {
-    chrome.storage.local.get({ backupList: null, backupTitleCorrections: {} }, (data) => {
-        if (data.backupList) {
-            chrome.storage.local.set({ bookList: data.backupList, titleCorrections: data.backupTitleCorrections }, () => {
-                showInfoToast('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
-                renderList(document.getElementById('searchInput').value, false);
-                document.getElementById('undoBtn').style.display = 'none';
-            });
-        }
-    });
-};
+function getCurrentBookFilter() {
+    const searchInput = document.getElementById('searchInput');
+    return searchInput ? searchInput.value : '';
+}
 
-document.getElementById('batchUpdateBtn').onclick = () => {
+async function renderCurrentBookList() {
+    await renderList(getCurrentBookFilter(), false);
+}
+
+function clearBookUndo() {
+    pendingBookUndo = null;
+    if (undoHideTimer) {
+        clearTimeout(undoHideTimer);
+        undoHideTimer = null;
+    }
+    if (undoButton) undoButton.style.display = 'none';
+}
+
+function setBookUndo(undoState) {
+    pendingBookUndo = undoState;
+    if (!undoButton) return;
+
+    if (undoHideTimer) clearTimeout(undoHideTimer);
+    undoButton.style.display = 'block';
+    undoHideTimer = setTimeout(() => {
+        if (pendingBookUndo === undoState) clearBookUndo();
+    }, 15000);
+}
+
+async function saveWithUndo(newList, successMsg, additionalValues = {}, previousList = null, expectedRevision = null) {
+    await ensureBookStoreReady();
+
+    let undoList = previousList;
+    let replaceRevision = expectedRevision;
+    if (undoList === null || replaceRevision === null) {
+        const currentSnapshot = await bookStoreGetAllWithRevision();
+        if (undoList === null) undoList = currentSnapshot.bookList;
+        if (replaceRevision === null) replaceRevision = currentSnapshot.revision;
+    }
+    const undoSnapshot = cloneUndoValue(undoList);
+    const settingKeys = Object.keys(additionalValues);
+    const knownSettingDefaults = {
+        allowedSites: [],
+        filterWords: [],
+        editionKeywords: getDefaultEditionKeywords(),
+        missingVolsMap: {},
+        titleCorrections: {}
+    };
+    const settingDefaults = Object.fromEntries(settingKeys.map(key => [
+        key,
+        Object.prototype.hasOwnProperty.call(knownSettingDefaults, key)
+            ? knownSettingDefaults[key]
+            : null
+    ]));
+    const previousSettings = settingKeys.length > 0
+        ? await storageLocalGet(settingDefaults)
+        : {};
+
+    const listToStore = hydrateRestoredBookMissingVols(newList, additionalValues.missingVolsMap);
+    const replaceResult = await bookStoreReplaceAll(listToStore, replaceRevision);
+    setBookUndo({
+        type: 'replace',
+        bookList: undoSnapshot,
+        settings: previousSettings,
+        expectedRevision: replaceResult.revision
+    });
+
+    if (settingKeys.length > 0) await storageLocalSet(additionalValues);
+    await bookStorePublishChange({
+        type: 'reload',
+        reason: 'options-bulk-update',
+        revision: replaceResult.revision
+    });
+
+    if (successMsg) showInfoToast(successMsg);
+    await renderCurrentBookList();
+}
+
+async function saveSingleBookWithUndo(book, previousBook, successMsg) {
+    await ensureBookStoreReady();
+    const undoBook = cloneUndoValue(previousBook);
+    const changedValues = {};
+    Object.keys(book || {}).forEach(key => {
+        if (key === 'id' || key.startsWith('_')) return;
+        if (book[key] !== previousBook[key]) changedValues[key] = book[key];
+    });
+    const savedBook = await bookStorePutByTarget({
+        id: previousBook.id,
+        matchKey: getTitleMatchParts(previousBook.title || '').matchKey
+    }, currentBook => {
+        if (!currentBook) throw new Error('수정할 도서 데이터를 찾을 수 없습니다.');
+        return {
+            ...currentBook,
+            ...changedValues,
+            id: currentBook.id
+        };
+    });
+    const previousValues = {};
+    const savedValues = {};
+    Object.keys(changedValues).forEach(key => {
+        previousValues[key] = undoBook[key];
+        savedValues[key] = savedBook[key];
+    });
+    setBookUndo({
+        type: 'patch',
+        bookId: savedBook.id,
+        matchKey: getTitleMatchParts(savedBook.title || '').matchKey,
+        previousValues,
+        savedValues
+    });
+    await bookStorePublishChange({ type: 'upsert', book: savedBook });
+
+    if (successMsg) showInfoToast(successMsg);
+    await renderCurrentBookList();
+}
+
+async function deleteSingleBookWithUndo(book, successMsg) {
+    await ensureBookStoreReady();
+    const undoBook = cloneUndoValue(book);
+    const deletedBook = await bookStoreDelete(book.id);
+    if (!deletedBook) return;
+    setBookUndo({ type: 'restore', book: undoBook });
+    await bookStorePublishChange({ type: 'delete', id: deletedBook.id, book: deletedBook });
+
+    if (successMsg) showInfoToast(successMsg);
+    await renderCurrentBookList();
+}
+
+if (undoButton) {
+    undoButton.onclick = async () => {
+        if (!pendingBookUndo) return;
+
+        const undoState = pendingBookUndo;
+        undoButton.style.pointerEvents = 'none';
+
+        try {
+            await ensureBookStoreReady();
+            if (undoState.type === 'replace') {
+                const replaceResult = await bookStoreReplaceAll(
+                    undoState.bookList,
+                    undoState.expectedRevision
+                );
+                if (Object.keys(undoState.settings).length > 0) {
+                    await storageLocalSet(undoState.settings);
+                    renderRestoredSettingPanels(undoState.settings);
+                }
+                await bookStorePublishChange({
+                    type: 'reload',
+                    reason: 'options-undo-bulk',
+                    revision: replaceResult.revision
+                });
+            } else if (undoState.type === 'patch') {
+                const restoredBook = await bookStorePutByTarget({
+                    id: undoState.bookId,
+                    matchKey: undoState.matchKey
+                }, currentBook => {
+                    if (!currentBook) throw new Error('실행 취소할 도서 데이터를 찾을 수 없습니다.');
+
+                    const restoredValues = { ...currentBook };
+                    Object.keys(undoState.savedValues).forEach(key => {
+                        if (currentBook[key] !== undoState.savedValues[key]) {
+                            if (key === 'date') return;
+                            throw new Error('도서가 다른 화면에서 변경되어 실행 취소할 수 없습니다.');
+                        }
+                        if (undoState.previousValues[key] === undefined) delete restoredValues[key];
+                        else restoredValues[key] = undoState.previousValues[key];
+                    });
+                    return restoredValues;
+                });
+                await bookStorePublishChange({ type: 'upsert', book: restoredBook });
+            } else if (undoState.type === 'restore') {
+                const restoredBook = await bookStorePutByTarget({ id: undoState.book.id }, currentBook => {
+                    if (currentBook) throw new Error('같은 ID의 도서가 이미 있어 복구할 수 없습니다.');
+                    return undoState.book;
+                });
+                await bookStorePublishChange({ type: 'upsert', book: restoredBook });
+            }
+
+            clearBookUndo();
+            showInfoToast('⏪ 방금 전 작업이 완벽하게 취소(복구)되었습니다.');
+            await renderCurrentBookList();
+        } catch (error) {
+            setBookUndo(undoState);
+            showInfoToast('❌ 실행 취소 중 오류가 발생했습니다.', true);
+            console.error('도서 작업 실행 취소 실패:', error);
+        } finally {
+            undoButton.style.pointerEvents = 'auto';
+        }
+    };
+}
+
+document.getElementById('batchUpdateBtn').onclick = async () => {
     const targetType = document.getElementById('batchTypeSelect').value;
     const filter = document.getElementById('searchInput').value.toLowerCase();
     const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').trim().replace(/\s+/g, '');
@@ -616,8 +859,13 @@ document.getElementById('batchUpdateBtn').onclick = () => {
     let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
     if(!confirm(`현재 검색된 모든 항목을 [${typeNameKOR}] 타입으로 변경하시겠습니까?`)) return;
 
-    chrome.storage.local.get({ bookList: [], missingVolsMap: {} }, (data) => {
-        let list = Array.isArray(data.bookList) ? data.bookList : [];
+    try {
+        await ensureBookStoreReady();
+        const [bookSnapshot, data] = await Promise.all([
+            bookStoreGetAllWithRevision(),
+            storageLocalGet({ missingVolsMap: {} })
+        ]);
+        const { bookList: list, revision } = bookSnapshot;
         const today = new Date().toISOString(); 
         const isDuplicateSearch = filter === '#중복';
         const isMissingSearch = filter === '#누락';
@@ -678,18 +926,26 @@ document.getElementById('batchUpdateBtn').onclick = () => {
             return book;
         });
 
-        saveWithUndo(updatedList, '일괄 수정이 완료되었습니다.');
-    });
+        await saveWithUndo(updatedList, '일괄 수정이 완료되었습니다.', {}, list, revision);
+    } catch (error) {
+        showInfoToast('❌ 일괄 수정 중 오류가 발생했습니다.', true);
+        console.error('도서 목록 일괄 수정 실패:', error);
+    }
 };
 
 // ============================================================================
 // [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
 // ============================================================================
-document.getElementById('exportBtn').onclick = () => {
-    chrome.storage.local.get({ bookList: [], missingVolsMap: {}, allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
+document.getElementById('exportBtn').onclick = async () => {
+    try {
+        await ensureBookStoreReady();
+        const [bookList, data] = await Promise.all([
+            bookStoreGetAll(),
+            storageLocalGet({ missingVolsMap: {}, allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() })
+        ]);
         // 객체(Object) 형태로 데이터를 묶어서 백업
         const exportData = {
-            bookList: data.bookList,
+            bookList,
             missingVolsMap: data.missingVolsMap,
             allowedSites: data.allowedSites,
             filterWords: data.filterWords,
@@ -706,14 +962,22 @@ document.getElementById('exportBtn').onclick = () => {
 
         const now = new Date();
         const backupTime = now.toLocaleString('ko-KR'); 
-        chrome.storage.local.set({ lastBackup: backupTime }, () => {
-            const timeSpan = document.getElementById('lastBackupTime');
-            if(timeSpan) timeSpan.innerText = `최근 백업: ${backupTime}`;
-        });
-    });
+        await storageLocalSet({ lastBackup: backupTime });
+        const timeSpan = document.getElementById('lastBackupTime');
+        if(timeSpan) timeSpan.innerText = `최근 백업: ${backupTime}`;
+    } catch (error) {
+        showInfoToast('❌ 백업 파일을 만드는 중 오류가 발생했습니다.', true);
+        console.error('도서 목록 내보내기 실패:', error);
+    }
 };
 
 document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
+
+function renderRestoredSettingPanels(settings) {
+    if (Object.prototype.hasOwnProperty.call(settings, 'allowedSites')) renderSites();
+    if (Object.prototype.hasOwnProperty.call(settings, 'filterWords')) renderFilters();
+    if (Object.prototype.hasOwnProperty.call(settings, 'editionKeywords')) renderEditionKeywords();
+}
 
 // ============================================================================
 // [수정됨] 복구 (불러오기) 로직: 신규 포맷 및 구버전 포맷(하위 호환) 완벽 지원
@@ -728,40 +992,48 @@ document.getElementById('fileInput').onchange = (e) => {
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
         try {
             const importedData = JSON.parse(event.target.result);
             
             // 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
             if (importedData && typeof importedData === 'object' && !Array.isArray(importedData)) {
-                let hasSettings = false;
-                
-                // 사이트 설정이 존재하면 복구 및 화면 갱신
+                const restoredSettings = {};
+
+                // 사이트 설정이 존재하면 복구
                 if (Array.isArray(importedData.allowedSites)) {
-                    chrome.storage.local.set({ allowedSites: importedData.allowedSites }, renderSites);
-                    hasSettings = true;
+                    restoredSettings.allowedSites = importedData.allowedSites;
                 }
-                
-                // 필터(금지어) 설정이 존재하면 복구 및 화면 갱신
+
+                // 필터(금지어) 설정이 존재하면 복구
                 if (Array.isArray(importedData.filterWords)) {
-                    chrome.storage.local.set({ filterWords: importedData.filterWords }, renderFilters);
-                    hasSettings = true;
+                    restoredSettings.filterWords = importedData.filterWords;
                 }
 
                 if (Array.isArray(importedData.editionKeywords)) {
-                    chrome.storage.local.set({ editionKeywords: importedData.editionKeywords }, renderEditionKeywords);
-                    hasSettings = true;
+                    restoredSettings.editionKeywords = importedData.editionKeywords;
                 }
 
                 if (importedData.missingVolsMap && typeof importedData.missingVolsMap === 'object' && !Array.isArray(importedData.missingVolsMap)) {
-                    chrome.storage.local.set({ missingVolsMap: importedData.missingVolsMap });
-                    hasSettings = true;
+                    restoredSettings.missingVolsMap = importedData.missingVolsMap;
                 }
+
+                const hasSettings = Object.keys(restoredSettings).length > 0;
 
                 // 도서 목록이 존재하면 복구 (기존 saveWithUndo 재활용하여 취소 기능 유지)
                 if (Array.isArray(importedData.bookList)) {
-                    saveWithUndo(importedData.bookList, '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.');
+                    await saveWithUndo(
+                        importedData.bookList,
+                        '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.',
+                        restoredSettings
+                    );
+                    renderRestoredSettingPanels(restoredSettings);
                 } else if (hasSettings) {
+                    await storageLocalSet(restoredSettings);
+                    renderRestoredSettingPanels(restoredSettings);
+                    if (Object.prototype.hasOwnProperty.call(restoredSettings, 'missingVolsMap')) {
+                        await renderCurrentBookList();
+                    }
                     showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
                 } else {
                     showInfoToast('❌ 유효한 백업 데이터가 없습니다.', true);
@@ -769,13 +1041,14 @@ document.getElementById('fileInput').onchange = (e) => {
             } 
             // 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
             else if (Array.isArray(importedData)) {
-                saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
+                await saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
             } 
             else {
                 showInfoToast('❌ 올바른 백업 파일 형식이 아닙니다.', true);
             }
-        } catch (err) {
-            showInfoToast('❌ 파일을 읽는 중 오류가 발생했습니다. (JSON 파싱 에러)', true);
+        } catch (error) {
+            showInfoToast('❌ 백업 파일을 불러오는 중 오류가 발생했습니다.', true);
+            console.error('도서 목록 가져오기 실패:', error);
         }
         e.target.value = '';
     };
@@ -809,20 +1082,39 @@ async function renderSnapshots() {
         }).join('');
         
         document.querySelectorAll('.btn-restore-snap').forEach(btn => {
-            btn.onclick = async (e) => {
-                const id = parseInt(e.target.dataset.id, 10);
-                if (confirm('정말로 이 시점의 데이터로 되돌리시겠습니까?\n현재 저장된 모든 데이터는 해당 시점의 데이터로 덮어씌워집니다.')) {
+            btn.onclick = () => {
+                void runOptionsAsyncTask(async () => {
+                    const id = parseInt(btn.dataset.id, 10);
+                    if (!confirm('정말로 이 시점의 데이터로 되돌리시겠습니까?\n현재 저장된 모든 데이터는 해당 시점의 데이터로 덮어씌워집니다.')) return;
+
                     const snap = await db.snapshots.get(id);
-                    if (snap && snap.data) {
-                        let hasSettings = false;
-                        if (Array.isArray(snap.data.allowedSites)) { chrome.storage.local.set({ allowedSites: snap.data.allowedSites }, renderSites); hasSettings = true; }
-                        if (Array.isArray(snap.data.filterWords)) { chrome.storage.local.set({ filterWords: snap.data.filterWords }, renderFilters); hasSettings = true; }
-                        if (Array.isArray(snap.data.editionKeywords)) { chrome.storage.local.set({ editionKeywords: snap.data.editionKeywords }, renderEditionKeywords); hasSettings = true; }
-                        if (snap.data.missingVolsMap && typeof snap.data.missingVolsMap === 'object') { chrome.storage.local.set({ missingVolsMap: snap.data.missingVolsMap }); hasSettings = true; }
-                        if (Array.isArray(snap.data.bookList)) { saveWithUndo(snap.data.bookList, '✅ 선택한 시점으로 복원이 완료되었습니다.'); } 
-                        else if (hasSettings) { showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.'); } 
+                    if (!snap || !snap.data) return;
+
+                    const restoredSettings = {};
+                    if (Array.isArray(snap.data.allowedSites)) restoredSettings.allowedSites = snap.data.allowedSites;
+                    if (Array.isArray(snap.data.filterWords)) restoredSettings.filterWords = snap.data.filterWords;
+                    if (Array.isArray(snap.data.editionKeywords)) restoredSettings.editionKeywords = snap.data.editionKeywords;
+                    if (snap.data.missingVolsMap && typeof snap.data.missingVolsMap === 'object' && !Array.isArray(snap.data.missingVolsMap)) {
+                        restoredSettings.missingVolsMap = snap.data.missingVolsMap;
                     }
-                }
+
+                    const hasSettings = Object.keys(restoredSettings).length > 0;
+                    if (Array.isArray(snap.data.bookList)) {
+                        await saveWithUndo(
+                            snap.data.bookList,
+                            '✅ 선택한 시점으로 복원이 완료되었습니다.',
+                            restoredSettings
+                        );
+                        renderRestoredSettingPanels(restoredSettings);
+                    } else if (hasSettings) {
+                        await storageLocalSet(restoredSettings);
+                        renderRestoredSettingPanels(restoredSettings);
+                        if (Object.prototype.hasOwnProperty.call(restoredSettings, 'missingVolsMap')) {
+                            await renderCurrentBookList();
+                        }
+                        showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
+                    }
+                }, '스냅샷 복원');
             };
         });
     } catch (err) {
@@ -875,248 +1167,267 @@ bulkInput.addEventListener('input', async () => {
 });
 
 document.getElementById('saveBtn').onclick = async () => {
-  await customFiltersReady;
-  const lines = document.getElementById('bulkInput').value.split('\n').filter(t => t.trim());
-  const selectedTypeSelect = document.getElementById('bulkTypeSelect');
-  const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';
-  
-  // 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
-  const btn = document.getElementById('saveBtn');
-  const originalBtnText = btn.innerText;
-  btn.innerText = "⏳ 처리 중... (잠시만 기다려주세요)";
-  btn.style.pointerEvents = 'none';
+    await customFiltersReady;
+    const lines = document.getElementById('bulkInput').value.split('\n').filter(t => t.trim());
+    const selectedTypeSelect = document.getElementById('bulkTypeSelect');
+    const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';
 
-  chrome.storage.local.set({ lastBulkType: targetType });
+    // 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
+    const btn = document.getElementById('saveBtn');
+    const originalBtnText = btn.innerText;
+    btn.innerText = "⏳ 처리 중... (잠시만 기다려주세요)";
+    btn.style.pointerEvents = 'none';
 
-  // UI 텍스트가 바뀔 틈을 주기 위해 setTimeout으로 비동기 실행
-  setTimeout(() => {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-      let currentList = Array.isArray(data.bookList) ? data.bookList : [];
-      let skippedCount = 0;
+    chrome.storage.local.set({ lastBulkType: targetType });
 
-      // [최적화 1] 검색 속도 무한대 향상 (O(N) -> O(1))
-      // 매번 findIndex로 찾지 않도록 기존 목록을 Map(사전) 형태로 미리 만들어 둡니다.
-      const titleMap = new Map();
-      currentList.forEach((book, idx) => {
-          if (book && book.title) {
-              const normalized = getTitleMatchParts(book.title).matchKey;
-              titleMap.set(normalized, idx); // 제목을 키(Key)로, 인덱스를 값(Value)으로 저장
-          }
-      });
+    // UI 텍스트가 바뀔 틈을 주기 위해 setTimeout으로 비동기 실행
+    setTimeout(async () => {
+        try {
+            await ensureBookStoreReady();
+            const bookSnapshot = await bookStoreGetAllWithRevision();
+            let currentList = bookSnapshot.bookList;
+            const previousList = [...currentList];
+            let skippedCount = 0;
 
-      // [최적화 2] unshift 연산 제거
-      // 매번 배열을 뒤로 미는 대신, 임시 배열에 일단 차곡차곡 쌓습니다(push).
-      const newBooks = [];
+            // 매번 findIndex로 찾지 않도록 기존 목록을 Map 형태로 준비합니다.
+            const titleMap = new Map();
+            currentList.forEach((book, idx) => {
+                if (book && book.title) {
+                    const normalized = getTitleMatchParts(book.title).matchKey;
+                    titleMap.set(normalized, idx); // 제목을 키(Key)로, 인덱스를 값(Value)으로 저장
+                }
+            });
 
-      lines.forEach(line => {
-        const resMatch = line.match(/\d{3,4}\s*px/gi);
-        
-        // 이전에 수정한 부(?!터) 정규식 그대로 유지
-        const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-        const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
-        const endNumMatch = line.match(/(\d+)\s*$/);
-        
-        let parsedVol = "";
-        if (rangeMatch) parsedVol = parseInt(rangeMatch[2], 10).toString();
-        else if (singleMatch) parsedVol = parseInt(singleMatch[1], 10).toString();
-        else if (endNumMatch) parsedVol = parseInt(endNumMatch[1], 10).toString();
-        
-        let cleanTitle = cleanSiteTitle(line)
-          .replace(/\d+\s*권/g, '')
-          .replace(/완결/g, '')
-          .replace(/개$/g, '')
-          .replace(/(\d+)?완/g, '')
-          .replace(/\s?완$/g, '')
-          .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+            // 새 항목은 별도 배열에 모아 한 번에 합칩니다.
+            const newBooks = [];
+            const newBookIndexes = new Map();
 
-        if (!cleanTitle) {
-            skippedCount++;
-            return; 
+            lines.forEach(line => {
+                const resMatch = line.match(/\d{3,4}\s*px/gi);
+
+                // 이전에 수정한 부(?!터) 정규식 그대로 유지
+                const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
+                const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
+                const endNumMatch = line.match(/(\d+)\s*$/);
+
+                let parsedVol = "";
+                if (rangeMatch) parsedVol = parseInt(rangeMatch[2], 10).toString();
+                else if (singleMatch) parsedVol = parseInt(singleMatch[1], 10).toString();
+                else if (endNumMatch) parsedVol = parseInt(endNumMatch[1], 10).toString();
+
+                let cleanTitle = cleanSiteTitle(line)
+                    .replace(/\d+\s*권/g, '')
+                    .replace(/완결/g, '')
+                    .replace(/개$/g, '')
+                    .replace(/(\d+)?완/g, '')
+                    .replace(/\s?완$/g, '')
+                    .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                if (!cleanTitle) {
+                    skippedCount++;
+                    return;
+                }
+
+                const normalizedNewTitle = getTitleMatchParts(cleanTitle).matchKey;
+
+                const bookData = {
+                    type: targetType,
+                    title: cleanTitle,
+                    folderRule: "",
+                    resolution: resMatch ? Array.from(new Set(resMatch)).join(',') : "",
+                    lastVol: parsedVol,
+                    date: new Date().toISOString()
+                };
+
+                if (titleMap.has(normalizedNewTitle)) {
+                    const existingIdx = titleMap.get(normalizedNewTitle);
+                    currentList[existingIdx] = { ...currentList[existingIdx], ...bookData };
+                } else if (newBookIndexes.has(normalizedNewTitle)) {
+                    const newBookIndex = newBookIndexes.get(normalizedNewTitle);
+                    newBooks[newBookIndex] = { ...newBooks[newBookIndex], ...bookData };
+                } else {
+                    newBookIndexes.set(normalizedNewTitle, newBooks.length);
+                    newBooks.push(bookData);
+                }
+            });
+
+            // 기존 unshift처럼 최신 항목이 위로 오게 하려면, 새 책들을 뒤집은(reverse) 후 기존 목록 앞에 붙이면 됩니다.
+            currentList = [...newBooks.reverse(), ...currentList];
+
+            let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
+            let alertMsg = `✅ [${typeNameKOR}] 타입으로 일괄 저장이 완료되었습니다.`;
+            if (skippedCount > 0) alertMsg += `\n(단, 제목을 식별할 수 없는 ${skippedCount}개의 항목은 제외됨)`;
+
+            await saveWithUndo(currentList, alertMsg, {}, previousList, bookSnapshot.revision);
+
+            document.getElementById('bulkInput').value = '';
+            const bulkPreview = document.getElementById('bulkPreview');
+            if (bulkPreview) bulkPreview.style.display = 'none';
+        } catch (error) {
+            showInfoToast('❌ 도서 목록을 저장하는 중 오류가 발생했습니다.', true);
+            console.error('도서 목록 일괄 저장 실패:', error);
+        } finally {
+            // 버튼 상태 원상복구
+            btn.innerText = originalBtnText;
+            btn.style.pointerEvents = 'auto';
         }
-
-        const normalizedNewTitle = getTitleMatchParts(cleanTitle).matchKey;
-        
-        const bookData = { 
-          type: targetType,
-          title: cleanTitle, 
-          folderRule: "",
-          resolution: resMatch ? Array.from(new Set(resMatch)).join(',') : "", 
-          lastVol: parsedVol, 
-          date: new Date().toISOString(), 
-          id: Date.now() + Math.random() 
-        };
-
-        // [최적화 1 적용] Map에서 즉시(0.0001초) 찾아냅니다.
-        if (titleMap.has(normalizedNewTitle)) {
-            const existingIdx = titleMap.get(normalizedNewTitle);
-            currentList[existingIdx] = { ...currentList[existingIdx], ...bookData };
-        } else {
-            // [최적화 2 적용] 무거운 unshift 대신 가벼운 push 사용
-            newBooks.push(bookData);
-            // 6만 건의 새 데이터 안에서 중복이 발생할 수도 있으니 Map에도 등록
-            titleMap.set(normalizedNewTitle, -1); 
-        }
-      });
-
-      // [최적화 3] 마지막에 배열 합치기
-      // 기존 unshift처럼 최신 항목이 위로 오게 하려면, 새 책들을 뒤집은(reverse) 후 기존 목록 앞에 붙이면 됩니다.
-      currentList = [...newBooks.reverse(), ...currentList];
-
-      let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
-      let alertMsg = `✅ [${typeNameKOR}] 타입으로 일괄 저장이 완료되었습니다.`;
-      if (skippedCount > 0) alertMsg += `\n(단, 제목을 식별할 수 없는 ${skippedCount}개의 항목은 제외됨)`;
-
-      saveWithUndo(currentList, alertMsg);
-      
-      document.getElementById('bulkInput').value = ''; 
-      const bulkPreview = document.getElementById('bulkPreview');
-      if (bulkPreview) bulkPreview.style.display = 'none';
-
-      // 버튼 상태 원상복구
-      btn.innerText = originalBtnText;
-      btn.style.pointerEvents = 'auto';
-    });
-  }, 50); // 렌더링에 50ms 양보
+    }, 50); // 렌더링에 50ms 양보
 };
 
-document.body.onclick = (e) => {
-  const id = parseFloat(e.target.dataset.id);
-  const site = e.target.dataset.site;
-  const filterWord = e.target.dataset.filter; 
-  const editionKeyword = e.target.dataset.editionKeyword;
+document.body.onclick = async (e) => {
+    const id = parseFloat(e.target.dataset.id);
+    const site = e.target.dataset.site;
+    const filterWord = e.target.dataset.filter;
+    const editionKeyword = e.target.dataset.editionKeyword;
 
-  if (id && e.target.classList.contains('btn-del')) {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-      const list = Array.isArray(data.bookList) ? data.bookList : [];
-      saveWithUndo(list.filter(b => b.id !== id), null);
-    });
-  } else if (id && e.target.classList.contains('btn-save')) {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-      const list = Array.isArray(data.bookList) ? data.bookList : [];
-      const idx = list.findIndex(b => b.id === id);
-      const row = e.target.closest('tr');
-      if (idx > -1) {
-        const newTitle = row.querySelector('.edit-title').value.trim();
-        if (!newTitle) { showInfoToast('❌ 제목은 비워둘 수 없습니다!', true); return; }
+    try {
+        if (id && e.target.classList.contains('btn-del')) {
+            await ensureBookStoreReady();
+            const book = await bookStoreGet(id);
+            if (book) await deleteSingleBookWithUndo(book, null);
+        } else if (id && e.target.classList.contains('btn-save')) {
+            await ensureBookStoreReady();
+            const previousBook = await bookStoreGet(id);
+            const row = e.target.closest('tr');
+            if (previousBook && row) {
+                const newTitle = row.querySelector('.edit-title').value.trim();
+                if (!newTitle) {
+                    showInfoToast('❌ 제목은 비워둘 수 없습니다!', true);
+                    return;
+                }
 
-        list[idx] = { 
-            ...list[idx], 
-            type: row.querySelector('.edit-type').value, 
-            title: newTitle, 
-            resolution: row.querySelector('.edit-res').value.trim(), 
-            lastVol: row.querySelector('.edit-vol').value.trim(),
-            folderRule: row.querySelector('.edit-folder-rule').value.trim(),
-            date: new Date().toISOString() 
-        };
-        saveWithUndo(list, '✅ 수정이 완료되었습니다.');
-      }
-    });
-  } else if (id && e.target.classList.contains('btn-title-correction-bulk')) {
-    chrome.storage.local.get({ bookList: [], titleCorrections: {} }, (data) => {
-        const list = Array.isArray(data.bookList) ? data.bookList : [];
-        const baseIndex = list.findIndex(b => b.id === id);
-        if (baseIndex < 0) return;
-
-        const row = e.target.closest('tr');
-        if (!row) return;
-
-        const nextTitle = (row.querySelector('.edit-title')?.value || '').trim();
-        const baseTitle = String(list[baseIndex].title || '').trim();
-        if (!nextTitle) {
-            showInfoToast('❌ 제목은 비워둘 수 없습니다!', true);
-            return;
-        }
-        if (baseTitle === nextTitle) {
-            showInfoToast('⚠️ 변경값이 동일해 제목을 정정할 대상이 없습니다.');
-            return;
-        }
-
-        const targetCount = list.filter(book => String(book.title || '').trim() === baseTitle).length;
-        if (targetCount <= 0) return;
-        if (!confirm(`"${baseTitle}" 제목으로 등록된 ${targetCount}건을 "${nextTitle}"(으)로 정정할까요?`)) return;
-
-        const now = new Date().toISOString();
-        const updatedList = list.map(book => {
-            if (String(book.title || '').trim() !== baseTitle) return book;
-            return { ...book, title: nextTitle, date: now };
-        });
-        const nextCorrections = { ...(data.titleCorrections || {}) };
-        Object.keys(nextCorrections).forEach(key => {
-            if (getStoredCorrectionTitle(nextCorrections[key]) === baseTitle) {
-                nextCorrections[key] = typeof nextCorrections[key] === 'object'
-                    ? { ...nextCorrections[key], correctedTitle: nextTitle, editionKey: getTitleMatchParts(nextTitle).editionKey }
-                    : nextTitle;
+                const updatedBook = {
+                    ...previousBook,
+                    type: row.querySelector('.edit-type').value,
+                    title: newTitle,
+                    resolution: row.querySelector('.edit-res').value.trim(),
+                    lastVol: row.querySelector('.edit-vol').value.trim(),
+                    folderRule: row.querySelector('.edit-folder-rule').value.trim(),
+                    date: new Date().toISOString()
+                };
+                await saveSingleBookWithUndo(updatedBook, previousBook, '✅ 수정이 완료되었습니다.');
             }
-        });
-        const globalCorrectionKey = `*::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
-        nextCorrections[globalCorrectionKey] = {
-            correctedTitle: nextTitle,
-            bookId: list[baseIndex].id,
-            editionKey: getTitleMatchParts(nextTitle).editionKey
-        };
+        } else if (id && e.target.classList.contains('btn-title-correction-bulk')) {
+            await ensureBookStoreReady();
+            const [bookSnapshot, data] = await Promise.all([
+                bookStoreGetAllWithRevision(),
+                storageLocalGet({ titleCorrections: {} })
+            ]);
+            const { bookList: list, revision } = bookSnapshot;
+            const baseIndex = list.findIndex(b => b.id === id);
+            if (baseIndex < 0) return;
 
-        saveWithUndo(
-            updatedList,
-            `✅ ${targetCount}건의 도서 제목을 "${nextTitle}"(으)로 정정했습니다.`,
-            { titleCorrections: nextCorrections }
-        );
-    });
-  } else if (id && e.target.classList.contains('btn-folder-rule-bulk')) {
-    chrome.storage.local.get({ bookList: [] }, (data) => {
-        const list = Array.isArray(data.bookList) ? data.bookList : [];
-        const baseIndex = list.findIndex(b => b.id === id);
-        if (baseIndex < 0) return;
+            const row = e.target.closest('tr');
+            if (!row) return;
 
-        const row = e.target.closest('tr');
-        if (!row) return;
+            const nextTitle = (row.querySelector('.edit-title')?.value || '').trim();
+            const baseTitle = String(list[baseIndex].title || '').trim();
+            if (!nextTitle) {
+                showInfoToast('❌ 제목은 비워둘 수 없습니다!', true);
+                return;
+            }
+            if (baseTitle === nextTitle) {
+                showInfoToast('⚠️ 변경값이 동일해 제목을 정정할 대상이 없습니다.');
+                return;
+            }
 
-        const nextRule = (row.querySelector('.edit-folder-rule')?.value || '').trim();
-        const baseRule = String(list[baseIndex].folderRule || '').trim();
+            const targetCount = list.filter(book => String(book.title || '').trim() === baseTitle).length;
+            if (targetCount <= 0) return;
+            if (!confirm(`"${baseTitle}" 제목으로 등록된 ${targetCount}건을 "${nextTitle}"(으)로 정정할까요?`)) return;
 
-        if (baseRule === nextRule) {
-          showInfoToast('⚠️ 변경값이 동일해 일괄 수정할 대상이 없습니다.');
-          return;
+            const now = new Date().toISOString();
+            const updatedList = list.map(book => {
+                if (String(book.title || '').trim() !== baseTitle) return book;
+                return { ...book, title: nextTitle, date: now };
+            });
+            const nextCorrections = { ...(data.titleCorrections || {}) };
+            Object.keys(nextCorrections).forEach(key => {
+                if (getStoredCorrectionTitle(nextCorrections[key]) === baseTitle) {
+                    nextCorrections[key] = typeof nextCorrections[key] === 'object'
+                        ? { ...nextCorrections[key], correctedTitle: nextTitle, editionKey: getTitleMatchParts(nextTitle).editionKey }
+                        : nextTitle;
+                }
+            });
+            const globalCorrectionKey = `*::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
+            nextCorrections[globalCorrectionKey] = {
+                correctedTitle: nextTitle,
+                bookId: list[baseIndex].id,
+                editionKey: getTitleMatchParts(nextTitle).editionKey
+            };
+
+            await saveWithUndo(
+                updatedList,
+                `✅ ${targetCount}건의 도서 제목을 "${nextTitle}"(으)로 정정했습니다.`,
+                { titleCorrections: nextCorrections },
+                list,
+                revision
+            );
+        } else if (id && e.target.classList.contains('btn-folder-rule-bulk')) {
+            await ensureBookStoreReady();
+            const bookSnapshot = await bookStoreGetAllWithRevision();
+            const list = bookSnapshot.bookList;
+            const baseIndex = list.findIndex(b => b.id === id);
+            if (baseIndex < 0) return;
+
+            const row = e.target.closest('tr');
+            if (!row) return;
+
+            const nextRule = (row.querySelector('.edit-folder-rule')?.value || '').trim();
+            const baseRule = String(list[baseIndex].folderRule || '').trim();
+
+            if (baseRule === nextRule) {
+                showInfoToast('⚠️ 변경값이 동일해 일괄 수정할 대상이 없습니다.');
+                return;
+            }
+
+            const targetCount = list.filter(book => String(book.folderRule || '').trim() === baseRule).length;
+            if (targetCount <= 0) return;
+
+            const targetLabel = baseRule || '(미설정)';
+            const changedLabel = nextRule || '(비움)';
+            if (!confirm(`"[${targetLabel}]" 규칙으로 등록된 ${targetCount}건을 "${changedLabel}"(으)로 일괄 수정할까요?`)) return;
+
+            const now = new Date().toISOString();
+            const updatedList = list.map(book => {
+                const currentRule = String(book.folderRule || '').trim();
+                if (currentRule !== baseRule) return book;
+                return { ...book, folderRule: nextRule, date: now };
+            });
+            await saveWithUndo(
+                updatedList,
+                `✅ 규칙 "${changedLabel}"(으)로 ${targetCount}건의 상위 폴더 규칙을 일괄 수정했습니다.`,
+                {},
+                list,
+                bookSnapshot.revision
+            );
+        } else if (site) {
+            chrome.storage.local.get({ allowedSites: [] }, data => {
+                const sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
+                const newSites = sites.filter(item => {
+                    const siteUrl = typeof item === 'string' ? item : item.url;
+                    return siteUrl !== site;
+                });
+                chrome.storage.local.set({ allowedSites: newSites }, renderSites);
+            });
+        } else if (filterWord) {
+            chrome.storage.local.get({ filterWords: [] }, data => {
+                const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
+                const newFilters = filters.filter(item => item !== filterWord);
+                chrome.storage.local.set({ filterWords: newFilters }, renderFilters);
+            });
+        } else if (editionKeyword !== undefined) {
+            chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, data => {
+                const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+                const newKeywords = keywords.filter(keyword => keyword !== editionKeyword);
+                chrome.storage.local.set({ editionKeywords: newKeywords }, renderEditionKeywords);
+            });
         }
-
-        const targetCount = list.filter(book => String(book.folderRule || '').trim() === baseRule).length;
-        if (targetCount <= 0) return;
-
-        const targetLabel = baseRule || '(미설정)';
-        const changedLabel = nextRule || '(비움)';
-        if (!confirm(`"[${targetLabel}]" 규칙으로 등록된 ${targetCount}건을 "${changedLabel}"(으)로 일괄 수정할까요?`)) return;
-
-        const now = new Date().toISOString();
-        const updatedList = list.map(book => {
-          const currentRule = String(book.folderRule || '').trim();
-          if (currentRule !== baseRule) return book;
-          return { ...book, folderRule: nextRule, date: now };
-        });
-        saveWithUndo(updatedList, `✅ 규칙 "${changedLabel}"(으)로 ${targetCount}건의 상위 폴더 규칙을 일괄 수정했습니다.`);
-    });
-  } else if (site) {
-    chrome.storage.local.get({ allowedSites: [] }, (data) => {
-      const sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
-      const newSites = sites.filter(s => {
-          const sUrl = typeof s === 'string' ? s : s.url;
-          return sUrl !== site;
-      });
-      chrome.storage.local.set({ allowedSites: newSites }, renderSites);
-    });
-  } else if (filterWord) {
-    chrome.storage.local.get({ filterWords: [] }, (data) => {
-        const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
-        const newFilters = filters.filter(f => f !== filterWord);
-        chrome.storage.local.set({ filterWords: newFilters }, renderFilters);
-    });
-  } else if (editionKeyword !== undefined) {
-    chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, (data) => {
-        const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
-        const newKeywords = keywords.filter(keyword => keyword !== editionKeyword);
-        chrome.storage.local.set({ editionKeywords: newKeywords }, renderEditionKeywords);
-    });
-  }
+    } catch (error) {
+        showInfoToast('❌ 도서 목록 작업 중 오류가 발생했습니다.', true);
+        console.error('도서 목록 작업 실패:', error);
+    }
 };
 
 async function loadReleaseHistory() {
@@ -1255,7 +1566,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        renderList('', true); 
+        void runOptionsAsyncTask(() => renderList('', true), '도서 목록 불러오기');
         renderSites();
         renderFilters(); 
         renderEditionKeywords();
@@ -1455,7 +1766,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
                 // 검색어 입력 시 1페이지로 리셋 (true 전달)
-                renderList(e.target.value, true); 
+                void runOptionsAsyncTask(() => renderList(e.target.value, true), '도서 목록 검색');
             }, 300);
         };
     }
@@ -1465,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', () => {
             searchInput.value = '';
             clearSearchBtn.style.display = 'none';
             updateSearchToolsLabel('');
-            renderList('', true);
+            void runOptionsAsyncTask(() => renderList('', true), '도서 목록 검색 초기화');
         };
     }
 
@@ -1475,7 +1786,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({ sortOption: e.target.value }, () => {
                 const filter = searchInput ? searchInput.value : '';
                 // 💡 정렬 변경 시 1페이지로 리셋 (true 전달)
-                renderList(filter, true); 
+                void runOptionsAsyncTask(() => renderList(filter, true), '도서 목록 정렬');
             });
         };
     }
@@ -1922,11 +2233,39 @@ async function initVersionCheck() {
 // 우클릭 메뉴 등 외부(백그라운드)에서 데이터가 변경되었을 때, 
 // 열려있는 슬라이드 패널(또는 옵션창)의 리스트를 즉시 새로고침합니다.
 // ============================================================================
+let externalBookListRenderTimer = null;
+let externalBookListRenderPending = false;
+let externalBookListRenderRunning = false;
+
+function scheduleExternalBookListRender() {
+    externalBookListRenderPending = true;
+    if (externalBookListRenderTimer) clearTimeout(externalBookListRenderTimer);
+    externalBookListRenderTimer = setTimeout(() => {
+        externalBookListRenderTimer = null;
+        void flushExternalBookListRender();
+    }, 150);
+}
+
+async function flushExternalBookListRender() {
+    if (externalBookListRenderRunning) return;
+
+    externalBookListRenderPending = false;
+    externalBookListRenderRunning = true;
+    try {
+        await renderList(getCurrentBookFilter(), false);
+    } catch (error) {
+        console.error('외부 도서 목록 동기화 실패:', error);
+    } finally {
+        externalBookListRenderRunning = false;
+        if (externalBookListRenderPending) scheduleExternalBookListRender();
+    }
+}
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.missingVolsMap && changes.missingVolsUpdate) {
         const searchInput = document.getElementById('searchInput');
         if (searchInput && searchInput.value === '#누락') {
-            renderList('#누락', false);
+            void runOptionsAsyncTask(() => renderList('#누락', false), '누락 도서 목록 갱신');
             return;
         }
 
@@ -1934,12 +2273,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         return;
     }
 
-    if (areaName === 'local' && changes.bookList) {
-        const searchInput = document.getElementById('searchInput');
-        const filter = searchInput ? searchInput.value : '';
-        
-        // 검색어가 유지된 상태로 현재 페이지 위치에서 리스트를 다시 그립니다.
-        renderList(filter, false);
+    if (areaName === 'local' && changes.bookStoreChange) {
+        const marker = changes.bookStoreChange.newValue;
+        if (!marker || marker.source === BOOK_STORE_CONTEXT_ID) return;
+        scheduleExternalBookListRender();
     }
 });
 
@@ -1962,9 +2299,8 @@ function updateMissingBadge(update) {
     badge.textContent = missingCount > 0 ? `${missingCount}누락` : '+누락';
 }
 
-function scheduleMissingVolSave(missingVolsMap, bookId, missingVols) {
+function scheduleMissingVolSave(_missingVolsMap, bookId, missingVols) {
     pendingMissingVolSave = {
-        missingVolsMap,
         bookId,
         missingVols: [...missingVols].sort((a, b) => a - b)
     };
@@ -1983,17 +2319,10 @@ function flushPendingMissingVolSave() {
     const pending = pendingMissingVolSave;
     pendingMissingVolSave = null;
 
-    const save = () => new Promise(resolve => {
-        const updatedMissingVolsMap = { ...pending.missingVolsMap };
-        updatedMissingVolsMap[String(pending.bookId)] = pending.missingVols;
-
-        const marker = {
-            bookId: pending.bookId,
-            missingVols: pending.missingVols,
-            timestamp: Date.now()
-        };
-
-        chrome.storage.local.set({ missingVolsMap: updatedMissingVolsMap, missingVolsUpdate: marker }, resolve);
+    const save = () => requestRuntimeResult({
+        action: 'UPDATE_MISSING_VOLS',
+        bookId: pending.bookId,
+        missingVols: pending.missingVols
     });
 
     missingVolSaveQueue = missingVolSaveQueue.then(save, save);
@@ -2023,70 +2352,71 @@ if (listBody) {
         const badge = e.target.closest('.missing-badge');
         if (badge) {
             const id = parseFloat(badge.dataset.id);
-            openMissingPopover(id, badge);
+            void runOptionsAsyncTask(() => openMissingPopover(id, badge), '누락 권수 불러오기');
         }
     });
 }
 
-function openMissingPopover(bookId, badgeElement) {
-    flushPendingMissingVolSave().then(() => chrome.storage.local.get({ bookList: [], missingVolsMap: {} }, (data) => {
-        const list = data.bookList;
-        const bookIndex = list.findIndex(b => b.id === bookId);
-        const book = bookIndex > -1 ? list[bookIndex] : null;
-        if (!book) return;
+async function openMissingPopover(bookId, badgeElement) {
+    await flushPendingMissingVolSave();
+    await ensureBookStoreReady();
+    const [book, data] = await Promise.all([
+        bookStoreGet(bookId),
+        storageLocalGet({ missingVolsMap: {} })
+    ]);
+    if (!book) return;
 
-        const lastVol = parseInt(book.lastVol, 10);
-        if (isNaN(lastVol) || lastVol <= 0) {
-            showInfoToast('❌ 권수를 먼저 숫자로 입력하고 [수정] 버튼으로 저장한 뒤에 이용해주세요.', true);
-            return;
+    const lastVol = parseInt(book.lastVol, 10);
+    if (isNaN(lastVol) || lastVol <= 0) {
+        showInfoToast('❌ 권수를 먼저 숫자로 입력하고 [수정] 버튼으로 저장한 뒤에 이용해주세요.', true);
+        return;
+    }
+
+    const missingVolSet = new Set(getBookMissingVols(book, data.missingVolsMap));
+
+    // 팝오버 내부 HTML 구성 (입력된 최대 권수까지 번호표 렌더링)
+    volPopover.innerHTML = `
+        <div class="popover-header">
+            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${book.title} (총 ${lastVol}권)</span>
+            <button id="closePopoverBtn" style="background:transparent; color:var(--text); padding:0; margin-left:5px; font-size:14px; box-shadow:none; cursor:pointer;">✕</button>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
+        <div class="vol-grid">
+            ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
+                <div class="vol-item ${missingVolSet.has(v) ? 'missing' : ''}" data-vol="${v}">${v}</div>
+            `).join('')}
+        </div>
+    `;
+
+    // 클릭된 배지 위치를 계산하여 팝오버 띄우기
+    const rect = badgeElement.getBoundingClientRect();
+    volPopover.style.display = 'block';
+    volPopover.style.top = `${rect.bottom + window.scrollY + 8}px`;
+    let leftPos = rect.left + window.scrollX - 180;
+    if (leftPos < 10) leftPos = 10; // 화면 왼쪽 벗어남 방지
+    volPopover.style.left = `${leftPos}px`;
+
+    document.getElementById('closePopoverBtn').onclick = () => {
+        flushPendingMissingVolSave();
+        volPopover.style.display = 'none';
+    };
+
+    const volumeGrid = volPopover.querySelector('.vol-grid');
+    volumeGrid.onclick = event => {
+        const item = event.target.closest('.vol-item');
+        if (!item) return;
+
+        const vol = parseInt(item.dataset.vol, 10);
+        if (missingVolSet.has(vol)) {
+            missingVolSet.delete(vol);
+            item.classList.remove('missing');
+        } else {
+            missingVolSet.add(vol);
+            item.classList.add('missing');
         }
 
-        const missingVolSet = new Set(getBookMissingVols(book, data.missingVolsMap));
-
-        // 팝오버 내부 HTML 구성 (입력된 최대 권수까지 번호표 렌더링)
-        volPopover.innerHTML = `
-            <div class="popover-header">
-                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${book.title} (총 ${lastVol}권)</span>
-                <button id="closePopoverBtn" style="background:transparent; color:var(--text); padding:0; margin-left:5px; font-size:14px; box-shadow:none; cursor:pointer;">✕</button>
-            </div>
-            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
-            <div class="vol-grid">
-                ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
-                    <div class="vol-item ${missingVolSet.has(v) ? 'missing' : ''}" data-vol="${v}">${v}</div>
-                `).join('')}
-            </div>
-        `;
-
-        // 클릭된 배지 위치를 계산하여 팝오버 띄우기
-        const rect = badgeElement.getBoundingClientRect();
-        volPopover.style.display = 'block';
-        volPopover.style.top = `${rect.bottom + window.scrollY + 8}px`;
-        let leftPos = rect.left + window.scrollX - 180;
-        if (leftPos < 10) leftPos = 10; // 화면 왼쪽 벗어남 방지
-        volPopover.style.left = `${leftPos}px`;
-
-        document.getElementById('closePopoverBtn').onclick = () => {
-            flushPendingMissingVolSave();
-            volPopover.style.display = 'none';
-        };
-        
-        const volumeGrid = volPopover.querySelector('.vol-grid');
-        volumeGrid.onclick = (event) => {
-            const item = event.target.closest('.vol-item');
-            if (!item) return;
-
-            const vol = parseInt(item.dataset.vol, 10);
-            if (missingVolSet.has(vol)) {
-                missingVolSet.delete(vol);
-                item.classList.remove('missing');
-            } else {
-                missingVolSet.add(vol);
-                item.classList.add('missing');
-            }
-
-            const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
-            updateMissingBadge({ bookId, missingVols });
-            scheduleMissingVolSave(data.missingVolsMap, bookId, missingVols);
-        };
-    }));
+        const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
+        updateMissingBadge({ bookId, missingVols });
+        scheduleMissingVolSave(data.missingVolsMap, bookId, missingVols);
+    };
 }

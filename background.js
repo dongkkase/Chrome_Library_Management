@@ -224,61 +224,37 @@ async function handleQuickAction(message, sender) {
 
     if (message.type === "search") {
         chrome.tabs.create({ url: "https://www.google.com/search?q=" + encodeURIComponent(sanitizedTitle) }).catch(() => {});
-        return;
+        return { ok: true };
     }
 
     if (message.type === "everything_search") {
         executeEverythingSearch(stripEditionTagsForEverythingSearch(sanitizedTitle), tabId);
-        return;
+        return { ok: true };
     }
 
     console.log(message.type);
     if (message.type === "ridi_preview") {
         performRidiSearch(sanitizedTitle);
-        return;
+        return { ok: true };
     }
 
     if (message.type === "delete") {
-        chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
-            setEditionKeywords(data.editionKeywords);
-            let list = Array.isArray(data.bookList) ? data.bookList : [];
-            let targetTitleStr = getTitleMatchParts(sanitizedTitle).matchKey;
-
-            // 삭제 처리 최적화를 위해 뒤에서부터 빠르게 탐색
-            let existingIndex = -1;
-            for (let i = list.length - 1; i >= 0; i--) {
-                if (getTitleMatchParts(list[i].title || "").matchKey === targetTitleStr) {
-                    existingIndex = i;
-                    break;
-                }
-            }
-
-            if (existingIndex > -1) {
-                let deletedBook = list.splice(existingIndex, 1)[0];
-
-                bgListMapCache = null; // [추가] 삭제 시 백그라운드 캐시 무효화
-
-                chrome.storage.local.set({ bookList: list }, () => {
-                    sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
-                });
-            } else {
-                sendTabMessage(tabId, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
-            }
+        return enqueueBookMutation(() => {
+            return deleteBookByMatchKey(sanitizedTitle, tabId, 'quick-action', message.bookId);
         });
-        return;
     }
 
-    pendingTasks.push({
+    const task = {
         cleanTitle: sanitizedTitle,
+        matchKey: getTitleMatchParts(sanitizedTitle).matchKey,
+        bookId: message.bookId,
         resolution: message.resolution,
         lastVol: message.lastVol,
         type: message.type,
         dateString: new Date().toISOString(),
         tabId
-    });
-
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(processSaveQueue, 10);
+    };
+    return enqueueBookMutation(() => processSaveQueue([task]));
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -293,6 +269,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return true;
   }
+
+    else if (message.action === "GET_BOOK_LIST") {
+        bookStoreGetAllWithRevision().then(result => {
+            sendResponse({
+                ok: true,
+                bookList: result.bookList,
+                revision: result.revision
+            });
+        }).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
+
+    else if (message.action === "GET_BOOK_STORE_REVISION") {
+        bookStoreGetRevision().then(revision => {
+            sendResponse({ ok: true, revision });
+        }).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
+
+    else if (message.action === "CONTENT_UPDATE_BOOK") {
+        enqueueBookMutation(() => handleContentUpdateBook(message, sender)).then(result => {
+            sendResponse({ ok: true, book: result });
+        }).catch(error => {
+            const errorMessage = getBookStoreErrorMessage(error);
+            sendTabMessage(sender.tab && sender.tab.id, {
+                action: "SHOW_INFO_TOAST",
+                msg: `❌ 도서 수정에 실패했습니다: ${errorMessage}`,
+                isError: true
+            });
+            sendResponse({ ok: false, error: errorMessage });
+        });
+        return true;
+    }
+
+    else if (message.action === "UPDATE_MISSING_VOLS") {
+        enqueueBookMutation(() => handleMissingVolUpdate(message)).then(result => {
+            sendResponse({ ok: true, update: result });
+        }).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
 
   else if (message.action === "REQUEST_STORE_UPDATE") {
       requestChromeStoreUpdate().then((result) => {
@@ -379,7 +401,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   else if (message.action === "QUICK_ACTION") {
-      void handleQuickAction(message, sender).catch(error => console.error('빠른 작업 처리 실패:', error));
+      handleQuickAction(message, sender).then(result => {
+          sendResponse(result && typeof result === 'object' ? result : { ok: true });
+      }).catch(error => {
+          const errorMessage = getBookStoreErrorMessage(error);
+          console.error('빠른 작업 처리 실패:', error);
+          sendResponse({ ok: false, error: errorMessage });
+      });
       return true;
   }
   
@@ -997,23 +1025,35 @@ async function createDailySnapshot() {
     try {
         const now = new Date();
         const dateStr = now.toLocaleDateString('ko-KR');
+        await ensureBookStoreReady();
         
         // 오늘 날짜의 스냅샷이 이미 있다면 패스
         const existing = await db.snapshots.where('dateStr').equals(dateStr).first();
         if (existing) return;
-        
-        chrome.storage.local.get({ bookList: [], missingVolsMap: {}, allowedSites: [], filterWords: [], editionKeywords: getDefaultEditionKeywords() }, async (data) => {
-            const snapshotData = { timestamp: now.getTime(), dateStr: dateStr, data: data };
-            await db.snapshots.add(snapshotData); // 스냅샷 저장
-            
-            // 7개를 초과하면 가장 오래된 것 삭제
-            const count = await db.snapshots.count();
-            if (count > 7) {
-                const oldest = await db.snapshots.orderBy('timestamp').limit(count - 7).toArray();
-                const oldestIds = oldest.map(s => s.id);
-                await db.snapshots.bulkDelete(oldestIds);
-            }
-        });
+
+        const [bookList, storedData] = await Promise.all([
+            bookStoreGetAll(),
+            chrome.storage.local.get({
+                missingVolsMap: {},
+                allowedSites: [],
+                filterWords: [],
+                editionKeywords: getDefaultEditionKeywords()
+            })
+        ]);
+        const snapshotData = {
+            timestamp: now.getTime(),
+            dateStr,
+            data: { ...storedData, bookList }
+        };
+        await db.snapshots.add(snapshotData);
+
+        // 7개를 초과하면 가장 오래된 것 삭제
+        const count = await db.snapshots.count();
+        if (count > 7) {
+            const oldest = await db.snapshots.orderBy('timestamp').limit(count - 7).toArray();
+            const oldestIds = oldest.map(s => s.id);
+            await db.snapshots.bulkDelete(oldestIds);
+        }
     } catch (e) { console.error("Snapshot creation failed:", e); }
 }
 
@@ -1139,11 +1179,28 @@ chrome.runtime.onUpdateAvailable.addListener(() => {
     scheduleStoreUpdateReload().catch(() => {});
 });
 
+let bookMutationQueue = Promise.resolve();
+
+function enqueueBookMutation(operation) {
+    const result = bookMutationQueue.then(operation, operation);
+    bookMutationQueue = result.then(() => undefined, () => undefined);
+    return result;
+}
+
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.editionKeywords) {
-        bgListMapCache = null;
-        bgListLength = -1;
+        const nextEditionKeywords = changes.editionKeywords.newValue;
+        void enqueueBookMutation(async () => {
+            setEditionKeywords(nextEditionKeywords);
+            await bookStoreReindexAll();
+            await bookStorePublishChange({
+                type: 'reload',
+                reason: 'edition-keywords-reindex'
+            });
+        }).catch(error => {
+            console.error('도서 검색 키 재색인 실패:', error);
+        });
     }
     if (areaName === 'local' && changes.openSlidePanel) {
         const isSlide = changes.openSlidePanel.newValue;
@@ -1178,11 +1235,126 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-let pendingTasks = [];
-let isSaving = false;
-let saveTimer = null;
-let bgListMapCache = null; // [신규] 백그라운드 해시맵 캐시
-let bgListLength = -1;
+function getBookStoreErrorMessage(error) {
+    if (error && error.message) return error.message;
+    return String(error || '알 수 없는 오류');
+}
+
+async function handleMissingVolUpdate(message) {
+    if (message.bookId === undefined || message.bookId === null) {
+        throw new TypeError('누락 권수를 저장할 도서 ID가 없습니다.');
+    }
+
+    const missingVols = Array.isArray(message.missingVols)
+        ? Array.from(new Set(message.missingVols.map(Number).filter(value => {
+            return Number.isInteger(value) && value > 0;
+        }))).sort((a, b) => a - b)
+        : [];
+    const data = await chrome.storage.local.get({ missingVolsMap: {} });
+    const currentMap = data.missingVolsMap && typeof data.missingVolsMap === 'object'
+        ? data.missingVolsMap
+        : {};
+    const missingVolsMap = {
+        ...currentMap,
+        [String(message.bookId)]: missingVols
+    };
+    const update = {
+        bookId: message.bookId,
+        missingVols,
+        timestamp: Date.now()
+    };
+
+    await chrome.storage.local.set({ missingVolsMap, missingVolsUpdate: update });
+    return update;
+}
+
+async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
+    try {
+        await customFiltersReady;
+        const targetMatchKey = getTitleMatchParts(title || '').matchKey;
+        const deletedBook = await bookStoreDeleteByTarget({
+            id: bookId,
+            matchKey: targetMatchKey,
+            title
+        });
+
+        if (!deletedBook) {
+            sendTabMessage(tabId, {
+                action: "SHOW_INFO_TOAST",
+                msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.",
+                isError: true
+            });
+            return { ok: false, error: '등록된 데이터가 없습니다.' };
+        }
+
+        await bookStorePublishChange({
+            type: 'delete',
+            reason,
+            id: deletedBook.id,
+            book: deletedBook
+        });
+        sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
+        return { ok: true, book: deletedBook };
+    } catch (error) {
+        const errorMessage = getBookStoreErrorMessage(error);
+        console.error('도서 삭제 실패:', error);
+        sendTabMessage(tabId, {
+            action: "SHOW_INFO_TOAST",
+            msg: `❌ 삭제 처리에 실패했습니다: ${errorMessage}`,
+            isError: true
+        });
+        return { ok: false, error: errorMessage };
+    }
+}
+
+async function handleContentUpdateBook(message) {
+    await customFiltersReady;
+
+    const messageBook = message.book && typeof message.book === 'object' ? message.book : null;
+    const bookId = message.bookId ?? message.id ?? (messageBook ? messageBook.id : null);
+    const lookupMatchKey = message.matchKey
+        || message.cleanTitleStr
+        || (message.originalTitle ? getTitleMatchParts(message.originalTitle).matchKey : '');
+
+    const suppliedChanges = message.changes && typeof message.changes === 'object'
+        ? message.changes
+        : message.updates && typeof message.updates === 'object'
+            ? message.updates
+            : message.patch && typeof message.patch === 'object'
+                ? message.patch
+                : messageBook || {};
+    const changes = {};
+    ['title', 'type', 'resolution', 'lastVol', 'folderRule', 'date'].forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(suppliedChanges, key)) {
+            changes[key] = suppliedChanges[key];
+        }
+    });
+
+    if (message.title !== undefined) changes.title = message.title;
+    if (message.date !== undefined) changes.date = message.date;
+
+    const savedBook = await bookStorePutByTarget({ id: bookId, matchKey: lookupMatchKey }, existingBook => {
+        if (!existingBook) {
+            throw new Error('수정할 도서 데이터를 찾을 수 없습니다.');
+        }
+
+        const updatedBook = {
+            ...existingBook,
+            ...changes,
+            id: existingBook.id,
+            date: changes.date || new Date().toISOString()
+        };
+        updatedBook.title = String(updatedBook.title || '').trim();
+        if (!updatedBook.title) throw new Error('도서 제목은 비워둘 수 없습니다.');
+        return updatedBook;
+    });
+    await bookStorePublishChange({
+        type: 'upsert',
+        reason: 'content-update',
+        book: savedBook
+    });
+    return savedBook;
+}
 
 function sanitizeBookTitleForStorage(title) {
     return cleanSiteTitle(
@@ -1259,31 +1431,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
   }
 
-  if (menuId === "deleteBook") {
-      chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
-          setEditionKeywords(data.editionKeywords);
-          let list = Array.isArray(data.bookList) ? data.bookList : [];
-          let targetTitleStr = getTitleMatchParts(cleanTitle).matchKey;
-
-          let existingIndex = list.findIndex(b => {
-              const bTitle = getTitleMatchParts(b.title || "").matchKey;
-              return targetTitleStr === bTitle;
-          });
-
-          if (existingIndex > -1) {
-              let deletedBook = list.splice(existingIndex, 1)[0];
-          bgListMapCache = null; // 캐시 초기화
-              chrome.storage.local.set({ bookList: list }, () => {
-                  if (tab && tab.id) {
-                      sendTabMessage(tab.id, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
-                  }
-              });
-          } else {
-              if (tab && tab.id) sendTabMessage(tab.id, { action: "SHOW_INFO_TOAST", msg: "❌ 등록된 데이터가 없어 삭제할 수 없습니다.", isError: true });
-          }
-      });
-      return;
-  }
+    if (menuId === "deleteBook") {
+        await enqueueBookMutation(() => {
+            return deleteBookByMatchKey(cleanTitle, tab ? tab.id : null, 'context-menu');
+        });
+        return;
+    }
 
     let type = "exclude";
     if (menuId === "addIncomplete") type = "incomplete";
@@ -1307,12 +1460,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
     const dateString = new Date().toISOString();
 
-  pendingTasks.push({
-      cleanTitle, resolution, lastVol, type, dateString, tabId: tab?.id
-  });
-
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(processSaveQueue, 10);
+    await enqueueBookMutation(() => processSaveQueue([{
+        cleanTitle,
+        matchKey: getTitleMatchParts(cleanTitle).matchKey,
+        resolution,
+        lastVol,
+        type,
+        dateString,
+        tabId: tab?.id
+    }]));
 });
 
 function executeEverythingSearch(cleanTitle, tabId) {
@@ -1338,77 +1494,80 @@ function executeEverythingSearch(cleanTitle, tabId) {
     }
 }
 
-async function processSaveQueue() {
+async function processSaveQueue(tasks) {
     await customFiltersReady;
-    if (pendingTasks.length === 0) return;
-    if (isSaving) {
-        setTimeout(processSaveQueue, 10); 
-        return;
-    }
-    
-    isSaving = true;
-    const tasks = [...pendingTasks]; 
-    pendingTasks = []; 
+    const queuedTasks = Array.isArray(tasks) ? tasks : [];
+    if (queuedTasks.length === 0) return { ok: true, books: [] };
 
-    chrome.storage.local.get({ bookList: [], editionKeywords: getDefaultEditionKeywords() }, (data) => {
-        setEditionKeywords(data.editionKeywords);
-        let list = Array.isArray(data.bookList) ? data.bookList : [];
-        
-        // [핵심 최적화] 매번 6만번 루프 돌며 해시맵을 만들지 않고, 갯수가 같으면 캐시된 맵 사용
-        if (!bgListMapCache || bgListLength !== list.length) {
-            bgListMapCache = new Map();
-            for (let i = 0; i < list.length; i++) {
-                const t = getTitleMatchParts(list[i].title || "").matchKey;
-                bgListMapCache.set(t, i);
-            }
-            bgListLength = list.length;
-        }
-
-        let lastSavedBook = null;
-        let targetTabId = null;
-
-        for (let task of tasks) {
-            const normalizedTaskTitle = sanitizeBookTitleForStorage(task.cleanTitle);
-            const targetTitleStr = getTitleMatchParts(normalizedTaskTitle).matchKey;
-            let existingIndex = bgListMapCache.has(targetTitleStr) ? bgListMapCache.get(targetTitleStr) : -1;
-
-            if (existingIndex > -1) {
-                list[existingIndex].lastVol = task.lastVol || list[existingIndex].lastVol;
-                list[existingIndex].resolution = task.resolution || list[existingIndex].resolution;
-                list[existingIndex].type = task.type; 
-                list[existingIndex].date = task.dateString; 
-                list[existingIndex].title = normalizedTaskTitle;
-                lastSavedBook = list[existingIndex]; 
-            } else {
-                lastSavedBook = { 
-                    id: Date.now() + Math.random(), 
-                    title: normalizedTaskTitle, 
-                    type: task.type, 
-                    resolution: task.resolution, 
-                    lastVol: task.lastVol, 
-                    date: task.dateString 
-                };
-                list.push(lastSavedBook);
-                bgListMapCache.set(targetTitleStr, list.length - 1);
-                bgListLength = list.length;
-            }
-            if (task.tabId) targetTabId = task.tabId;
-        }
-        
-        chrome.storage.local.set({ bookList: list }, () => {
-            isSaving = false;
-
-            if (targetTabId && lastSavedBook) {
-                let msgBook = { ...lastSavedBook }; 
-                if (tasks.length > 1) {
-                    msgBook.title = "[총 " + tasks.length + "건 연속 처리] " + msgBook.title;
-                }
-                sendTabMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook });
-            }
-            
-            if (pendingTasks.length > 0) processSaveQueue();
-        });
+    let lastSavedBook = null;
+    let targetTabId = null;
+    queuedTasks.forEach(task => {
+        if (task.tabId) targetTabId = task.tabId;
     });
+
+    try {
+        await ensureBookStoreReady();
+        const mutationEntries = queuedTasks.map(task => {
+            const normalizedTaskTitle = String(task.cleanTitle || '').trim();
+            const targetMatchKey = task.matchKey || getTitleMatchParts(normalizedTaskTitle).matchKey;
+            return {
+                target: {
+                    id: task.bookId,
+                    matchKey: targetMatchKey,
+                    title: normalizedTaskTitle
+                },
+                updateBook: existingBook => {
+                    return existingBook ? {
+                        ...existingBook,
+                        lastVol: task.lastVol || existingBook.lastVol,
+                        resolution: task.resolution || existingBook.resolution,
+                        type: task.type,
+                        date: task.dateString,
+                        title: existingBook.title
+                    }
+                    : {
+                        title: normalizedTaskTitle,
+                        type: task.type,
+                        resolution: task.resolution,
+                        lastVol: task.lastVol,
+                        date: task.dateString
+                    };
+                }
+            };
+        });
+        const mutationResult = await bookStorePutManyByTarget(mutationEntries);
+        const savedChanges = mutationResult.books.map(book => ({ type: 'upsert', book }));
+        lastSavedBook = mutationResult.books[mutationResult.books.length - 1] || null;
+
+        const markerPayload = savedChanges.length === 1
+            ? { type: 'upsert', reason: 'quick-action', book: lastSavedBook }
+            : {
+                type: 'batch',
+                reason: 'quick-action-batch',
+                changes: savedChanges,
+                revision: mutationResult.revision
+            };
+        await bookStorePublishChange(markerPayload);
+
+        if (targetTabId && lastSavedBook) {
+            const msgBook = { ...lastSavedBook };
+            if (queuedTasks.length > 1) {
+                msgBook.title = "[총 " + queuedTasks.length + "건 연속 처리] " + msgBook.title;
+            }
+            sendTabMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook });
+        }
+        return { ok: true, book: lastSavedBook, books: savedChanges.map(change => change.book) };
+    } catch (error) {
+        const errorMessage = getBookStoreErrorMessage(error);
+        const errorTabId = targetTabId || queuedTasks.find(task => task.tabId)?.tabId;
+        console.error('도서 저장 실패:', error);
+        sendTabMessage(errorTabId, {
+            action: "SHOW_INFO_TOAST",
+            msg: `❌ 저장 처리에 실패했습니다: ${errorMessage}`,
+            isError: true
+        });
+        return { ok: false, error: errorMessage };
+    }
 }
 
 let downloadSpeedCache = {};
