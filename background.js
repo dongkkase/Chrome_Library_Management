@@ -1399,7 +1399,8 @@ async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
         const deletedBook = await bookStoreDeleteByTarget({
             id: bookId,
             matchKey: targetMatchKey,
-            title
+            title,
+            rejectLowCoverageId: true
         });
 
         if (!deletedBook) {
@@ -1641,7 +1642,8 @@ async function processSaveQueue(tasks) {
                 target: {
                     id: task.bookId,
                     matchKey: targetMatchKey,
-                    title: normalizedTaskTitle
+                    title: normalizedTaskTitle,
+                    rejectLowCoverageId: true
                 },
                 updateBook: existingBook => {
                     return existingBook ? {

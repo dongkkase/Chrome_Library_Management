@@ -516,6 +516,127 @@ test('긴 도서 제목은 접두사만 같은 짧은 도서와 상태 처리 �
     );
 });
 
+test('DB 대상 조회는 stale ID의 low-coverage 제목을 거부하고 exact 제목으로 fallback한다', async () => {
+    const state = {
+        booksById: new Map(),
+        exactBooksByKey: new Map(),
+        whereIndexes: [],
+        exactLookups: []
+    };
+    const findStoredBookByTarget = vm.runInNewContext(`
+        function getTitleMatchParts(title) {
+            const compact = String(title || '').replace(/\\s+/g, '');
+            return { baseNoSpace: compact, matchKey: compact };
+        }
+
+        ${extractFunction(sources['db.js'], 'getBookStoreMatchKey')}
+        ${extractFunction(sources['db.js'], 'isLowCoverageBookTargetMismatch')}
+        ${extractFunction(sources['db.js'], 'findStoredBookByTarget')}
+        findStoredBookByTarget;
+    `, {
+        db: {
+            books: {
+                get: async id => state.booksById.get(String(id)) || null,
+                where: indexName => {
+                    state.whereIndexes.push(indexName);
+                    return {
+                        equals: matchKey => ({
+                            last: async () => {
+                                state.exactLookups.push(matchKey);
+                                return state.exactBooksByKey.get(matchKey) || null;
+                            }
+                        })
+                    };
+                }
+            }
+        }
+    });
+    const fullTitle = '리버스 더 루나틱 테이커';
+    const fullKey = '리버스더루나틱테이커';
+    const shortBook = { id: 1, title: '리버스', cleanTitleStr: '리버스' };
+    const fullBook = { id: 2, title: fullTitle, cleanTitleStr: fullKey };
+    const staleTarget = {
+        id: 1,
+        title: fullTitle,
+        matchKey: fullKey,
+        rejectLowCoverageId: true
+    };
+
+    state.booksById = new Map([['1', shortBook]]);
+    state.exactBooksByKey = new Map([[fullKey, fullBook]]);
+    let result = await findStoredBookByTarget(staleTarget);
+    assert.strictEqual(result, fullBook);
+    assert.deepEqual(state.whereIndexes, ['cleanTitleStr']);
+    assert.deepEqual(state.exactLookups, [fullKey]);
+
+    state.whereIndexes = [];
+    state.exactLookups = [];
+    state.exactBooksByKey = new Map();
+    result = await findStoredBookByTarget(staleTarget);
+    assert.equal(result, null);
+    assert.deepEqual(state.whereIndexes, ['cleanTitleStr']);
+    assert.deepEqual(state.exactLookups, [fullKey]);
+
+    const middleCoverageBook = {
+        id: 3,
+        title: '루나틱 테이커',
+        cleanTitleStr: '루나틱테이커'
+    };
+    state.whereIndexes = [];
+    state.exactLookups = [];
+    state.booksById = new Map([['3', middleCoverageBook]]);
+    result = await findStoredBookByTarget({
+        id: 3,
+        title: '리버스 루나틱 테이커',
+        matchKey: '리버스루나틱테이커',
+        rejectLowCoverageId: true
+    });
+    assert.strictEqual(result, middleCoverageBook);
+    assert.deepEqual(state.whereIndexes, []);
+    assert.deepEqual(state.exactLookups, []);
+
+    const closeLengthBook = {
+        id: 4,
+        title: '루나틱 테이커',
+        cleanTitleStr: '루나틱테이커'
+    };
+    state.whereIndexes = [];
+    state.exactLookups = [];
+    state.booksById = new Map([['4', closeLengthBook]]);
+    result = await findStoredBookByTarget({
+        id: 4,
+        title: '더 루나틱 테이커',
+        matchKey: '더루나틱테이커',
+        rejectLowCoverageId: true
+    });
+    assert.strictEqual(result, closeLengthBook);
+    assert.deepEqual(state.whereIndexes, []);
+    assert.deepEqual(state.exactLookups, []);
+
+    state.whereIndexes = [];
+    state.exactLookups = [];
+    state.booksById = new Map([['1', shortBook]]);
+    result = await findStoredBookByTarget({
+        id: 1,
+        title: fullTitle,
+        matchKey: fullKey
+    });
+    assert.strictEqual(result, shortBook);
+    assert.deepEqual(state.whereIndexes, []);
+    assert.deepEqual(state.exactLookups, []);
+
+    const processSaveQueue = extractFunction(sources['background.js'], 'processSaveQueue');
+    const deleteBookByMatchKey = extractFunction(sources['background.js'], 'deleteBookByMatchKey');
+    assert.match(
+        processSaveQueue,
+        /target:\s*\{\s*id:\s*task\.bookId,\s*matchKey:\s*targetMatchKey,\s*title:\s*normalizedTaskTitle,\s*rejectLowCoverageId:\s*true\s*\}/
+    );
+    assert.match(
+        deleteBookByMatchKey,
+        /bookStoreDeleteByTarget\s*\(\s*\{\s*id:\s*bookId,\s*matchKey:\s*targetMatchKey,\s*title,\s*rejectLowCoverageId:\s*true\s*\}\s*\)/
+    );
+});
+
 test('SHOW_TOAST 메시지는 알림만 표시하고 전체 도서 목록을 다시 읽지 않는다', () => {
     const toastBranch = extractBranch(
         sources['content.js'],

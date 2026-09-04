@@ -506,11 +506,36 @@ async function bookStoreFindByMatchKey(matchKey) {
     return toPublicBook(book);
 }
 
+function isLowCoverageBookTargetMismatch(book, target) {
+    if (!book || !target || !target.title) return false;
+
+    const getBaseKey = title => {
+        if (typeof getTitleMatchParts === 'function') {
+            return getTitleMatchParts(title || '').baseNoSpace;
+        }
+        return getBookStoreMatchKey(title || '').split('::')[0];
+    };
+    const storedBaseKey = getBaseKey(book.title);
+    const targetBaseKey = getBaseKey(target.title);
+    if (!storedBaseKey || !targetBaseKey || storedBaseKey === targetBaseKey) return false;
+
+    const isContained = storedBaseKey.includes(targetBaseKey) || targetBaseKey.includes(storedBaseKey);
+    if (!isContained || Math.abs(storedBaseKey.length - targetBaseKey.length) <= 2) return false;
+
+    const shorterLength = Math.min(storedBaseKey.length, targetBaseKey.length);
+    const longerLength = Math.max(storedBaseKey.length, targetBaseKey.length);
+    return shorterLength / longerLength < 0.5;
+}
+
 async function findStoredBookByTarget(target) {
     const requestedId = target && target.id !== undefined ? target.id : null;
     let book = requestedId === null ? null : await db.books.get(requestedId);
     if (!book && typeof requestedId === 'string' && requestedId.trim() && Number.isFinite(Number(requestedId))) {
         book = await db.books.get(Number(requestedId));
+    }
+    if (book && target && target.rejectLowCoverageId === true
+        && isLowCoverageBookTargetMismatch(book, target)) {
+        book = null;
     }
 
     const matchKey = target && target.title
