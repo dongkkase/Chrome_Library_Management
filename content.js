@@ -1848,6 +1848,11 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
   if (isSiteIncludesReg || isRegIncludesSite) {
     const lengthDiff = Math.abs(regBody.length - siteBody.length);
     if (lengthDiff <= 2) return 95;
+
+    const shorterLength = Math.min(regBody.length, siteBody.length);
+    const longerLength = Math.max(regBody.length, siteBody.length);
+    if (shorterLength / longerLength < 0.5) return 75;
+
     if (lengthDiff <= 4) return 85;
 
     const isPrefixOrSuffix = siteBody.startsWith(regBody) || siteBody.endsWith(regBody) || regBody.startsWith(siteBody) || regBody.endsWith(siteBody);

@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const projectRoot = path.join(__dirname, '..');
 const sources = Object.fromEntries(
-    ['db.js', 'background.js', 'content.js', 'options.js'].map(fileName => [
+    ['common.js', 'db.js', 'background.js', 'content.js', 'options.js'].map(fileName => [
         fileName,
         fs.readFileSync(path.join(projectRoot, fileName), 'utf8')
     ])
@@ -453,6 +453,67 @@ test('QUICK_ACTION은 비동기 처리 완료를 sendResponse로 확인한다', 
 
     assert.match(createQuickActions, /requestRuntimeResponse\s*\(\s*\{\s*action:\s*"QUICK_ACTION"[\s\S]*\(response\)\s*=>/);
     assert.match(createQuickActions, /!response\s*\|\|\s*response\.ok\s*!==\s*true[\s\S]*recoverPendingOptimisticChanges\s*\(\s*true\s*\)/);
+});
+
+test('긴 도서 제목은 접두사만 같은 짧은 도서와 상태 처리 대상으로 매칭되지 않는다', () => {
+    const commonContext = vm.createContext({
+        console: {
+            log() {},
+            error() {}
+        }
+    });
+    vm.runInContext(sources['common.js'], commonContext);
+
+    const rawTitles = [
+        '리버스 더 루나틱 테이커 1~7권 1800px (완결)',
+        '리버스 더 루나틱 테이커 1\\~7권 1800px (완결)'
+    ];
+    const cleanedTitles = rawTitles.map(title => commonContext.cleanSiteTitle(title));
+    assert.deepEqual(Array.from(cleanedTitles), [
+        '리버스 더 루나틱 테이커',
+        '리버스 더 루나틱 테이커'
+    ]);
+    const fullTitle = cleanedTitles[0];
+
+    const shortBook = {
+        id: 1,
+        title: '리버스',
+        type: 'incomplete',
+        _regBodyOriginal: '리버스',
+        _regBodyNoSpace: '리버스',
+        _editionKey: '',
+        _editionState: 'unknown',
+        _matchKey: '리버스'
+    };
+    const matchingApi = vm.runInNewContext(`
+        const levRow0 = new Int32Array(256);
+        const levRow1 = new Int32Array(256);
+        let cachedBookList = [initialShortBook];
+        let exactMatchCache = {};
+        let similarityCache = {};
+
+        ${extractFunction(sources['content.js'], 'calculateLevenshtein')}
+        ${extractFunction(sources['content.js'], 'getSimilarity')}
+        ${extractFunction(sources['content.js'], 'findMatchingBook')}
+
+        ({ getSimilarity, findMatchingBook });
+    `, {
+        initialShortBook: shortBook
+    });
+
+    assert.equal(matchingApi.getSimilarity('리버스', fullTitle), 75);
+    const match = matchingApi.findMatchingBook(commonContext.getTitleMatchParts(fullTitle));
+    assert.equal(match.book, null);
+    assert.equal(match.maxScore, 0);
+
+    assert.equal(
+        matchingApi.getSimilarity('루나틱 테이커', '더 루나틱 테이커'),
+        95
+    );
+    assert.equal(
+        matchingApi.getSimilarity('루나틱 테이커', '리버스 루나틱 테이커'),
+        85
+    );
 });
 
 test('SHOW_TOAST 메시지는 알림만 표시하고 전체 도서 목록을 다시 읽지 않는다', () => {
