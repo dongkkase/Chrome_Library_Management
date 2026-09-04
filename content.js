@@ -566,6 +566,8 @@ let titleCorrections = {};
 let similarityCache = {};
 let lastRightClickedLink = null; 
 let lastRightClickedElement = null; 
+let lastRightClickedContext = null;
+let isRightClickedContextCaptureInstalled = false;
 
 let isDownloadUIEnabled = false;
 
@@ -735,6 +737,15 @@ function getResolvedLinkTitle(linkData) {
         sourceEditionKey: '',
         sourceEditionState: 'unknown'
     };
+}
+
+function getResolvedQuickActionTitle(linkData, actionElement) {
+    const liveChatingWikiTitle = getChatingWikiListTitle(actionElement);
+    if (liveChatingWikiTitle !== null) {
+        return getResolvedSiteTitle(liveChatingWikiTitle, !!linkData.hasSiteTranslationEdition);
+    }
+
+    return getResolvedLinkTitle(linkData);
 }
 
 function invalidateTitleCorrectionRenderCache() {
@@ -1698,10 +1709,25 @@ function processUselessComments() {
 
 function getChatingWikiListTitle(link) {
     if (!link || !window.location.hostname.includes('chating.wiki')) return null;
-    if (typeof link.matches !== 'function' || !link.matches('a.cw-board-item')) return null;
+    if (typeof link.matches !== 'function') return null;
 
-    const titleElement = link.querySelector(':scope > .cw-board-item__title > strong');
-    return titleElement ? titleElement.textContent.trim() : null;
+    const item = link.matches('a.cw-board-item')
+        ? link
+        : (typeof link.closest === 'function' ? link.closest('a.cw-board-item') : null);
+    if (!item) return null;
+
+    const titleContainer = item.querySelector(':scope > .cw-board-item__title')
+        || item.querySelector('.cw-board-item__title');
+    if (!titleContainer) return null;
+
+    const titleElement = titleContainer.querySelector('strong');
+    if (titleElement && titleElement.textContent.trim()) return titleElement.textContent.trim();
+
+    const clone = titleContainer.cloneNode(true);
+    clone.querySelectorAll('.cw-board-item__comments, .cw-board-item__tags, .book-badge, .bm-quick-actions').forEach(element => {
+        element.remove();
+    });
+    return clone.textContent.trim() || null;
 }
 
 function getPureLinkText(link) {
@@ -1711,7 +1737,7 @@ function getPureLinkText(link) {
   let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
   const temp = document.createElement('div');
   temp.innerHTML = safeHTML;
-  const unwantedElements = temp.querySelectorAll('.count, .book-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em');
+  const unwantedElements = temp.querySelectorAll('.count, .book-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em, .cw-board-item__tags, .cw-board-item__meta');
   unwantedElements.forEach(el => el.remove());
   const walker = document.createTreeWalker(temp, NodeFilter.SHOW_COMMENT, null, false);
   let commentNode;
@@ -1719,6 +1745,55 @@ function getPureLinkText(link) {
   while (commentNode = walker.nextNode()) { commentsToRemove.push(commentNode); }
   commentsToRemove.forEach(node => node.remove());
   return temp.textContent.trim();
+}
+
+function getCurrentRightClickedContext() {
+    const sourceElement = lastRightClickedLink || lastRightClickedElement;
+    if (!sourceElement) return lastRightClickedContext;
+
+    try {
+        const title = getPureLinkText(sourceElement).trim();
+        if (!title) return lastRightClickedContext;
+
+        return {
+            title,
+            hasTranslationEdition: !!lastRightClickedLink && hasSiteTranslationEdition(lastRightClickedLink),
+            pageUrl: window.location.href,
+            linkUrl: lastRightClickedLink ? lastRightClickedLink.href : ''
+        };
+    } catch (e) {
+        return lastRightClickedContext;
+    }
+}
+
+function captureRightClickedContext(event) {
+    if (!isExtensionContextValid()) return;
+
+    const target = event.target && event.target.nodeType === 3
+        ? event.target.parentElement
+        : event.target;
+    if (!target) return;
+
+    lastRightClickedElement = target;
+    lastRightClickedLink = typeof target.closest === 'function' ? target.closest('a') : null;
+    lastRightClickedContext = null;
+    lastRightClickedContext = getCurrentRightClickedContext();
+    if (!lastRightClickedContext) return;
+
+    sendRuntimeMessage({
+        type: 'RIGHT_CLICK_TITLE',
+        ...lastRightClickedContext
+    });
+}
+
+function installRightClickedContextCapture() {
+    if (isRightClickedContextCaptureInstalled) return;
+    document.addEventListener('contextmenu', captureRightClickedContext, true);
+    isRightClickedContextCaptureInstalled = true;
+}
+
+if (window.location.hostname.includes('chating.wiki')) {
+    installRightClickedContextCapture();
 }
 
 const levRow0 = new Int32Array(256);
@@ -2512,7 +2587,7 @@ function createQuickActions(linkData, hasBook) {
             e.stopPropagation();
             
             try {
-                const resolvedTitle = getResolvedLinkTitle(linkData);
+                const resolvedTitle = getResolvedQuickActionTitle(linkData, btn);
                 const actionTitle = resolvedTitle.title;
 
                 if (btnInfo.action === 'correct_title') {
@@ -3492,27 +3567,7 @@ loadInitialContentData((data, usedLegacyBookList, markerTokenBeforeBooks) => {
             debouncedApplyStyles(); 
         }).observe(document.body, { childList: true, subtree: true });
 
-        document.addEventListener("contextmenu", (e) => {
-            try {
-                if (!isExtensionContextValid()) return;
-                lastRightClickedElement = e.target; 
-                const link = e.target.closest('a');
-                if (link) { 
-                    lastRightClickedLink = link; 
-                    sendRuntimeMessage({
-                        type: "RIGHT_CLICK_TITLE",
-                        title: getPureLinkText(link),
-                        hasTranslationEdition: hasSiteTranslationEdition(link)
-                    });
-                } else if (e.target) {
-                    sendRuntimeMessage({
-                        type: "RIGHT_CLICK_TITLE",
-                        title: getPureLinkText(e.target),
-                        hasTranslationEdition: false
-                    });
-                }
-            } catch (err) {}
-        }, true);
+        installRightClickedContextCapture();
 
         const config = PRE_DEFINED_SITES.find(site => window.location.hostname.includes(site.url));
         if (config && config.thumbSelector && (config.getHighResUrl || config.getHighResUrlAsync)) {
@@ -3655,6 +3710,11 @@ function handleDownloadProgress(downloads) {
 try {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (!isExtensionContextValid()) return;
+      if (request.action === 'GET_RIGHT_CLICK_CONTEXT') {
+          const context = getCurrentRightClickedContext();
+          sendResponse(context ? { ok: true, ...context } : { ok: false });
+          return;
+      }
       if (request.action === "GET_AND_REGISTER_SELECTOR") {
           const host = window.location.hostname.replace(/^www\./, '');
           const selector = generateOptimalSelector(lastRightClickedElement);

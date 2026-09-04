@@ -1,7 +1,7 @@
 importScripts('dexie.min.js', 'db.js', 'common.js');
 
-let lastRightClickedTitle = "";
-let lastRightClickedHasTranslationEdition = false;
+const rightClickedContexts = new Map();
+const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
 let downloadTitlesMap = {}; // 다운로드 ID와 폴더 경로 매핑
 let urlToTitleMap = {};
 let gofileAuthLock = null;
@@ -40,6 +40,125 @@ function sendTabMessage(tabId, message) {
     try {
         chrome.tabs.sendMessage(tabId, message, ignoreLastError);
     } catch (e) {}
+}
+
+function getRightClickedContextKey(tabId, frameId = 0) {
+    if (!Number.isInteger(tabId)) return '';
+    return `${tabId}:${Number.isInteger(frameId) ? frameId : 0}`;
+}
+
+function normalizeRightClickedContext(value) {
+    if (!value || typeof value !== 'object') return null;
+
+    const title = String(value.title || '').trim();
+    if (!title) return null;
+
+    return {
+        title,
+        hasTranslationEdition: !!value.hasTranslationEdition,
+        pageUrl: String(value.pageUrl || ''),
+        linkUrl: String(value.linkUrl || ''),
+        timestamp: Number(value.timestamp) || Date.now()
+    };
+}
+
+function rememberRightClickedContext(tabId, frameId, value) {
+    const key = getRightClickedContextKey(tabId, frameId);
+    const context = normalizeRightClickedContext(value);
+    if (!key || !context) return null;
+
+    rightClickedContexts.set(key, context);
+    return context;
+}
+
+function doesRightClickedContextMatch(context, info) {
+    if (!context) return false;
+    if (Date.now() - context.timestamp > RIGHT_CLICK_CONTEXT_MAX_AGE_MS) return false;
+    const infoPageUrl = String(info.frameUrl || info.pageUrl || '');
+    if (infoPageUrl && context.pageUrl !== infoPageUrl) return false;
+    if (context.linkUrl !== String(info.linkUrl || '')) return false;
+    return true;
+}
+
+function getCachedRightClickedContext(tabId, frameId, info) {
+    const key = getRightClickedContextKey(tabId, frameId);
+    if (!key) return null;
+
+    const context = rightClickedContexts.get(key) || null;
+    if (doesRightClickedContextMatch(context, info || {})) return context;
+
+    rightClickedContexts.delete(key);
+    return null;
+}
+
+function requestRightClickedContext(tabId, frameId) {
+    return new Promise(resolve => {
+        if (!Number.isInteger(tabId)) {
+            resolve(null);
+            return;
+        }
+
+        const callback = response => {
+            let hasError = false;
+            try {
+                hasError = !!chrome.runtime.lastError;
+            } catch (e) {
+                hasError = true;
+            }
+
+            resolve(hasError || !response || response.ok !== true
+                ? null
+                : normalizeRightClickedContext(response));
+        };
+
+        try {
+            chrome.tabs.sendMessage(
+                tabId,
+                { action: 'GET_RIGHT_CLICK_CONTEXT' },
+                { frameId: Number.isInteger(frameId) ? frameId : 0 },
+                callback
+            );
+        } catch (e) {
+            resolve(null);
+        }
+    });
+}
+
+function isChatingWikiUrl(value) {
+    try {
+        const hostname = new URL(String(value || '')).hostname.toLowerCase();
+        return hostname === 'chating.wiki' || hostname.endsWith('.chating.wiki');
+    } catch (e) {
+        return false;
+    }
+}
+
+async function resolveContextMenuClickContext(info, tab) {
+    const tabId = tab && Number.isInteger(tab.id) ? tab.id : null;
+    const frameId = info && Number.isInteger(info.frameId) ? info.frameId : 0;
+    const requestedContext = await requestRightClickedContext(tabId, frameId);
+    const liveContext = doesRightClickedContextMatch(requestedContext, info || {})
+        ? rememberRightClickedContext(tabId, frameId, requestedContext)
+        : null;
+    const capturedContext = liveContext || getCachedRightClickedContext(tabId, frameId, info || {});
+    const selectionTitle = String((info && info.selectionText) || '').trim();
+    const capturedTitle = capturedContext ? capturedContext.title : '';
+    const linkTitle = String((info && info.linkText) || '').trim();
+    const contextUrl = String((info && (info.frameUrl || info.pageUrl || info.linkUrl)) || '');
+    const isChatingWikiEverythingSearch = !!(info && info.linkUrl)
+        && info.menuItemId === 'searchEverything'
+        && isChatingWikiUrl(contextUrl);
+    const normalizedSelectionTitle = selectionTitle.replace(/\s+/g, '');
+    const normalizedCapturedTitle = capturedTitle.replace(/\s+/g, '');
+    const canUseChatingWikiSelection = !!normalizedSelectionTitle
+        && normalizedCapturedTitle.includes(normalizedSelectionTitle);
+
+    return {
+        title: isChatingWikiEverythingSearch
+            ? (canUseChatingWikiSelection ? selectionTitle : capturedTitle)
+            : selectionTitle || capturedTitle || linkTitle,
+        hasTranslationEdition: !!(capturedContext && capturedContext.hasTranslationEdition)
+    };
 }
 
 function runHellkdisAutoDownload(url, pw) {
@@ -259,8 +378,13 @@ async function handleQuickAction(message, sender) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "RIGHT_CLICK_TITLE") {
-    lastRightClickedTitle = message.title;
-    lastRightClickedHasTranslationEdition = !!message.hasTranslationEdition;
+    rememberRightClickedContext(sender.tab && sender.tab.id, sender.frameId, {
+        title: message.title,
+        hasTranslationEdition: message.hasTranslationEdition,
+        pageUrl: message.pageUrl || (sender.tab && sender.tab.url),
+        linkUrl: message.linkUrl,
+        timestamp: Date.now()
+    });
   }
   
   else if (message.action === "CLOSE_ME") {
@@ -1399,12 +1523,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   await customFiltersReady;
 
-  let rawTitle = (info.selectionText || lastRightClickedTitle || info.linkText || "").trim();
+  const clickedContext = await resolveContextMenuClickContext(info, tab);
+  let rawTitle = clickedContext.title;
   if (!rawTitle) return;
 
   let cleanTitle = sanitizeBookTitleForStorage(rawTitle);
 
-  if (lastRightClickedHasTranslationEdition || hasTranslationEditionMarker(rawTitle)) {
+  if (clickedContext.hasTranslationEdition || hasTranslationEditionMarker(rawTitle)) {
       const baseTitle = stripTranslationEditionMarkers(cleanTitle);
       if (baseTitle) cleanTitle = `${baseTitle}(번역판)`;
   }
@@ -1472,6 +1597,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 function executeEverythingSearch(cleanTitle, tabId) {
+    const searchTitle = stripEditionTagsForEverythingSearch(cleanTitle);
+
     if (tabId) {
         chrome.scripting.executeScript({
             target: { tabId: tabId },
@@ -1485,12 +1612,12 @@ function executeEverythingSearch(cleanTitle, tabId) {
                 }
                 iframe.src = "es:" + encodeURIComponent(title);
             },
-            args: [cleanTitle]
+            args: [searchTitle]
         }).catch(() => {
-            chrome.tabs.create({ url: "es:" + encodeURIComponent(cleanTitle) }).catch(() => {});
+            chrome.tabs.create({ url: "es:" + encodeURIComponent(searchTitle) }).catch(() => {});
         });
     } else {
-        chrome.tabs.create({ url: "es:" + encodeURIComponent(cleanTitle) }).catch(() => {});
+        chrome.tabs.create({ url: "es:" + encodeURIComponent(searchTitle) }).catch(() => {});
     }
 }
 
