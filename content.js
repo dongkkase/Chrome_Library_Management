@@ -2838,7 +2838,7 @@ function getListRenderTargets(link) {
         : link.closest('.cw-board-item__title');
     if (!titleTarget) return defaultTargets;
 
-    const titleStyleTarget = titleTarget.querySelector(':scope > strong') || link;
+    const titleStyleTarget = titleTarget.querySelector('strong') || link;
 
     const itemTarget = link.matches('a.cw-board-item') ? link : link.closest('a.cw-board-item');
     const tagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags')
