@@ -54,7 +54,29 @@
       box-sizing: border-box;
       border: 1px solid var(--border);
     }
-    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .header-title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .usage-guide-button {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        border-radius: 6px;
+        background: #0d6efd;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: bold;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .usage-guide-button:hover { background: #0b5ed7; }
+    .usage-guide-button:focus-visible { outline: 3px solid #80bdff; outline-offset: 3px; }
+    body.side-panel-mode .header-row > .header-title-row { flex-wrap: nowrap; gap: 10px; }
+    body.side-panel-mode .header-title-row h2 { font-size: 16px; }
     h2, h3, h4 { margin: 0; color: var(--text); }
     
     /* 테마 토글 스위치 */
@@ -625,7 +647,10 @@
 <body>
     <div class="container">
         <div class="header-row">
-            <h2>⚙️ 도서 목록 매칭 매니저</h2>
+            <div class="header-title-row">
+                <h2>⚙️ 도서 목록 매칭 매니저</h2>
+                <a id="usageGuideBtn" class="usage-guide-button" href="help.html" target="_blank" rel="noopener" title="사용방법을 새 탭에서 열기">사용방법</a>
+            </div>
             <div style="display: flex;align-items: center;justify-content: flex-end;align-content: center;flex-direction: row;">
 
             <div class="theme-switch-wrapper">
@@ -640,7 +665,7 @@
             <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
             <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
 
-            <a href="https://github.com/dongkkase/Chrome_Library_Management/issues" target="_blank" style="margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🐞 버그 신고 및 건의</a>
+            <a href="https://discord.gg/DRVUbPewaV" target="_blank" style="margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🐞 버그 신고 및 건의</a>
             </div>
         </div>
 

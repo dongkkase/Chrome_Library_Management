@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>사용방법 | 도서 목록 매칭 매니저</title>
+    <link rel="icon" href="icon.png">
+    <link rel="stylesheet" href="help.css">
+    <link rel="stylesheet" href="book-ui.css">
+    <script src="book-ui.js" defer></script>
+    <script src="help.js" defer></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+    <header class="page-header">
+        <a class="brand" href="#intro"><img src="icon.png" width="28" height="28" alt="">도서 목록 매칭 매니저</a>
+        <span class="header-caption">사용방법</span>
+    </header>
+    <div class="layout">
+        <nav class="sidebar" aria-label="사용방법 목차">
+            <p class="eyebrow">GUIDE</p>
+            <a href="#intro">처음 시작하기</a>
+            <a href="#examples">게시판 목록 예시</a>
+            <a href="#detail">상세페이지 예시</a>
+            <p class="nav-group">옵션 탭별 설명</p>
+            <a href="#tab-books">01 도서 목록 관리</a>
+            <a href="#tab-settings">02 사이트 및 설정</a>
+            <a href="#tab-backup">03 데이터 백업</a>
+            <a href="#tab-history">04 업데이트 내역</a>
+            <p class="nav-group">더 활용하기</p>
+            <a href="#workflows">상황별 활용 방법</a>
+            <a href="#troubleshooting">자주 묻는 질문</a>
+        </nav>
+        <main id="main">
+            <section id="intro" class="hero">
+                <p class="eyebrow">도서 목록 매칭 매니저 · 사용 가이드</p>
+                <h1>내 목록과 게시물을<br>한눈에 비교하세요.</h1>
+                <p class="lead">소장한 도서를 등록하면 게시물 제목과 비교해 제외·미완·완결을 표시합니다. 새 권수, 더 높은 해상도, 빠진 권수를 확인하는 흐름을 예시로 익혀보세요.</p>
+                <div class="hero-actions"><a class="button primary" href="#examples">예시로 체험하기 <span aria-hidden="true">→</span></a><a class="button" href="#tab-settings">옵션 설명 보기</a></div>
+                <ol class="steps">
+                    <li><span class="step-number">1</span><h2>사이트 등록</h2><p>‘사이트 및 설정’에 사용할 사이트의 도메인을 추가합니다.</p></li>
+                    <li><span class="step-number">2</span><h2>소장 목록 입력</h2><p>제목·권수·해상도를 입력하고 제외 / 미완 / 완결을 선택해 저장합니다.</p></li>
+                    <li><span class="step-number">3</span><h2>게시물과 비교</h2><p>사이트를 새로고침하고 제목 옆 배지와 UP 표시를 확인합니다.</p></li>
+                </ol>
+            </section>
+
+            <section id="examples">
+                <div class="section-heading"><p class="eyebrow">EXAMPLE 01</p><h2>게시판 목록에서 먼저 확인하기</h2></div>
+                <p>아래는 가상의 도서 게시판입니다. <strong>제목을 클릭하면 상세 예시가 열립니다.</strong> 적용 전후를 비교하고, 우측 하단의 ‘게시물 숨김’ 스위치로 분류별 숨김을 체험해 보세요.</p>
+                <div class="notice">실제 확장 프로그램과 같은 배지·숨김 규칙·디자인을 사용하는 체험용 예시입니다. 조작은 실제 소장 목록이나 설정에 저장되지 않습니다. 실제 배치와 제공 기능은 사이트에 따라 다를 수 있습니다.</div>
+                <div class="demo-board">
+                    <div class="board-heading"><div><span class="eyebrow">SAMPLE LIBRARY</span><h3>도서 소식 게시판</h3></div><span class="pill neutral">가상 데이터</span></div>
+                    <div class="demo-toolbar">
+                        <label><input type="checkbox" id="demoEnabled" checked> 매칭 표시 적용</label>
+                        <label><input type="checkbox" id="demoQuickHover"> 퀵 버튼을 마우스 오버 시에만 표시</label>
+                        <button type="button" id="resetDemo" class="small-button">예시 초기화</button>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="example-table">
+                            <caption class="sr-only">게시물 제목과 예시 소장 목록의 비교</caption>
+                            <thead><tr><th scope="col">분류</th><th scope="col">게시물 제목 / 내 목록 배지</th><th scope="col">확인할 내용</th></tr></thead>
+                            <tbody id="exampleRows"></tbody>
+                        </table>
+                    </div>
+                    <p id="demoSummary" class="board-footer" role="status"></p>
+                </div>
+                <noscript><p class="notice">예시 체험에는 JavaScript가 필요합니다. 아래의 탭별 설명은 그대로 읽을 수 있습니다.</p></noscript>
+                <div class="legend">
+                    <div><span class="pill exclude">제외</span><p>제목에 취소선을 표시합니다. 관심 없는 작품을 구분할 때 사용합니다.</p></div>
+                    <div><span class="pill incomplete">미완</span><p>모으는 중인 작품입니다. 소장 권수와 해상도를 비교합니다.</p></div>
+                    <div><span class="pill complete">완결</span><p>수집을 마친 작품입니다. 더 높은 사양의 게시물도 확인할 수 있습니다.</p></div>
+                    <div><span class="pill upgrade">UP / 누락</span><p>UP은 등록값보다 높은 권수·해상도, 누락은 직접 지정한 빠진 권수입니다.</p></div>
+                </div>
+                <p class="muted">배지의 권수·해상도는 <strong>내가 등록한 값</strong>입니다. 게시물의 값이 더 높으면 해당 값 옆에 UP이 표시됩니다. 신작은 내 목록에 매칭되지 않은 게시물을 뜻하며 실제 출간 시점을 의미하지 않습니다.</p>
+            </section>
+
+            <section id="detail">
+                <div class="section-heading"><p class="eyebrow">EXAMPLE 02</p><h2>상세페이지에서 등록·갱신하기</h2></div>
+                <p>목록에서 선택한 게시물의 제목과 소장 정보를 비교합니다. 실제 화면과 같은 배지와 퀵 버튼으로 분류 변경, 삭제, 누락관리를 체험하세요. 검색 버튼은 체험 화면에 검색어를 표시합니다.</p>
+                <article class="detail-card" aria-labelledby="detailTitle">
+                    <div class="detail-meta"><span>도서 소식 / 상세 예시</span><a href="#examples">목록으로 돌아가기 ↑</a></div>
+                    <h3 id="detailHeading"><span id="detailTitle" tabindex="-1"></span><span id="detailBadge"></span></h3>
+                    <p class="muted">작성자: 예시 편집자 · 체험용 게시물</p>
+                    <div id="detailActions" role="group" aria-label="상세페이지 퀵 액션"></div>
+                    <div class="comparison-grid">
+                        <div><h4>게시물에서 읽은 정보</h4><dl id="publishedData"></dl></div>
+                        <div><h4>예시 소장 목록</h4><dl id="ownedData"></dl></div>
+                    </div>
+                    <p id="detailExplanation" class="notice"></p>
+                    <p id="demoFeedback" class="feedback" role="status" aria-live="polite"></p>
+                    <div class="sample-body"><h4>게시물 본문 예시</h4><p>이번에 정리한 도서의 권수와 이미지 해상도를 제목에 기재했습니다. 제목에서 읽은 정보와 내 소장 목록을 비교한 뒤 필요한 항목을 갱신하세요.</p><p class="muted">예시에는 실제 파일이나 다운로드 링크가 없습니다.</p></div>
+                </article>
+                <div class="two-column guide-cards">
+                    <div class="card"><h3>처음 사용하는 사이트라면</h3><ol><li>실제 사이트의 도서 상세페이지를 엽니다.</li><li>책 제목 위에서 마우스 오른쪽 버튼을 누릅니다.</li><li><strong>‘이 요소를 상세페이지 제목으로 등록 (버튼 표시)’</strong>를 선택합니다.</li><li>필요하면 새로고침 후 제목 주변의 등록 버튼을 확인합니다.</li></ol><p class="muted">DOM은 페이지의 요소 구조입니다. 제목 요소를 지정하면 확장 프로그램이 상세 제목을 찾는 기준으로 사용합니다.</p></div>
+                    <div class="card"><h3>빠르게 등록하는 다른 방법</h3><ul><li>게시물 제목 링크를 우클릭해 ‘제외 추가’, ‘미완 추가’, ‘완결 추가’를 선택합니다.</li><li>링크가 없는 제목은 텍스트를 드래그한 뒤 우클릭 메뉴를 사용합니다.</li><li>등록된 항목은 배지와 퀵 액션으로 관리할 수 있습니다.</li><li>잘못 읽힌 제목·권수·해상도는 옵션의 도서 목록에서 수정합니다.</li></ul></div>
+                </div>
+            </section>
+
+            <section id="tab-books">
+                <div class="section-heading"><p class="eyebrow">OPTION TAB 01</p><h2>도서 목록 관리</h2></div>
+                <p>소장 정보의 기준이 되는 탭입니다. 상단 통계에서 전체·완결·미완결·제외 항목 수를 확인할 수 있습니다.</p>
+                <div class="card"><h3>여러 도서를 한 번에 등록하기</h3><ol><li>‘새로운 도서 일괄 등록’에서 저장할 타입을 선택합니다. 기본값은 <strong>제외</strong>이므로 모으는 중인 도서는 미완으로 바꿉니다.</li><li>한 줄에 한 작품씩 제목, 권수, 해상도를 입력합니다.</li><li>추출 미리보기를 확인하고 ‘목록에 일괄 추가하기’를 누릅니다.</li></ol><pre><code>별빛 도서관 3권 1500px
+구름 우체국 8권 2000px
+바람의 기록 5권 1500px</code></pre><p class="muted">같은 제목으로 인식되는 기존 항목은 입력 정보로 갱신될 수 있습니다. 대량 등록 전에는 데이터 백업을 권장합니다.</p></div>
+                <dl class="option-list">
+                    <div><dt>제목 검색 / 정렬</dt><dd>저장된 제목을 검색하고 최신·오래된 등록순 또는 제목 가나다·역순으로 정렬합니다. 목록은 페이지 단위로 표시됩니다.</dd></div>
+                    <div><dt>목록 찾기</dt><dd>‘중복 찾기’는 제목이 겹치는 항목, ‘누락 찾기’는 빠진 권수가 등록된 항목을 찾습니다. ‘폴더 규칙 찾기’를 선택한 뒤 규칙명을 입력할 수도 있습니다. 검색어 예: <code>#중복</code>, <code>#누락</code>, <code>#폴더규칙:만화</code>.</dd></div>
+                    <div><dt>검색된 결과 타입 일괄 변경</dt><dd>현재 검색 조건에 해당하는 결과 전체를 선택한 타입으로 변경합니다. 검색을 비우면 전체 목록이 대상이므로 적용 범위를 먼저 확인합니다.</dd></div>
+                    <div><dt>행별 수정 / 삭제</dt><dd>타입, 제목, 해상도, 권수, 상위 폴더 규칙을 고친 뒤 해당 행의 ‘수정’을 누릅니다. ‘삭제’는 소장 목록에서 항목을 제거합니다. 지원되는 작업은 화면 우측 하단 ‘실행 취소’로 되돌릴 수 있습니다.</dd></div>
+                    <div><dt>제목정정</dt><dd>제목 입력칸에 올바른 이름을 적은 뒤 옆의 ‘제목정정’을 누르면 기존 제목이 동일한 항목을 함께 고칩니다. 이후 제목 인식에 사용할 보정 규칙도 저장합니다. 확인창에 표시되는 대상 수와 변경할 제목을 확인하세요.</dd></div>
+                    <div><dt>상위 폴더 규칙</dt><dd>자동 폴더 다운로드 시 책 폴더 위에 둘 분류 경로입니다. 예: <code>만화/연재</code>. 입력칸의 경로 미리보기로 결과를 확인하고 저장합니다. 규칙 옆 일괄 변경 버튼으로 같은 규칙을 사용하는 항목을 함께 수정할 수 있습니다.</dd></div>
+                    <div><dt>+누락 / 누락 배지</dt><dd>먼저 숫자로 된 권수를 입력하고 ‘수정’으로 저장합니다. 권수 옆 배지를 누른 뒤 빠진 번호를 클릭하면 자동 저장됩니다. 다시 누르면 누락이 해제됩니다. 예: 5권까지 소장했지만 2권이 없으면 2를 선택합니다.</dd></div>
+                </dl>
+            </section>
+
+            <section id="tab-settings">
+                <div class="section-heading"><p class="eyebrow">OPTION TAB 02</p><h2>사이트 및 설정</h2></div>
+                <p>어디에서 작동할지, 제목을 어떻게 읽을지, 어떤 보조 기능을 사용할지 설정합니다. 체크박스 변경은 바로 저장됩니다.</p>
+                <h3 class="subheading">사이트와 제목 인식</h3>
+                <dl class="option-list">
+                    <div><dt>작동 허용 사이트 / 상세 DOM</dt><dd>실제 사용할 도메인을 입력하고 ‘수동 추가’를 누릅니다. 입력 형식 예시는 <code>books.example.com</code>입니다. 상세 제목은 실제 페이지에서 우클릭으로 지정합니다. 등록 항목의 ×는 해당 사이트 등록을 삭제합니다.</dd></div>
+                    <div><dt>제목 파싱 금지어</dt><dd>작가명이나 반복되는 홍보 문구처럼 제목 비교 전에 제거할 문자열을 등록합니다. 예: ‘샘플편집팀’을 등록하면 ‘별빛 도서관 샘플편집팀’에서 해당 문구를 제거합니다. 실제 작품명에 들어가는 일반 단어는 신중하게 추가하세요.</dd></div>
+                    <div><dt>판본 식별 괄호 키워드</dt><dd>‘신장판’처럼 판본을 구분하는 단어를 보존합니다. ‘별빛 도서관(신장판)’과 ‘별빛 도서관 신장판’은 같은 판본으로, 일반판과는 별도 작품으로 매칭합니다.</dd></div>
+                </dl>
+                <h3 class="subheading">다운로드와 브라우저 동작</h3>
+                <dl class="option-list">
+                    <div><dt>자동 폴더 생성 다운로드</dt><dd>지원되는 바로다운로드 기능을 사용할 때 책 제목으로 폴더를 만듭니다. 도서에 상위 폴더 규칙이 있으면 함께 반영합니다. 일반적인 모든 웹 다운로드에 적용되는 설정은 아닙니다.</dd></div>
+                    <div><dt>다운로드 현황판 표시</dt><dd>지원되는 다운로드의 진행 상황을 화면 좌측 하단 현황판에 표시합니다.</dd></div>
+                    <div><dt>확인창(Confirm) 자동 스킵</dt><dd>지원되는 페이지의 반복 확인창을 자동으로 넘깁니다. 포인트 차감 같은 확인도 포함될 수 있으므로 내용을 직접 확인하려면 꺼두세요.</dd></div>
+                    <div><dt>활성 탭 종료 시 왼쪽 탭 포커스</dt><dd>활성 탭을 닫았을 때 같은 창의 왼쪽 탭으로 이동하도록 돕습니다. 목록 오른쪽에 상세 탭을 열어 탐색할 때 활용할 수 있습니다.</dd></div>
+                    <div><dt>슬라이드 패널로 열기</dt><dd>확장 프로그램 아이콘을 누르면 브라우저 우측 사이드 패널에 옵션을 엽니다. 게시물과 목록을 나란히 보며 관리할 때 편리합니다.</dd></div>
+                </dl>
+                <h3 class="subheading">화면 표시와 검색</h3>
+                <dl class="option-list">
+                    <div><dt>의미 없는 댓글 가림</dt><dd>지원되는 페이지에서 ‘감사합니다’, ‘고맙습니다’ 같은 반복적인 짧은 댓글을 숨깁니다.</dd></div>
+                    <div><dt>에브리띵 연결</dt><dd>추출된 책 제목으로 PC의 Everything 검색을 실행합니다. Everything 설치와 <code>es:</code> URL 연결 설정이 필요합니다. 이 옵션 안의 ‘Everything 연동 방법 확인하기’를 펼쳐 설정한 뒤 상세페이지의 검색 버튼을 사용하세요.</dd></div>
+                    <div><dt>리스트 퀵 버튼 표시</dt><dd>지원되는 게시물 목록의 배지 아래에 등록·검색 등의 퀵 액션을 표시합니다.</dd></div>
+                    <div><dt>마우스 오버 시에만 표시</dt><dd>‘리스트 퀵 버튼 표시’를 켠 상태에서 사용합니다. 마우스를 올렸을 때만 퀵 버튼을 보여 목록의 공간을 줄입니다.</dd></div>
+                    <div><dt>1글자 매칭 지원</dt><dd>한글 한 글자 제목도 비교 대상에 포함합니다. 영어·숫자 한 글자는 제외됩니다. 짧은 제목은 다른 작품과 혼동될 수 있어 결과를 확인하세요.</dd></div>
+                    <div><dt>게시판 전용 테마 적용</dt><dd>지원되는 게시판 목록의 디자인 일부를 변경합니다. 모든 사이트에 동일한 디자인을 적용하는 기능은 아닙니다.</dd></div>
+                </dl>
+                <h3 class="subheading">게시물 숨김 처리</h3>
+                <dl class="option-list">
+                    <div><dt>제외 / 완결 / 미완</dt><dd>선택한 타입과 매칭되는 게시물을 목록에서 숨깁니다. 제외는 매칭률이 95%를 넘는 경우 숨깁니다. 미완·완결 등 제외가 아닌 항목은 등록값보다 높은 권수·해상도 또는 누락 데이터가 있으면 보통 계속 표시됩니다.</dd></div>
+                    <div><dt>번역 / 신작</dt><dd>번역으로 판별된 게시물이나 소장 목록에 매칭되지 않은 게시물을 숨깁니다. 번역 분류의 판별·우선 적용 방식은 사이트별로 다를 수 있습니다.</dd></div>
+                    <div><dt>게시물 숨김 처리 퀵 메뉴 가리기</dt><dd>게시판 우측 하단의 숨김 설정 패널을 가립니다. 패널을 가려도 설정된 게시물 숨김 기능은 유지됩니다.</dd></div>
+                </dl>
+                <div class="notice">옵션 상단의 테마 스위치로 밝은 화면 / 어두운 화면을 바꿀 수 있습니다. 직접 선택하기 전에는 시스템 테마를 따릅니다. 이 안내 페이지도 같은 테마 설정을 따릅니다.</div>
+            </section>
+
+            <section id="tab-backup">
+                <div class="section-heading"><p class="eyebrow">OPTION TAB 03</p><h2>데이터 백업</h2></div>
+                <div class="two-column guide-cards">
+                    <div class="card"><h3>파일로 보관 / 복구</h3><ol><li>‘내 PC로 데이터 백업’을 눌러 <code>book_manager_backup.json</code> 파일을 저장합니다.</li><li>다른 환경으로 옮기거나 복구할 때 ‘기존 데이터 복구’를 누릅니다.</li><li>백업 JSON 파일을 선택하고 덮어쓰기 안내를 확인합니다.</li></ol><p>도서 목록, 누락 권수, 허용 사이트, 금지어, 판본 키워드를 백업합니다. 화면 테마와 모든 기능 체크박스까지 포함하는 전체 설정 백업은 아닙니다.</p></div>
+                    <div class="card"><h3>타임머신</h3><p>자동으로 저장된 로컬 스냅샷에서 이전 상태로 복원합니다. 하루에 한 번 생성하며 최근 <strong>최대 7개 복원 지점</strong>을 보관합니다.</p><p>‘복원’ 전 날짜와 항목 수를 확인하세요. 확장 프로그램 내부에 저장되는 기록이므로 브라우저 데이터 삭제나 확장 프로그램 제거에 대비하려면 파일 백업도 보관하세요.</p></div>
+                </div>
+                <div class="notice">복구는 목록을 합치는 기능이 아니라 기존 데이터를 덮어쓰는 작업입니다. 현재 목록도 남겨야 한다면 먼저 파일로 백업하세요.</div>
+            </section>
+
+            <section id="tab-history">
+                <div class="section-heading"><p class="eyebrow">OPTION TAB 04</p><h2>업데이트 내역</h2></div>
+                <p>GitHub에 공개된 버전별 변경 사항과 게시 날짜를 불러옵니다. 인터넷 연결이 필요하며, 기록이 보이지 않으면 연결 상태를 확인하고 옵션 화면을 다시 열어보세요.</p>
+                <dl class="option-list">
+                    <div><dt>현재 버전 / 업데이트 확인</dt><dd>옵션 상단에서 설치된 버전을 확인합니다. 웹 스토어 설치본은 ‘업데이트 확인’으로 스토어 업데이트를 요청합니다. GitHub에 먼저 공개된 버전은 스토어 배포 대기로 표시될 수 있습니다.</dd></div>
+                    <div><dt>직접 설치한 확장 프로그램</dt><dd>새 버전 압축 파일을 받은 뒤 기존 설치 폴더에 덮어쓰고, 브라우저 확장 프로그램 관리 화면에서 새로고침합니다. 교체 전 데이터 백업을 권장합니다.</dd></div>
+                </dl>
+            </section>
+
+            <section id="workflows">
+                <div class="section-heading"><p class="eyebrow">WORKFLOWS</p><h2>이렇게 활용해 보세요</h2></div>
+                <div class="two-column guide-cards">
+                    <div class="card"><span class="pill incomplete">연재작 추적</span><h3>다음 권이 올라왔는지 확인</h3><p>‘별빛 도서관 3권 1500px’를 미완으로 등록합니다. ‘5권 2000px’ 게시물의 UP을 확인하고, 실제 소장한 뒤 목록의 권수·해상도를 갱신합니다.</p></div>
+                    <div class="card"><span class="pill upgrade">누락 정리</span><h3>중간에 빠진 권만 찾기</h3><p>5권까지 등록한 도서의 ‘+누락’에서 2권을 선택합니다. ‘목록 찾기 → 누락 찾기’로 모아보고, 해당 권을 확보한 뒤 누락 번호를 다시 눌러 해제합니다.</p></div>
+                    <div class="card"><span class="pill complete">목록 정돈</span><h3>확인할 게시물에 집중</h3><p>관심 없는 작품은 제외로 분류하고 제외 숨김을 켭니다. 수집을 마친 도서는 완결로 관리합니다. 게시물이 너무 적어지면 퀵 메뉴에서 숨김 조건을 점검합니다.</p></div>
+                    <div class="card"><span class="pill neutral">소장 파일 확인</span><h3>검색과 폴더 정리 연결</h3><p>Everything 연동으로 같은 제목의 로컬 파일을 검색합니다. 자동 폴더 생성과 ‘만화/연재’ 같은 상위 폴더 규칙을 함께 사용해 지원되는 다운로드를 분류합니다.</p></div>
+                </div>
+                <p class="muted">도서 외의 연속 자료도 제목을 기준으로 목록을 관리할 수 있습니다. 다만 권수·해상도 추출은 도서 제목 형식에 맞춰져 있으므로 등록 미리보기를 확인하세요.</p>
+            </section>
+
+            <section id="troubleshooting">
+                <div class="section-heading"><p class="eyebrow">HELP</p><h2>자주 묻는 질문</h2></div>
+                <details><summary>등록했는데 제목 옆에 아무 표시도 없어요.</summary><p>허용 사이트에 현재 도메인이 등록되어 있는지 확인하고 새로고침하세요. 상세페이지라면 제목 요소를 우클릭으로 등록합니다. 사이트 구조에 따라 일부 기능이 지원되지 않을 수 있습니다.</p></details>
+                <details><summary>다른 작품이 매칭되거나 제목을 잘못 읽어요.</summary><p>목록에서 추출된 제목을 확인하고 수정하세요. 너무 넓은 금지어, 짧은 제목, 별칭, 외국어 제목, 작품명에 포함된 숫자 등이 원인일 수 있습니다. 판본 키워드와 외전 표기도 확인하세요. 유사한 제목의 자동 매칭 결과는 직접 점검하는 것이 좋습니다.</p></details>
+                <details><summary>숨김을 켰는데도 일부 도서가 보여요.</summary><p>제외가 아닌 항목은 권수·해상도 업그레이드 또는 누락 데이터가 있으면 숨김의 예외가 될 수 있습니다. 제외는 매칭률 95% 이하일 때 제외 타입 숨김을 적용하지 않습니다. 번역 숨김은 사이트별 분류 규칙도 확인하세요.</p></details>
+                <details><summary>누락 번호를 선택할 수 없어요.</summary><p>도서 목록에서 권수를 먼저 숫자로 입력하고 ‘수정’으로 저장하세요. 이후 ‘+누락’을 누르면 저장한 권수까지 번호가 표시됩니다.</p></details>
+                <details><summary>Everything 검색이나 바로다운로드가 작동하지 않아요.</summary><p>Everything 설치와 es: URL 연결, 확장 프로그램의 연결 옵션을 확인하세요. 바로다운로드는 지원되는 링크와 페이지에서 제공됩니다. 사이트 등록만으로 모든 파일 호스팅의 다운로드가 지원되는 것은 아닙니다.</p></details>
+                <details><summary>예시에서 등록했는데 내 도서 목록에는 없어요.</summary><p>이 안내 페이지는 가상 데이터로 동작하는 체험 화면입니다. 실제 등록은 옵션의 ‘도서 목록 관리’ 또는 허용된 사이트의 등록 기능을 사용하세요. ‘예시 초기화’를 누르거나 페이지를 새로고침하면 체험 내용이 초기 상태로 돌아갑니다.</p></details>
+            </section>
+            <footer class="page-footer"><span>도서 목록 매칭 매니저 · 사용방법</span><a href="#intro">맨 위로 ↑</a></footer>
+        </main>
+    </div>
+</body>
+</html>

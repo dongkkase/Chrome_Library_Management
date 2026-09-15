@@ -50,7 +50,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["common.js", "content.js"],
+      "js": ["common.js", "book-ui.js", "content.js"],
+      "css": ["book-ui.css"],
       "run_at": "document_end"
     }
   ]

@@ -1530,57 +1530,14 @@ function injectQuickHidePanel() {
     if (document.getElementById('bm-quick-hide-panel')) return;
     if (!document.body) return;
 
-    const style = document.createElement('style');
-    style.textContent = `
-        .bm-toggle-switch { display: inline-block; width: 28px; height: 16px; position: relative; vertical-align: middle; margin-right: 4px; }
-        .bm-toggle-switch input { opacity: 0; width: 0; height: 0; margin: 0; }
-        .bm-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .3s; border-radius: 16px; }
-        .bm-slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-        .bm-toggle-switch input:checked + .bm-slider { background-color: #20c997; }
-        .bm-toggle-switch input:checked + .bm-slider:before { transform: translateX(12px); }
-        .bm-qh-label { display: flex; align-items: center; cursor: pointer; font-size: 13px; color: #333; user-select: none; margin: 0; font-weight: normal; }
-        #bm-quick-hide-panel {
-            position: fixed; bottom: 20px; right: 20px; background: rgba(255, 255, 255, 0.95);
-            border: 1px solid #dee2e6; border-radius: 8px; padding: 12px 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15); z-index: 999999;
-            font-family: 'Malgun Gothic', sans-serif; backdrop-filter: blur(5px);
-            display: flex; flex-direction: column; gap: 10px;
-        }
-        body.dark-mode #bm-quick-hide-panel { background: rgba(33, 37, 41, 0.95); border-color: #495057; }
-        body.dark-mode .bm-qh-label { color: #f8f9fa; }
-        body.dark-mode .bm-slider { background-color: #495057; }
-    `;
-    document.head.appendChild(style);
-
-    const panel = document.createElement('div');
-    panel.id = 'bm-quick-hide-panel';
-    panel.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: bold; border-bottom: 1px dashed #dee2e6; padding-bottom: 8px; color:var(--text, #333);">
-            <span style="display:flex; align-items:center; gap:5px;">🙈 게시물 숨김</span>
-            <span id="bm-qh-toggle-btn" style="cursor:pointer; font-size: 16px; line-height: 1; padding: 0 5px; color: #868e96; user-select: none;">−</span>
-        </div>
-        <div id="bm-qh-content" style="display: flex; gap: 12px; align-items: center;">
-            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-exclude" ${isHideExclude ? 'checked' : ''}><span class="bm-slider"></span></label> 제외</label>
-            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-complete" ${isHideComplete ? 'checked' : ''}><span class="bm-slider"></span></label> 완결</label>
-            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-incomplete" ${isHideIncomplete ? 'checked' : ''}><span class="bm-slider"></span></label> 미완</label>
-            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-translate" ${isHideTranslate ? 'checked' : ''}><span class="bm-slider"></span></label> 번역</label>
-            <label class="bm-qh-label"><label class="bm-toggle-switch"><input type="checkbox" id="bm-qh-new" ${isHideNew ? 'checked' : ''}><span class="bm-slider"></span></label> 신작</label>
-        </div>
-    `;
+    const panel = BookMatchUI.createHidePanel({
+        hideExclude: isHideExclude,
+        hideComplete: isHideComplete,
+        hideIncomplete: isHideIncomplete,
+        hideTranslate: isHideTranslate,
+        hideNew: isHideNew
+    }, (key, checked) => safeStorageSet({ [key]: checked }));
     document.body.appendChild(panel);
-
-    const toggleBtn = document.getElementById('bm-qh-toggle-btn');
-    const content = document.getElementById('bm-qh-content');
-    toggleBtn.onclick = () => {
-        if (content.style.display === 'none') { content.style.display = 'flex'; toggleBtn.textContent = '−'; } 
-        else { content.style.display = 'none'; toggleBtn.textContent = '+'; }
-    };
-
-    document.getElementById('bm-qh-exclude').addEventListener('change', e => safeStorageSet({ hideExclude: e.target.checked }));
-    document.getElementById('bm-qh-complete').addEventListener('change', e => safeStorageSet({ hideComplete: e.target.checked }));
-    document.getElementById('bm-qh-incomplete').addEventListener('change', e => safeStorageSet({ hideIncomplete: e.target.checked }));
-    document.getElementById('bm-qh-translate').addEventListener('change', e => safeStorageSet({ hideTranslate: e.target.checked }));
-    document.getElementById('bm-qh-new').addEventListener('change', e => safeStorageSet({ hideNew: e.target.checked }));
 }
 
 function updateQuickHidePanel() {
@@ -2439,36 +2396,7 @@ function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId
         contentVolPopover.id = 'bm-missing-popover';
         document.body.appendChild(contentVolPopover);
         
-        // 말풍선 삼각형 및 애니메이션 효과를 위한 스타일 동적 주입 (최초 1회)
-        if (!document.getElementById('bm-popover-style')) {
-            const style = document.createElement('style');
-            style.id = 'bm-popover-style';
-            style.innerHTML = `
-                @keyframes bmPopIn {
-                    0% { opacity: 0; transform: translate(-50%, -20px) scale(0.9); }
-                    60% { opacity: 1; transform: translate(-50%, 5px) scale(1.03); }
-                    100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-                }
-                #bm-missing-popover {
-                    animation: bmPopIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-                    transform-origin: top center; /* 푱! 효과 시 기준점을 상단 중앙으로 설정 */
-                }
-                /* 말풍선 삼각형 꼬리 - 테두리 부분 */
-                #bm-missing-popover::after {
-                    content: ''; position: absolute; bottom: 100%; left: 50%;
-                    transform: translateX(-50%); border: 10px solid transparent;
-                    border-bottom-color: #dee2e6; /* 테두리 색상 */
-                }
-                /* 말풍선 삼각형 꼬리 - 내부 배경 부분 */
-                #bm-missing-popover::before {
-                    content: ''; position: absolute; bottom: 100%; left: 50%;
-                    transform: translateX(-50%); border: 9px solid transparent;
-                    border-bottom-color: #fff; /* 내부 배경 색상 */
-                    z-index: 1; /* 테두리보다 위에 배치 */
-                }
-            `;
-            document.head.appendChild(style);
-        }
+        contentVolPopover.className = 'bm-missing-popover';
 
         document.addEventListener('click', (e) => {
             if (contentVolPopover && !contentVolPopover.contains(e.target) && !e.target.closest('button')) {
@@ -2500,21 +2428,10 @@ function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId
 
         const missingVolSet = new Set(getBookMissingVols(dbBook, currentStorageData.missingVolsMap));
 
-        contentVolPopover.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:bold; border-bottom:1px solid #dee2e6; padding-bottom:8px; margin-bottom:8px; color:#333;">
-                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">${dbBook.title} (총 ${lastVol}권)</span>
-                <button id="bmClosePopoverBtn" style="background:transparent; color:#333; padding:0; margin-left:5px; font-size:16px; border:none; cursor:pointer;">✕</button>
-            </div>
-            <div style="font-size:11px; color:#6c757d; margin-bottom:8px;">빈틈이 발생한 누락 번호를 클릭하세요.</div>
-            <div class="bm-vol-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:5px; max-height:200px; overflow-y:auto; padding-right:4px; box-sizing:border-box;">
-                ${Array.from({length: lastVol}, (_, i) => i + 1).map(v => `
-                    <div class="bm-vol-item ${missingVolSet.has(v) ? 'missing' : ''}" data-vol="${v}" style="text-align:center; padding:6px 0; font-size:12px; background:${missingVolSet.has(v) ? '#ffe3e3' : '#f8f9fa'}; border:1px solid ${missingVolSet.has(v) ? '#ffa8a8' : '#dee2e6'}; border-radius:4px; cursor:pointer; user-select:none; color:${missingVolSet.has(v) ? '#e03131' : '#333'}; font-weight:500; transition:all 0.1s; ${missingVolSet.has(v) ? 'text-decoration:line-through; opacity:0.8;' : ''}">${v}</div>
-                `).join('')}
-            </div>
-        `;
-
-        // 애니메이션이 적용되도록 하기 위해 display:none 상태에서 즉시 스타일 적용 후 block 처리
-        contentVolPopover.style.cssText = "position:absolute; display:none; background:#fff; border:1px solid #dee2e6; border-radius:10px; padding:15px; box-shadow:0 6px 18px rgba(0,0,0,0.2); z-index:9999999; width:250px; box-sizing:border-box;";
+        contentVolPopover.innerHTML = BookMatchUI.missingPopoverHtml({
+            ...dbBook, missingVols: [...missingVolSet]
+        });
+        contentVolPopover.style.cssText = BookMatchUI.missingPopoverStyle;
 
         const rect = badgeElement.getBoundingClientRect();
         // 버튼의 중앙 하단에 말풍선이 오도록 좌표 계산
@@ -2547,6 +2464,7 @@ function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId
                 item.style.cssText = "text-align:center; padding:6px 0; font-size:12px; background:#ffe3e3; border:1px solid #ffa8a8; border-radius:4px; cursor:pointer; user-select:none; color:#e03131; font-weight:500; transition:all 0.1s; text-decoration:line-through; opacity:0.8;";
             }
 
+            item.setAttribute('aria-pressed', String(missingVolSet.has(vol)));
             const missingVols = Array.from(missingVolSet).sort((a, b) => a - b);
             const impact = applyMissingVolUpdateToCache({ bookId: dbBook.id, missingVols });
             if (impact) finalizeBookChangeImpact(impact);
@@ -2562,21 +2480,13 @@ function createQuickActions(linkData, hasBook) {
     container.className = 'bm-quick-actions';
     container.style.cssText = "display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle;";
 
-    const btnStyle = "padding: 2px 5px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; border: none; text-decoration: none; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s; flex-shrink: 0;";
-    
+    const btnStyle = BookMatchUI.quickButtonStyle;
     const canCorrectTitle = hasBook || (Array.isArray(linkData.matchCandidates) && linkData.matchCandidates.length > 0);
-    const buttons = [
-        { label: '복사', color: '#845ef7', action: 'copy' },
-        { label: '제외', color: '#ff6b6b', action: 'exclude' },
-        { label: '미완', color: '#ff922b', action: 'incomplete' },
-        { label: '완결', color: '#4dabf7', action: 'complete' },
-        { label: '삭제', color: '#868e96', action: 'delete', display: hasBook }, 
-        { label: '누락관리', color: '#f06595', action: 'missing_vol', display: hasBook },
-        { label: '구글검색', color: '#20c997', action: 'search' },
-        { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
-        { label: '에브리띵검색', color: '#495057', action: 'everything_search', display: true },
-        { label: '제목정정', color: '#5c7cfa', action: 'correct_title', display: canCorrectTitle }
-    ];
+    const buttons = BookMatchUI.quickButtons.map(button => ({
+        ...button,
+        display: button.action === 'correct_title' ? canCorrectTitle
+            : ['delete', 'missing_vol'].includes(button.action) ? hasBook : true
+    }));
 
     buttons.forEach(btnInfo => {
         if (btnInfo.display === false) return;
@@ -2811,16 +2721,11 @@ function createQuickActions(linkData, hasBook) {
 }
 
 function getDisplayMatchScore(maxScore) {
-    return maxScore === 100 ? 100 : Math.min(99, Math.round(maxScore));
+    return BookMatchUI.displayMatchScore(maxScore);
 }
 
 function createMatchScoreHtml(displayScore, useLightText = false) {
-    if (displayScore < 100) {
-        return `<span class="bm-match-score bm-match-score--partial" style="color:#5f3b00; background:#fff3bf; border:1px solid #e67700; font-size:10px; font-weight:800; padding:1px 4px; border-radius:3px; margin-left:4px; vertical-align:middle; display:inline-block; line-height:1.15; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.12);" title="유사 매칭 ${displayScore}%: 등록된 책 제목을 확인하세요">유사 ${displayScore}%</span>`;
-    }
-
-    const textColor = useLightText ? 'rgba(255,255,255,0.8)' : '#868e96';
-    return `<span class="bm-match-score bm-match-score--exact" style="color:${textColor}; font-size:10px; margin-left:4px;" title="일치율: ${displayScore}%">(${displayScore}%)</span>`;
+    return BookMatchUI.matchScoreHtml(displayScore, useLightText);
 }
 
 function getListRenderTargets(link) {
@@ -2968,97 +2873,30 @@ function applyStyleToSingleLink(link) {
     link._bmData.matchCandidates = match.candidates || [];
     link._bmData.matchedBookId = book ? book.id : null;
     
-    let badgeStyle = '';
-    let newBadgeHTML = '';
-    
-    let shouldHide = false;
+    const presentation = BookMatchUI.getPresentation(book, siteRes, siteVol, maxScore);
+    const badgeStyle = presentation.style;
+    const newBadgeHTML = presentation.html;
+    const shouldHide = BookMatchUI.shouldHidePost({
+        book, score: maxScore, siteRes, siteVol, translated: hasTranslationTag,
+        forceTranslationHide: isChatingWikiSite && link._bmData.hasSiteTranslationEdition
+    }, {
+        hideExclude: isHideExclude, hideComplete: isHideComplete,
+        hideIncomplete: isHideIncomplete, hideTranslate: isHideTranslate, hideNew: isHideNew
+    });
 
     if (book) {
-        const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
-        const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
-        const displayScore = getDisplayMatchScore(maxScore);
-        const resText = book.resolution || '-';
-        const volText = book.lastVol ? book.lastVol + '권' : '-';
-
-        // '제외' 타입이더라도 매칭률이 95% 이하일 경우 숨김 무시
-        if (book.type === "exclude" && isHideExclude && maxScore > 95) shouldHide = true;
-        else if (book.type === "complete" && isHideComplete) shouldHide = true;
-        else if (book.type === "incomplete" && isHideIncomplete) shouldHide = true;
-        else if (book.type === "new" && isHideNew) shouldHide = true; // 신작(new) 대응
-        else if (hasTranslationTag && isHideTranslate) shouldHide = true;
-
-        // 해상도/권수 업그레이드 및 누락 권수 예외 적용 (단, '제외' 항목은 업그레이드 여부와 무관하게 무조건 숨김)
-        if (book.type !== "exclude") {
-            const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-            if (hasUpgrade || (book.missingVols && book.missingVols.length > 0)) {
-                shouldHide = false;
-            }
-        }
-
-        // 누락 뱃지 생성 로직
-        let missingHtml = '';
-        if (book.missingVols && book.missingVols.length > 0) {
-            let mStr = book.missingVols.join(',');
-            missingHtml = '<span style="background:#7b1010; color:#fff; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px; margin-left:4px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,0.2);">누락:' + mStr + '</span>';
-        }
-
         clearManagedTitleStyles(link);
         if (titleStyleTarget !== link) clearManagedTitleStyles(titleStyleTarget);
-        link.style.removeProperty("background-color");
-        link.style.removeProperty("padding");
-        link.style.removeProperty("border-radius");
-        link.style.removeProperty("text-decoration");
-        link.style.removeProperty("color");
-        link.style.removeProperty("opacity");
-        link.style.removeProperty("font-weight");
-
-        if (book.type === "exclude") {
-          setManagedTitleStyle(titleStyleTarget, "text-decoration", "line-through");
-          setManagedTitleStyle(titleStyleTarget, "color", "#aaaaaa");
-          setManagedTitleStyle(titleStyleTarget, "font-weight", "normal");
-          link.style.setProperty("opacity", "0.5", "important");
-          link.setAttribute("title", "[제외됨] " + book.title + " (매칭률: " + displayScore + "%)");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
-          badgeStyle = "font-size:10px; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
-        } else if (book.type === "incomplete") {
-          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          setManagedTitleStyle(titleStyleTarget, "text-decoration", "none");
-          setManagedTitleStyle(titleStyleTarget, "color", "#d9480f");
-          setManagedTitleStyle(titleStyleTarget, "font-weight", "800");
-          link.style.setProperty("opacity", "1", "important");
-          link.setAttribute("title", "[미완] " + book.title + " (" + displayScore + "%)");
-          let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-          let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
-          let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
-          badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
-        } else if (book.type === "complete") {
-          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          setManagedTitleStyle(titleStyleTarget, "text-decoration", "none");
-          link.style.setProperty("opacity", "1", "important");
-          link.setAttribute("title", "[완결] " + book.title + " (" + displayScore + "%)");
-          if (hasUpgrade) {
-              setManagedTitleStyle(titleStyleTarget, "color", "#d9480f");
-              setManagedTitleStyle(titleStyleTarget, "font-weight", "800");
-              let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-              let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
-              badgeStyle = "font-size:10px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
-          } else {
-              setManagedTitleStyle(titleStyleTarget, "color", "#0056b3");
-              setManagedTitleStyle(titleStyleTarget, "font-weight", "600");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
-              badgeStyle = "font-size:10px; background:#f0f7ff; border:1px solid #007bff; padding:2px 4px; border-radius:3px; margin-left:6px; vertical-align:middle; display:inline-block; line-height:1.2;";
-          }
-        }
+        ['background-color', 'padding', 'border-radius', 'text-decoration', 'color', 'opacity', 'font-weight'].forEach(property => link.style.removeProperty(property));
+        Object.entries(presentation.titleStyles).forEach(([property, value]) => {
+            if (property === 'opacity') link.style.setProperty(property, value, 'important');
+            else setManagedTitleStyle(titleStyleTarget, property, value);
+        });
+        if (book.type === 'exclude') link.setAttribute('title', `[제외됨] ${book.title} (매칭률: ${presentation.score}%)`);
+        else if (book.type === 'incomplete') link.setAttribute('title', `[미완] ${book.title} (${presentation.score}%)`);
+        else if (book.type === 'complete') link.setAttribute('title', `[완결] ${book.title} (${presentation.score}%)`);
     } else {
         removeBadge(link, titleStyleTarget);
-        if (isHideNew) shouldHide = true; // 어느 항목과도 매칭되지 않은 경우(미등록) 신작으로 간주하여 숨김 처리
-        if (!shouldHide && isHideTranslate && hasTranslationTag) shouldHide = true;
-    }
-
-    if (isHideTranslate && isChatingWikiSite && link._bmData.hasSiteTranslationEdition) {
-        shouldHide = true;
     }
 
     // 뱃지 지울 때 직계 요소(:scope >)만 탐색하여 부모/자식 뱃지를 서로 오해하는 것을 방지
@@ -3243,71 +3081,17 @@ function applyStyleToDetailElement(el) {
     el._bmDetailData.matchCandidates = match.candidates || [];
     el._bmDetailData.matchedBookId = book ? book.id : null;
     
-    let badgeStyle = '';
-    let newBadgeHTML = '';
+    const presentation = BookMatchUI.getPresentation(book, siteRes, siteVol, maxScore, true);
+    const badgeStyle = presentation.style;
+    const newBadgeHTML = presentation.html;
 
     if (book) {
-        // 매칭된 도서가 있다면 툴팁에 등록된 데이터의 책 제목을 표기합니다.
-        el.setAttribute("title", "등록된 책 제목: " + book.title);
-
-        const regRes = book.resolution ? parseInt(book.resolution.replace(/[^0-9]/g, ''), 10) : 0;
-        const regVol = book.lastVol ? parseInt(book.lastVol, 10) : 0;
-        const displayScore = getDisplayMatchScore(maxScore);
-        const resText = book.resolution || '-';
-        const volText = book.lastVol ? book.lastVol + '권' : '-';
-
-        // 누락 뱃지 생성 로직
-        let missingHtml = '';
-        if (book.missingVols && book.missingVols.length > 0) {
-            let mStr = book.missingVols.join(',');
-            missingHtml = '<span style="background:#7b1010; color:#fff; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px; margin-left:5px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow:0 1px 2px rgba(0,0,0,0.2);">누락:' + mStr + '</span>';
-        }
-
-        el.style.removeProperty("background-color");
-        el.style.removeProperty("padding");
-        el.style.removeProperty("border-radius");
-        el.style.removeProperty("text-decoration");
-        el.style.removeProperty("color");
-        el.style.removeProperty("opacity");
-        el.style.removeProperty("font-weight");
-
-        if (book.type === "exclude") {
-          el.style.setProperty("text-decoration", "line-through", "important");
-          el.style.setProperty("color", "#aaaaaa", "important");
-          el.style.setProperty("opacity", "0.5", "important");
-          newBadgeHTML = '<span style="color:#999;">' + resText + '</span><span style="color:#ccc;"> | </span><span style="color:#999;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
-          badgeStyle = "font-size:11px; font-weight:bold; background:#f8f9fa; border:1px solid #dee2e6; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; text-decoration:none !important; opacity:1 !important;";
-        } else if (book.type === "incomplete") {
-          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          el.style.setProperty("text-decoration", "none", "important");
-          el.style.setProperty("color", "#d9480f", "important"); 
-          el.style.setProperty("font-weight", "800", "important");
-          let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-          let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-          newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
-          let shadow = hasUpgrade ? "box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);" : "box-shadow: 0 1px 2px rgba(0,0,0,0.2);";
-          badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; " + shadow;
-        } else if (book.type === "complete") {
-          const hasUpgrade = (siteRes > regRes && regRes > 0) || (siteVol > regVol && regVol > 0);
-          el.style.setProperty("text-decoration", "none", "important");
-          if (hasUpgrade) {
-              el.style.setProperty("color", "#d9480f", "important"); 
-              el.style.setProperty("font-weight", "800", "important");
-              let resHtml = (siteRes > regRes && regRes > 0) ? '<span style="color:#ffc107; font-weight:900;">' + resText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + resText + '</span>';
-              let volHtml = (siteVol > regVol && regVol > 0) ? '<span style="color:#ffc107; font-weight:900;">' + volText + ' <b style="background:#ffc107; color:#000; padding:1px 3px; border-radius:2px; font-size:8px;">UP</b></span>' : '<span style="color:#ffffff; font-weight:bold;">' + volText + '</span>';
-              newBadgeHTML = resHtml + '<span style="color:rgba(255,255,255,0.5); margin:0 4px;">|</span>' + volHtml + missingHtml + createMatchScoreHtml(displayScore, true);
-              badgeStyle = "font-size:11px; background:#e65100; border:1px solid #e65100; padding:3px 6px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2; box-shadow: 0 0 6px rgba(255, 193, 7, 0.8);";
-          } else {
-              el.style.setProperty("color", "#0056b3", "important"); 
-              el.style.setProperty("font-weight", "600", "important");
-              newBadgeHTML = '<span style="color:#007bff; font-weight:normal;">' + resText + '</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">' + volText + '</span>' + missingHtml + createMatchScoreHtml(displayScore);
-              badgeStyle = "font-size:11px; background:#f0f7ff; border:1px solid #007bff; padding:2px 5px; border-radius:4px; margin-left:8px; vertical-align:middle; display:inline-block; line-height:1.2;";
-          }
-        }
+        el.setAttribute('title', '등록된 책 제목: ' + book.title);
+        ['background-color', 'padding', 'border-radius', 'text-decoration', 'color', 'opacity', 'font-weight'].forEach(property => el.style.removeProperty(property));
+        Object.entries(presentation.titleStyles).forEach(([property, value]) => el.style.setProperty(property, value, 'important'));
     } else {
-        // 매칭된 도서가 없다면 추출된 제목을 유지합니다.
-        el.setAttribute("title", "추출된 책 제목: " + el._bmDetailData.pureTitle);
-        removeBadge(el); 
+        el.setAttribute('title', '추출된 책 제목: ' + el._bmDetailData.pureTitle);
+        removeBadge(el);
     }
 
     // 직계 자손(:scope >)만 탐색하도록 교체! (엄한 자식 뱃지를 지우는 대참사 방지)
