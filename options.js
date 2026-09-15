@@ -2011,6 +2011,7 @@ async function initVersionCheck() {
     const updateLink = document.getElementById('update-link');
     const manualBtn = document.getElementById('manual-check-btn');
     const statusMsg = document.getElementById('update-status-msg');
+    const statusTooltip = document.getElementById('update-status-tooltip');
 
     let extensionInfo;
     try {
@@ -2037,16 +2038,25 @@ async function initVersionCheck() {
     let storeUpdateUiTimeout = null;
     let isApplyingStoreUpdate = false;
 
-    const showStatus = (message, color = "#6c757d", hideAfter = 0) => {
+    const showStatus = (message, color = "#6c757d", hideAfter = 0, asTooltip = false) => {
         if (!statusMsg) return;
         if (statusHideTimer) clearTimeout(statusHideTimer);
-        statusMsg.textContent = message;
-        statusMsg.style.color = color;
-        statusMsg.style.display = "inline-block";
+        if (asTooltip && statusTooltip) {
+            statusMsg.style.display = "none";
+            statusTooltip.textContent = message;
+            statusTooltip.classList.add('is-visible');
+        } else {
+            if (statusTooltip) statusTooltip.classList.remove('is-visible');
+            statusMsg.textContent = message;
+            statusMsg.style.color = color;
+            statusMsg.style.display = "inline-block";
+        }
 
         if (hideAfter > 0) {
             statusHideTimer = setTimeout(() => {
                 statusMsg.style.display = "none";
+                if (statusTooltip) statusTooltip.classList.remove('is-visible');
+                statusHideTimer = null;
             }, hideAfter);
         }
     };
@@ -2163,7 +2173,7 @@ async function initVersionCheck() {
         if (isManual) {
             setControlsBusy(true);
             hideUpdateAction();
-            showStatus("GitHub에서 최신 버전을 확인하는 중...");
+            showStatus("GitHub에서 최신 버전을 확인하는 중...", "#6c757d", 0, true);
         }
 
         try {
@@ -2206,7 +2216,7 @@ async function initVersionCheck() {
 
             hideUpdateAction();
             if (isManual) {
-                showStatus("최신 버전입니다.", "#28a745", 3000);
+                showStatus("최신 버전입니다.", "#28a745", 3000, true);
             } else if (isStoreInstall) {
                 showStatus("Chrome 웹 스토어 설치본 · 최신 버전", "#28a745");
             } else if (!isManualInstall) {

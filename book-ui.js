@@ -110,10 +110,16 @@ const BookMatchUI = (() => {
         toggle.setAttribute('aria-label', '게시물 숨김 접기');
         toggle.setAttribute('aria-expanded', 'true');
         toggle.setAttribute('aria-controls', `${prefix}-qh-content`);
-        heading.append(title, toggle);
+        heading.appendChild(title);
         const content = document.createElement('div');
         content.id = `${prefix}-qh-content`;
         content.className = 'bm-qh-content';
+        content.setAttribute('role', 'group');
+        content.setAttribute('aria-label', '게시물 숨김 유형');
+        const body = document.createElement('div');
+        body.className = 'bm-qh-body';
+        const bodyInner = document.createElement('div');
+        bodyInner.className = 'bm-qh-body-inner';
         for (const [type, labelText] of [['exclude', '제외'], ['complete', '완결'], ['incomplete', '미완'], ['translate', '번역'], ['new', '신작']]) {
             const key = `hide${type[0].toUpperCase()}${type.slice(1)}`;
             const label = document.createElement('label');
@@ -133,18 +139,25 @@ const BookMatchUI = (() => {
             content.appendChild(label);
         }
         toggle.addEventListener('click', () => {
-            content.hidden = !content.hidden;
-            toggle.textContent = content.hidden ? '+' : '−';
-            toggle.setAttribute('aria-expanded', String(!content.hidden));
-            toggle.setAttribute('aria-label', content.hidden ? '게시물 숨김 펼치기' : '게시물 숨김 접기');
+            const collapsed = panel.classList.toggle('is-collapsed');
+            body.inert = collapsed;
+            body.setAttribute('aria-hidden', String(collapsed));
+            toggle.textContent = collapsed ? '+' : '−';
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+            toggle.setAttribute('aria-label', collapsed ? '게시물 숨김 펼치기' : '게시물 숨김 접기');
         });
-        panel.append(heading, content);
+        bodyInner.appendChild(content);
         if (demo) {
             const caption = document.createElement('small');
             caption.className = 'bm-qh-demo-caption';
+            caption.id = `${prefix}-qh-caption`;
             caption.textContent = '체험용 · 위 게시판 예시에만 적용됩니다.';
-            panel.appendChild(caption);
+            title.title = caption.textContent;
+            panel.setAttribute('aria-describedby', caption.id);
+            bodyInner.appendChild(caption);
         }
+        body.appendChild(bodyInner);
+        panel.append(heading, body, toggle);
         return panel;
     }
 
