@@ -462,7 +462,8 @@ const PRE_DEFINED_SITES = [
             justify-self: start !important;
         }
     `,
-    themeCss: `
+    siteCss: `
+        .cw-request-comment-popups { bottom: 80px !important; }
     `,
     customJS: () => {
         const openActions = document.querySelectorAll('.cw-material-open-action');
@@ -539,6 +540,7 @@ let isHideTranslate = false;
 let isHideNew = false;
 let isHideQuickMenu = false;
 let globalCustomCss = '';
+let globalSiteCss = '';
 let globalThemeCss = '';
 let globalBoardCss2 = '';
 let globalBoardJS2 = null;
@@ -1109,6 +1111,8 @@ function applyDataSettings(data) {
         const sUrl = typeof s === 'string' ? s : s.url;
         return hostname.includes(sUrl);
     });
+
+    globalSiteCss = config?.siteCss || '';
 
     if (config) {
         isTargetSite = true;
@@ -3342,6 +3346,7 @@ loadInitialContentData((data, usedLegacyBookList, markerTokenBeforeBooks) => {
             document.head.appendChild(fixStyle);
         }
         let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
+        if (globalSiteCss) styleContent += "\n" + globalSiteCss;
         if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
         if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
         if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
@@ -3597,6 +3602,7 @@ function updateManagedStyleSheet() {
     if (!fixStyle) return;
 
     let styleContent = ".list-subject > div[style*=\"float:left\"], .list-subject > div[style*=\"float: left\"] { position: relative !important; z-index: 10 !important; } .list-subject a.ellipsis { position: relative !important; z-index: 1 !important; }";
+    if (globalSiteCss) styleContent += "\n" + globalSiteCss;
     if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
     if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
     if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
