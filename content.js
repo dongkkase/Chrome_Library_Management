@@ -461,6 +461,7 @@ const PRE_DEFINED_SITES = [
             flex: 0 0 auto !important;
             justify-self: start !important;
         }
+        .cw-request-comment-popups { bottom: 80px !important; }
     `,
     siteCss: `
         .cw-request-comment-popups { bottom: 80px !important; }
