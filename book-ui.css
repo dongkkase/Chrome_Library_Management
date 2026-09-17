@@ -24,7 +24,10 @@
     background: var(--bm-qh-panel);
     box-shadow: 0 6px 24px rgba(25, 42, 75, .12), 0 1px 4px rgba(25, 42, 75, .06);
     z-index: 999999;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     box-sizing: border-box;
     color: var(--bm-qh-text);
     line-height: 1.5;

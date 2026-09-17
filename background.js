@@ -497,10 +497,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                           if (chrome.action && chrome.action.openPopup) {
                               chrome.action.openPopup().catch(() => {
                                   // 비동기 처리로 인해 사용자 제스처(클릭)가 유실되어 팝업 열기가 실패하면, 폴백으로 윈도우 창을 엽니다.
-                                  chrome.windows.create({ url: targetUrl, type: "popup", width: 760, height: 850 });
+                                  chrome.windows.create({ url: targetUrl, type: "popup", width: 630, height: 850 });
                               });
                           } else {
-                              chrome.windows.create({ url: targetUrl, type: "popup", width: 760, height: 850 });
+                              chrome.windows.create({ url: targetUrl, type: "popup", width: 630, height: 850 });
                           }
                       });
                   }

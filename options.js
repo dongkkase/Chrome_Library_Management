@@ -1,4 +1,5 @@
 const listBody = document.getElementById('listBody');
+document.body.classList.toggle('options-window-mode', window.location.hash !== '#sidepanel');
 
 function storageLocalGet(defaults) {
     return new Promise((resolve, reject) => {
@@ -60,7 +61,7 @@ function showInfoToast(msg, isError = false) {
   const toast = document.createElement('div');
   const bgColor = isError ? '#dc3545' : '#17a2b8';
   
-  toast.style.cssText = "background: " + bgColor + "; color: white; padding: 12px 35px 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(20px); transition: all 0.3s ease; white-space: nowrap; pointer-events: auto; position: relative;";
+  toast.style.cssText = "background: " + bgColor + "; color: white; max-width: calc(100vw - 40px); box-sizing: border-box; padding: 12px 35px 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(20px); transition: all 0.3s ease; white-space: normal; pointer-events: auto; position: relative;";
   toast.innerHTML = msg;
 
   const closeBtn = document.createElement('span');
@@ -169,6 +170,7 @@ let totalPages = 1;
 let folderRulePreview;
 let activeFolderRuleInput = null;
 let folderRulePreviewHideTimer;
+let folderRulePreviewEnabled = true;
 
 function normalizeTitleCorrectionKeyPart(value) {
     return String(value || '')
@@ -190,11 +192,41 @@ function ensureFolderRulePreview() {
     folderRulePreview = document.createElement('div');
     folderRulePreview.id = 'folderRulePreview';
     folderRulePreview.className = 'folder-rule-preview-popover';
-    folderRulePreview.setAttribute('role', 'tooltip');
+    folderRulePreview.setAttribute('role', 'dialog');
+    folderRulePreview.setAttribute('aria-label', '상위 폴더 규칙 안내');
     folderRulePreview.setAttribute('aria-hidden', 'true');
+    folderRulePreview.addEventListener('focusout', (event) => {
+        if (event.relatedTarget === activeFolderRuleInput || folderRulePreview.contains(event.relatedTarget)) return;
+        hideFolderRulePreview();
+    });
     document.body.appendChild(folderRulePreview);
 
     return folderRulePreview;
+}
+
+function setFolderRulePreviewEnabled(enabled, options = {}) {
+    folderRulePreviewEnabled = enabled !== false;
+    const inputToRestore = !folderRulePreviewEnabled ? activeFolderRuleInput : null;
+
+    const settingCheckbox = document.getElementById('showFolderRulePreviewCheckbox');
+    const popoverToggle = folderRulePreview?.querySelector('.folder-rule-preview-toggle');
+    if (settingCheckbox) settingCheckbox.checked = folderRulePreviewEnabled;
+    if (popoverToggle) popoverToggle.setAttribute('aria-checked', String(folderRulePreviewEnabled));
+
+    if (!folderRulePreviewEnabled) {
+        hideFolderRulePreview();
+        inputToRestore?.focus({ preventScroll: true });
+    }
+
+    if (options.persist) {
+        void runOptionsAsyncTask(
+            () => storageLocalSet({ showFolderRulePreview: folderRulePreviewEnabled }),
+            '상위 폴더 규칙 말풍선 설정 저장'
+        );
+    }
+    if (options.announceDisabled && !folderRulePreviewEnabled) {
+        showInfoToast('사이트 및 설정에서 다시 표시할 수 있습니다.');
+    }
 }
 
 function sanitizeFolderRulePreviewSegment(value) {
@@ -275,9 +307,40 @@ function updateFolderRulePreviewContent(folderInput) {
     const preview = ensureFolderRulePreview();
     const data = getFolderRulePreviewData(folderInput);
 
+    const header = document.createElement('div');
+    header.className = 'folder-rule-preview-header';
+
     const heading = document.createElement('div');
     heading.className = 'folder-rule-preview-heading';
     heading.textContent = '저장 후 다운로드 폴더 예시';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'folder-rule-preview-toggle';
+    toggle.title = '상위 폴더 규칙 안내 말풍선 표시 여부';
+    toggle.setAttribute('role', 'switch');
+    toggle.setAttribute('aria-checked', String(folderRulePreviewEnabled));
+    toggle.setAttribute('aria-label', '상위 폴더 규칙 안내 말풍선 표시');
+    toggle.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+    });
+    toggle.addEventListener('click', () => {
+        const nextEnabled = toggle.getAttribute('aria-checked') !== 'true';
+        setFolderRulePreviewEnabled(nextEnabled, {
+            persist: true,
+            announceDisabled: true
+        });
+    });
+
+    const toggleLabel = document.createElement('span');
+    toggleLabel.textContent = '표시';
+
+    const toggleTrack = document.createElement('span');
+    toggleTrack.className = 'folder-rule-preview-toggle-track';
+    toggleTrack.setAttribute('aria-hidden', 'true');
+
+    toggle.append(toggleLabel, toggleTrack);
+    header.append(heading, toggle);
 
     const examples = document.createElement('div');
     examples.className = 'folder-rule-preview-examples';
@@ -312,7 +375,7 @@ function updateFolderRulePreviewContent(folderInput) {
     guideResult.textContent = '장르/작가/책 제목';
 
     guide.append(guideLabel, guideInput, guideArrow, guideResult);
-    preview.replaceChildren(heading, examples, guide);
+    preview.replaceChildren(header, examples, guide);
 }
 
 function updateFolderRulePreviewPosition(folderInput) {
@@ -352,6 +415,7 @@ function updateFolderRulePreviewPosition(folderInput) {
 }
 
 function showFolderRulePreview(folderInput) {
+    if (!folderRulePreviewEnabled) return;
     if (!folderInput || !(folderInput instanceof HTMLInputElement) || !folderInput.isConnected) return;
     const preview = ensureFolderRulePreview();
     const wasOpen = preview.classList.contains('open');
@@ -424,10 +488,10 @@ async function renderList(filter = "", resetPage = false) {
     const incompleteCount = list.filter(b => b.type === 'incomplete').length;
     const excludeCount = list.filter(b => b.type === 'exclude').length;
     
-    document.getElementById('stat-total').innerText = list.length;
-    document.getElementById('stat-complete').innerText = completeCount;
-    document.getElementById('stat-incomplete').innerText = incompleteCount;
-    document.getElementById('stat-exclude').innerText = excludeCount;
+    document.getElementById('stat-total').innerText = list.length.toLocaleString('ko-KR');
+    document.getElementById('stat-complete').innerText = completeCount.toLocaleString('ko-KR');
+    document.getElementById('stat-incomplete').innerText = incompleteCount.toLocaleString('ko-KR');
+    document.getElementById('stat-exclude').innerText = excludeCount.toLocaleString('ko-KR');
 
     const folderRulePrefix = "#폴더규칙";
     const isDuplicateSearch = filter === "#중복";
@@ -483,17 +547,18 @@ async function renderList(filter = "", resetPage = false) {
 
     const countDisplay = document.getElementById('listCountDisplay');
     if (countDisplay) {
+        const formattedCount = filteredList.length.toLocaleString('ko-KR');
         if (isDuplicateSearch) {
-            countDisplay.innerHTML = `중복 의심 목록: 총 <span style="color:#fd7e14;">${filteredList.length}</span>건 (공백/기호 무시 시 동일한 항목 묶음)`;
+            countDisplay.innerHTML = `중복 의심 목록: 총 <span style="color:#fd7e14;">${formattedCount}</span>건 (공백/기호 무시 시 동일한 항목 묶음)`;
         } else if (isMissingSearch) {
-            countDisplay.innerHTML = `누락 권수 등록 목록: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (누락 권수가 하나 이상인 도서)`;
+            countDisplay.innerHTML = `누락 권수 등록 목록: 총 <span style="color:#e83e8c;">${formattedCount}</span>건 (누락 권수가 하나 이상인 도서)`;
         } else if (isFolderRuleSearch) {
             const keywordText = folderRuleKeyword ? `"${folderRuleKeyword}"(이)` : '등록된';
-            countDisplay.innerHTML = `상위 폴더 규칙 ${keywordText}인 목록: 총 <span style="color:#20c997;">${filteredList.length}</span>건`;
+            countDisplay.innerHTML = `상위 폴더 규칙 ${keywordText}인 목록: 총 <span style="color:#20c997;">${formattedCount}</span>건`;
         } else if (filter.trim() === "") {
-            countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
+            countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${formattedCount}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
-            countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${filteredList.length}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
+            countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${formattedCount}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         }
     }
 
@@ -1124,6 +1189,22 @@ async function renderSnapshots() {
 
 const bulkInput = document.getElementById('bulkInput');
 const bulkPreview = document.getElementById('bulkPreview');
+const bulkPanel = document.getElementById('bulkPanel');
+const bulkPanelToggle = document.getElementById('bulkPanelToggle');
+
+function setBulkPanelCollapsed(collapsed) {
+    if (!bulkPanel || !bulkPanelToggle) return;
+
+    const isCollapsed = collapsed === true;
+    const label = bulkPanelToggle.querySelector('.bulk-panel-toggle-label');
+    const icon = bulkPanelToggle.querySelector('.bulk-panel-toggle-icon');
+
+    bulkPanel.classList.toggle('is-collapsed', isCollapsed);
+    bulkPanelToggle.setAttribute('aria-expanded', String(!isCollapsed));
+    bulkPanelToggle.setAttribute('aria-label', `새로운 도서 일괄 등록 ${isCollapsed ? '펼치기' : '접기'}`);
+    if (label) label.textContent = isCollapsed ? '펼치기' : '접기';
+    if (icon) icon.textContent = isCollapsed ? '▼' : '▲';
+}
 
 bulkInput.addEventListener('input', async () => {
     await customFiltersReady;
@@ -1507,17 +1588,6 @@ async function loadReleaseHistory() {
 }
 
 document.addEventListener('DOMContentLoaded', () => { 
-    const syncCompactListLayout = () => {
-        document.body.classList.toggle('compact-list-mode', window.innerWidth <= 900);
-    };
-
-    syncCompactListLayout();
-    window.addEventListener('resize', syncCompactListLayout);
-
-    if (window.location.hash === '#sidepanel') {
-        document.body.classList.add('side-panel-mode');
-    }
-
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1554,7 +1624,20 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({ darkMode: isDark });
     });
 
-    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc', lastBulkType: 'exclude' }, (data) => {
+    if (bulkPanel && bulkPanelToggle) {
+        bulkPanelToggle.addEventListener('click', () => {
+            const collapsed = !bulkPanel.classList.contains('is-collapsed');
+            setBulkPanelCollapsed(collapsed);
+            void runOptionsAsyncTask(
+                () => storageLocalSet({ bulkPanelCollapsed: collapsed }),
+                '일괄 등록 영역 상태 저장'
+            );
+        });
+    }
+
+    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc', lastBulkType: 'exclude', bulkPanelCollapsed: false }, (data) => {
+        setBulkPanelCollapsed(data.bulkPanelCollapsed);
+
         const sortSelect = document.getElementById('sortSelect');
         if (sortSelect) sortSelect.value = data.sortOption;
         
@@ -1604,6 +1687,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         listBody.addEventListener('focusout', (e) => {
             if (!e.target.classList.contains('edit-folder-rule')) return;
+            if (folderRulePreview?.contains(e.relatedTarget)) return;
             hideFolderRulePreview();
         });
 
@@ -1804,6 +1888,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const showListQuickBtnHoverCheckbox = document.getElementById('showListQuickBtnHoverCheckbox');
     const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
     const supportSingleCharCheckbox = document.getElementById('supportSingleCharCheckbox');
+    const folderRulePreviewCheckbox = document.getElementById('showFolderRulePreviewCheckbox');
     const hideExcludeCheckbox = document.getElementById('hideExcludeCheckbox');
     const hideCompleteCheckbox = document.getElementById('hideCompleteCheckbox');
     const hideIncompleteCheckbox = document.getElementById('hideIncompleteCheckbox');
@@ -1811,7 +1896,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideNewCheckbox = document.getElementById('hideNewCheckbox');
     const hideQuickMenuCheckbox = document.getElementById('hideQuickMenuCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, showFolderRulePreview: true, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -1823,6 +1908,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (showListQuickBtnHoverCheckbox) showListQuickBtnHoverCheckbox.checked = data.showListQuickBtnHover;
         if (customThemeCheckbox) customThemeCheckbox.checked = data.useCustomTheme;
         if (supportSingleCharCheckbox) supportSingleCharCheckbox.checked = data.supportSingleChar;
+        setFolderRulePreviewEnabled(data.showFolderRulePreview);
         if (hideExcludeCheckbox) hideExcludeCheckbox.checked = data.hideExclude;
         if (hideCompleteCheckbox) hideCompleteCheckbox.checked = data.hideComplete;
         if (hideIncompleteCheckbox) hideIncompleteCheckbox.checked = data.hideIncomplete;
@@ -1840,6 +1926,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (supportSingleCharCheckbox) {
         supportSingleCharCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ supportSingleChar: e.target.checked });
+        });
+    }
+    if (folderRulePreviewCheckbox) {
+        folderRulePreviewCheckbox.addEventListener('change', (e) => {
+            setFolderRulePreviewEnabled(e.target.checked, { persist: true });
         });
     }
     if (confirmCheckbox) {
@@ -1897,7 +1988,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     chrome.windows.create({
                                         url: "options.html",
                                         type: "popup",
-                                        width: 760,
+                                        width: 630,
                                         height: 850
                                     }, () => {
                                         window.close();
@@ -1909,7 +2000,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         chrome.windows.create({
                             url: "options.html",
                             type: "popup",
-                            width: 760,
+                            width: 630,
                             height: 850
                         }, () => {
                             window.close();

@@ -7,7 +7,7 @@
         <link rel="icon" href="icon.png">
         <link rel="stylesheet" href="options.css">
     </head>
-    <body>
+    <body class="side-panel-mode">
         <div class="container">
             <div class="header-row">
                 <div class="header-title-row">
@@ -15,16 +15,15 @@
                         <img src="icon.png" alt="" class="brand-icon" width="36" height="36">
                         <div><p class="eyebrow">LIBRARY MANAGER</p><h2>도서 목록 매칭 매니저</h2></div>
                     </div>
-                    <a id="usageGuideBtn" class="usage-guide-button" href="help.html" target="_blank" rel="noopener" title="사용방법을 새 탭에서 열기">사용방법</a>
-                </div>
-                <div class="header-actions">
-
                     <div class="theme-switch-wrapper">
                         <label class="theme-switch" title="다크 모드 온/오프 (기본: 시스템 테마)">
                             <input type="checkbox" id="themeToggle" aria-label="다크 모드">
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <a id="usageGuideBtn" class="usage-guide-button" href="help.html" target="_blank" rel="noopener" title="사용방법을 새 탭에서 열기">사용방법</a>
+                </div>
+                <div class="header-actions">
                     <div class="version-group" role="group" aria-label="버전 및 업데이트">
                         <span class="version-chip" title="현재 버전"><b id="current-version">v1.0</b></span>
                         <div class="update-check-control">
@@ -70,8 +69,14 @@
                     </div>
                 </div>
 
-                <div class="panel-box bulk-panel">
-                    <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
+                <div class="panel-box bulk-panel" id="bulkPanel">
+                    <div class="bulk-panel-header">
+                        <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
+                        <button type="button" id="bulkPanelToggle" class="bulk-panel-toggle" aria-expanded="true" aria-controls="bulkTypeSelect bulkInput bulkPreview bulkHint saveBtn">
+                            <span class="bulk-panel-toggle-label">접기</span>
+                            <span class="bulk-panel-toggle-icon" aria-hidden="true">▲</span>
+                        </button>
+                    </div>
                     <select aria-label="일괄 등록 타입" id="bulkTypeSelect" style="width: 100%; margin-bottom: 8px; border-color: var(--border); font-weight: bold; color: var(--input-text); font-size: 13px;">
                         <option value="exclude">🚫 '제외' 타입으로 일괄 저장 (기본값)</option>
                         <option value="incomplete">⏳ '미완' 타입으로 일괄 저장</option>
@@ -81,7 +86,7 @@
 
                     <div id="bulkPreview" style="margin-top:8px; font-size:12px; color:var(--text-muted); background:var(--panel); padding:8px 12px; border-radius:4px; border:1px solid var(--border); display:none;"></div>
 
-                    <p class="bulk-hint">한 줄에 한 작품씩 입력한 뒤 추출 결과를 확인하세요.</p>
+                    <p class="bulk-hint" id="bulkHint">한 줄에 한 작품씩 입력한 뒤 추출 결과를 확인하세요.</p>
                     <button id="saveBtn" style="width:100%; margin-top: 8px; background: #20c997; font-size: 14px;">목록에 일괄 추가하기</button>
                 </div>
 
@@ -221,6 +226,11 @@
                         </label>
                     </fieldset>
                     <fieldset class="settings-group"><legend>화면 표시와 검색</legend>
+                        <label id="folderRulePreviewSetting">
+                            <input type="checkbox" id="showFolderRulePreviewCheckbox" checked>
+                            <b>상위 폴더 규칙 안내 말풍선 표시</b>
+                            <span>상위 폴더 규칙 입력 시 저장될 다운로드 폴더 예시를 표시합니다</span>
+                        </label>
                         <label id="hideUselessCommentsContainer">
                             <input type="checkbox" id="hideUselessCommentsCheckbox" checked>
                             <b>의미 없는 댓글 가림</b>
