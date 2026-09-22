@@ -324,7 +324,15 @@ test('전체 교체는 revision CAS로 중간 변경을 덮어쓰지 않는다',
         bookStoreReplaceAll;
     `, {
         ensureBookStoreReady: async () => {},
-        runBookStoreIndexTransaction: async (_mode, operation) => operation(),
+        runBookStoreIndexTransaction: async (_mode, operation) => {
+            const previous = structuredClone(state);
+            try {
+                return await operation();
+            } catch (error) {
+                Object.assign(state, previous);
+                throw error;
+            }
+        },
         prepareBooksForBulkStore: books => books.map(book => ({ ...book })),
         getBookStoreRevisionInTransaction: async () => state.revision,
         incrementBookStoreRevisionInTransaction: async () => {
@@ -343,7 +351,14 @@ test('전체 교체는 revision CAS로 중간 변경을 덮어쓰지 않는다',
                 },
                 count: async () => state.storedBooks.length
             },
-            meta: {},
+            meta: {
+                get: async () => state.pendingSync,
+                put: async value => {
+                    assert.equal(value.key, 'google-sync-local-replacement');
+                    if (state.failReplacementMarker) throw new Error('교체 기록 저장 실패');
+                    state.replacementMarker = structuredClone(value);
+                }
+            },
             transaction: async (...args) => args[args.length - 1]()
         }
     });
@@ -361,6 +376,12 @@ test('전체 교체는 revision CAS로 중간 변경을 덮어쓰지 않는다',
     assert.equal(state.bulkPutCount, 0);
     assert.equal(state.revision, 8);
 
+    state.pendingSync = { key: 'google-sync-pending' };
+    await assert.rejects(replaceAll([{ id: 1, title: '복구 전 교체' }], 8), /동기화 복구/);
+    assert.equal(state.clearCount, 0);
+    assert.equal(state.bulkPutCount, 0);
+    state.pendingSync = undefined;
+
     const result = await replaceAll([
         { id: 1, title: '스냅샷' },
         { id: 2, title: '새 도서' }
@@ -370,6 +391,13 @@ test('전체 교체는 revision CAS로 중간 변경을 덮어쓰지 않는다',
     assert.equal(state.clearCount, 1);
     assert.equal(state.bulkPutCount, 1);
     assert.equal(state.storedBooks.length, 2);
+    assert.equal(state.replacementMarker.revision, 9);
+    state.failReplacementMarker = true;
+    await assert.rejects(replaceAll([{ id: 3, title: '실패할 교체' }], 9), /교체 기록 저장 실패/);
+    assert.equal(state.revision, 9);
+    assert.equal(state.storedBooks.length, 2);
+    assert.equal(state.storedBooks[0].title, '스냅샷');
+    assert.equal(state.replacementMarker.revision, 9);
 });
 
 test('백그라운드 저장 큐는 여러 변경을 하나의 IndexedDB 트랜잭션으로 커밋한다', () => {
@@ -942,6 +970,7 @@ test('옵션 단건 수정과 삭제는 전체 replace 경로를 사용하지 �
     assert.doesNotMatch(singleDelete, /bookStoreReplaceAll|bookStoreGetAll|chrome\.storage/);
 
     assert.match(bulkSave, /bookStoreGetAllWithRevision\s*\(\s*\)/);
+    assert.match(bulkSave, /return bookStoreWithSyncLock\(async \(\) =>/);
     assert.match(bulkSave, /hydrateRestoredBookMissingVols\s*\(\s*newList/);
     assert.match(bulkSave, /bookStoreReplaceAll\s*\(\s*listToStore\s*,\s*replaceRevision\s*\)/);
     assert.match(bulkSave, /type:\s*['"]reload['"]/);
@@ -971,4 +1000,228 @@ test('옵션 화면은 자기 marker를 무시하고 외부 marker만 다시 렌
     assert.doesNotMatch(listenerBody, /changes\.bookList/);
     assert.match(scheduleExternalRender, /clearTimeout\s*\(\s*externalBookListRenderTimer\s*\)/);
     assert.match(scheduleExternalRender, /setTimeout\s*\(/);
+});
+
+function snapshotHarness(snapshots = []) {
+    const state = {
+        snapshots: structuredClone(snapshots),
+        books: [{ id: 1, title: '이 기기 목록', missingVols: [2] }],
+        revision: 4,
+        meta: {},
+        nextId: 100,
+        failAdd: false,
+        failPrune: false,
+        indexAssertions: 0,
+        failFinalIndex: false
+    };
+    let transactionTables = null;
+    const assertWritable = table => assert.ok(transactionTables?.includes(table), '동일 트랜잭션에서 저장해야 합니다.');
+    const db = {
+        books: {
+            clear: async () => { assertWritable(db.books); state.books = []; },
+            bulkPut: async books => { assertWritable(db.books); state.books = structuredClone(books); }
+        },
+        meta: {
+            put: async value => {
+                assertWritable(db.meta);
+                state.meta[value.key] = structuredClone(value);
+            }
+        },
+        snapshots: {
+            add: async value => {
+                assertWritable(db.snapshots);
+                if (state.failAdd) throw new Error('백업 저장 공간 부족');
+                const id = state.nextId++;
+                state.snapshots.push({ ...structuredClone(value), id });
+                return id;
+            },
+            orderBy: key => {
+                assert.equal(key, 'timestamp');
+                return {
+                    toArray: async () => structuredClone(state.snapshots).sort((a, b) => a.timestamp - b.timestamp)
+                };
+            },
+            where: key => ({
+                equals: expected => ({ first: async () => state.snapshots.find(snapshot => snapshot[key] === expected) })
+            }),
+            bulkDelete: async ids => {
+                assertWritable(db.snapshots);
+                if (state.failPrune) throw new Error('백업 정리 실패');
+                state.snapshots = state.snapshots.filter(snapshot => !ids.includes(snapshot.id));
+            }
+        },
+        transaction: async (mode, ...args) => {
+            assert.equal(mode, 'rw');
+            assert.equal(transactionTables, null);
+            const operation = args.pop();
+            const previous = structuredClone(state);
+            transactionTables = args;
+            try {
+                return await operation();
+            } catch (error) {
+                Object.assign(state, previous);
+                throw error;
+            } finally {
+                transactionTables = null;
+            }
+        }
+    };
+    const api = vm.runInNewContext(`
+        ${extractFunction(sources['db.js'], 'createBookStoreConflictError')}
+        ${extractFunction(sources['db.js'], 'bookStorePruneSnapshots')}
+        ${extractFunction(sources['db.js'], 'bookStoreBackupGoogleRemote')}
+        ${extractFunction(sources['db.js'], 'bookStoreApplyGoogleSnapshot')}
+        ${extractFunction(sources['background.js'], 'createDailySnapshot')}
+        ({ bookStoreBackupGoogleRemote, bookStoreApplyGoogleSnapshot, createDailySnapshot });
+    `, {
+        db,
+        console,
+        ensureBookStoreReady: async () => {},
+        ensureBookStoreIndexCurrent: async () => {},
+        getCurrentBookStoreIndexSignature: () => 'unchanged',
+        assertBookStoreIndexSignatureInTransaction: async () => {
+            state.indexAssertions++;
+            if (state.failFinalIndex && state.indexAssertions > 1) throw new Error('검색 규칙 변경');
+        },
+        getBookStoreRevisionInTransaction: async () => state.revision,
+        incrementBookStoreRevisionInTransaction: async () => ++state.revision,
+        prepareBooksForBulkStore: books => structuredClone(books),
+        bookStoreGetAll: async () => structuredClone(state.books),
+        chrome: { storage: { local: { get: async defaults => defaults } } },
+        getDefaultEditionKeywords: () => []
+    });
+    return { state, api };
+}
+
+function retainedSnapshotFixtures() {
+    return [
+        ...Array.from({ length: 7 }, (_, index) => ({
+            id: index + 1, timestamp: index + 1, dateStr: `일일 ${index + 1}`, data: { bookList: [] }
+        })),
+        ...Array.from({ length: 10 }, (_, index) => ({
+            id: index + 20, timestamp: index + 20,
+            dateStr: `${index + 1} (Google 동기화 전)`,
+            ...(index === 0 ? {} : { kind: 'google-sync' }),
+            data: { bookList: [] }
+        }))
+    ];
+}
+
+test('원격 업로드 전 백업은 누락 권수와 파일 버전을 보관하고 일일 백업 7개와 별도로 10개를 유지한다', async () => {
+    const { state, api } = snapshotHarness(retainedSnapshotFixtures());
+    const books = [{ id: 12, title: '덮어쓰기 전 원격 도서', missingVols: [3, 5] }];
+    const metadata = { accountId: 'account-1', fileId: 'drive-db', etag: '"version-2"', hash: 'remote-hash' };
+    const id = await api.bookStoreBackupGoogleRemote(books, metadata);
+    const backup = state.snapshots.find(snapshot => snapshot.id === id);
+    assert.equal(backup.kind, 'google-sync');
+    assert.deepEqual(backup.data, { bookList: books, missingVolsMap: { 12: [3, 5] } });
+    assert.deepEqual(backup.googleSync, metadata);
+    assert.equal(state.snapshots.length, 17);
+    assert.equal(state.snapshots.filter(snapshot => snapshot.dateStr.startsWith('일일')).length, 7);
+    assert.equal(state.snapshots.some(snapshot => snapshot.id === 20), false);
+    assert.equal(state.books[0].title, '이 기기 목록');
+    assert.equal(state.revision, 4);
+});
+
+test('같은 원격 버전의 업로드 재시도는 기존 백업을 재사용하여 오래된 복구본을 밀어내지 않는다', async () => {
+    const { state, api } = snapshotHarness(retainedSnapshotFixtures());
+    const books = [{ id: 12, title: '재시도 중인 원격 목록', missingVols: [3] }];
+    const metadata = { accountId: 'account-1', fileId: 'drive-db', etag: '"version-2"', hash: 'remote-hash' };
+    const originalId = await api.bookStoreBackupGoogleRemote(books, metadata);
+    const savedSnapshots = structuredClone(state.snapshots);
+    state.failAdd = true;
+    for (let retry = 0; retry < 12; retry++) {
+        const id = await api.bookStoreBackupGoogleRemote(books, metadata);
+        assert.equal(id, originalId);
+    }
+    assert.deepEqual(state.snapshots, savedSnapshots);
+    assert.equal(state.nextId, originalId + 1);
+});
+
+test('원격 백업은 계정·파일·버전·해시가 다르거나 없으면 중복으로 간주하지 않는다', async t => {
+    const keys = ['accountId', 'fileId', 'etag', 'hash'];
+    const metadata = { accountId: 'account-1', fileId: 'drive-db', etag: '"version-2"', hash: 'remote-hash' };
+    const books = [{ id: 12, title: '원격 목록', missingVols: [] }];
+    for (const key of keys) {
+        await t.test(`${key} 변경`, async () => {
+            const { state, api } = snapshotHarness();
+            const firstId = await api.bookStoreBackupGoogleRemote(books, metadata);
+            const secondId = await api.bookStoreBackupGoogleRemote(books, { ...metadata, [key]: 'changed' });
+            assert.notEqual(firstId, secondId);
+            assert.equal(state.snapshots.length, 2);
+        });
+        await t.test(`${key} 없음`, async () => {
+            const { state, api } = snapshotHarness();
+            const incompleteMetadata = { ...metadata };
+            delete incompleteMetadata[key];
+            const firstId = await api.bookStoreBackupGoogleRemote(books, incompleteMetadata);
+            const secondId = await api.bookStoreBackupGoogleRemote(books, incompleteMetadata);
+            assert.notEqual(firstId, secondId);
+            assert.equal(state.snapshots.length, 2);
+        });
+    }
+});
+
+test('일일 백업 정리는 동기화 복구본을 지우지 않고 일일 백업만 7개로 제한한다', async () => {
+    const { state, api } = snapshotHarness(retainedSnapshotFixtures());
+    await api.createDailySnapshot();
+    assert.equal(state.snapshots.length, 17);
+    assert.equal(state.snapshots.some(snapshot => snapshot.id === 1), false);
+    for (let id = 20; id < 30; id++) assert.ok(state.snapshots.some(snapshot => snapshot.id === id));
+    await api.createDailySnapshot();
+    assert.equal(state.snapshots.length, 17);
+});
+
+test('원격 백업 저장이나 정리에 실패하면 성공으로 반환하지 않고 새 백업도 원자적으로 취소한다', async t => {
+    for (const failure of ['failAdd', 'failPrune']) {
+        await t.test(failure, async () => {
+            const fixtures = retainedSnapshotFixtures();
+            const { state, api } = snapshotHarness(fixtures);
+            state[failure] = true;
+            await assert.rejects(api.bookStoreBackupGoogleRemote([{ id: 2, title: '원격', missingVols: [] }], {}), /백업/);
+            assert.deepEqual(state.snapshots, fixtures);
+            assert.equal(state.books[0].title, '이 기기 목록');
+        });
+    }
+});
+
+test('Google 다운로드는 이전 목록 백업과 새 목록·복구 저널을 같은 트랜잭션에서 저장한다', async () => {
+    const { state, api } = snapshotHarness(retainedSnapshotFixtures());
+    const previousBooks = structuredClone(state.books);
+    const remote = [{ id: 2, title: '받은 도서', missingVols: [4] }];
+    const backup = { bookList: previousBooks, missingVolsMap: { 1: [2] } };
+    const checkpoint = { accountId: 'account-1', baseHash: 'remote-hash' };
+    await api.bookStoreApplyGoogleSnapshot(remote, 4, backup, checkpoint);
+    assert.deepEqual(state.books, remote);
+    assert.equal(state.revision, 5);
+    const savedBackup = state.snapshots.find(snapshot => snapshot.id === 100);
+    assert.equal(savedBackup.kind, 'google-sync');
+    assert.deepEqual(savedBackup.data, backup);
+    assert.equal(state.snapshots.length, 17);
+    assert.equal(state.snapshots.filter(snapshot => snapshot.dateStr.startsWith('일일')).length, 7);
+    assert.deepEqual(state.meta['google-sync-pending'], {
+        key: 'google-sync-pending', revision: 5,
+        previousMissingVolsMap: { 1: [2] }, missingVolsMap: { 2: [4] }, checkpoint
+    });
+});
+
+test('Google 다운로드 백업 실패·동시 수정·반영 도중 오류는 기존 목록과 복구본을 유지한다', async t => {
+    for (const failure of ['failAdd', 'failPrune', 'staleRevision', 'failFinalIndex']) {
+        await t.test(failure, async () => {
+            const fixtures = retainedSnapshotFixtures();
+            const { state, api } = snapshotHarness(fixtures);
+            const previousBooks = structuredClone(state.books);
+            state[failure] = true;
+            await assert.rejects(api.bookStoreApplyGoogleSnapshot(
+                [{ id: 2, title: '적용되면 안 되는 원격', missingVols: [] }],
+                failure === 'staleRevision' ? 3 : 4,
+                { bookList: previousBooks, missingVolsMap: { 1: [2] } },
+                { accountId: 'account-1', baseHash: 'remote-hash' }
+            ));
+            assert.deepEqual(state.books, previousBooks);
+            assert.deepEqual(state.snapshots, fixtures);
+            assert.equal(state.revision, 4);
+            assert.deepEqual(state.meta, {});
+        });
+    }
 });

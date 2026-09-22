@@ -22,6 +22,11 @@ const BOOK_STORE_CONTEXT_ID = `book-store-${Date.now()}-${Math.random().toString
 let bookStoreReadyPromise = null;
 let bookStoreIndexedSignature = null;
 
+function bookStoreWithSyncLock(operation) {
+    // 옵션 페이지와 서비스 워커의 DB·누락 권수 변경을 같은 잠금으로 직렬화합니다.
+    return navigator.locks.request('book-manager-db-sync', { mode: 'exclusive' }, operation);
+}
+
 function getBookStoreMatchKey(title) {
     if (typeof getTitleMatchParts === 'function') {
         return getTitleMatchParts(title || '').matchKey;
@@ -650,6 +655,9 @@ async function bookStoreReplaceAll(books, expectedRevision = null) {
 
     const sourceBooks = Array.isArray(books) ? books : [];
     const result = await runBookStoreIndexTransaction('rw', async () => {
+        if (await db.meta.get('google-sync-pending')) {
+            throw new Error('Google 동기화 복구가 진행 중입니다. 잠시 후 다시 시도해 주세요.');
+        }
         const currentRevision = await getBookStoreRevisionInTransaction();
         if (normalizedExpectedRevision !== null && currentRevision !== normalizedExpectedRevision) {
             throw createBookStoreConflictError(normalizedExpectedRevision, currentRevision);
@@ -663,6 +671,7 @@ async function bookStoreReplaceAll(books, expectedRevision = null) {
             throw new Error('교체한 도서 목록 건수가 일치하지 않습니다.');
         }
         const revision = await incrementBookStoreRevisionInTransaction();
+        await db.meta.put({ key: 'google-sync-local-replacement', revision });
         return { count: nextBooks.length, revision };
     });
 
@@ -674,6 +683,84 @@ async function bookStoreReindexAll() {
     await waitForBookStoreTitleRules();
     bookStoreIndexedSignature = null;
     await ensureBookStoreIndexCurrent();
+}
+
+async function bookStorePruneSnapshots() {
+    const snapshots = await db.snapshots.orderBy('timestamp').toArray();
+    const daily = [];
+    const googleSync = [];
+    snapshots.forEach(snapshot => {
+        const isGoogleSync = snapshot.kind === 'google-sync'
+            || (typeof snapshot.dateStr === 'string' && snapshot.dateStr.endsWith(' (Google 동기화 전)'));
+        (isGoogleSync ? googleSync : daily).push(snapshot);
+    });
+    const expired = [
+        ...daily.slice(0, Math.max(0, daily.length - 7)),
+        ...googleSync.slice(0, Math.max(0, googleSync.length - 10))
+    ];
+    if (expired.length > 0) await db.snapshots.bulkDelete(expired.map(snapshot => snapshot.id));
+}
+
+async function bookStoreBackupGoogleRemote(books, metadata) {
+    await ensureBookStoreReady();
+    return db.transaction('rw', db.snapshots, async () => {
+        const versionKeys = ['accountId', 'fileId', 'etag', 'hash'];
+        if (metadata && versionKeys.every(key => typeof metadata[key] === 'string' && metadata[key].length > 0)) {
+            const snapshots = await db.snapshots.orderBy('timestamp').toArray();
+            const existing = snapshots.find(snapshot => snapshot.kind === 'google-sync'
+                && snapshot.googleSync && versionKeys.every(key => snapshot.googleSync[key] === metadata[key]));
+            if (existing) return existing.id;
+        }
+        const snapshotId = await db.snapshots.add({
+            timestamp: Date.now(),
+            dateStr: `${new Date().toLocaleDateString('ko-KR')} (Google 업로드 전 원격 목록)`,
+            kind: 'google-sync',
+            data: {
+                bookList: books,
+                missingVolsMap: Object.fromEntries(books.map(book => [String(book.id), book.missingVols || []]))
+            },
+            googleSync: metadata
+        });
+        await bookStorePruneSnapshots();
+        return snapshotId;
+    });
+}
+
+async function bookStoreApplyGoogleSnapshot(books, expectedRevision, backup, checkpoint) {
+    await ensureBookStoreReady();
+    await ensureBookStoreIndexCurrent();
+    const indexSignature = getCurrentBookStoreIndexSignature();
+    return db.transaction('rw', db.books, db.meta, db.snapshots, async () => {
+        await assertBookStoreIndexSignatureInTransaction(indexSignature);
+        const currentRevision = await getBookStoreRevisionInTransaction();
+        if (currentRevision !== expectedRevision) {
+            throw createBookStoreConflictError(expectedRevision, currentRevision);
+        }
+        const nextBooks = prepareBooksForBulkStore(books);
+        await db.snapshots.add({
+            timestamp: Date.now(),
+            dateStr: `${new Date().toLocaleDateString('ko-KR')} (Google 동기화 전)`,
+            kind: 'google-sync',
+            data: backup
+        });
+        await bookStorePruneSnapshots();
+        await db.books.clear();
+        if (nextBooks.length > 0) await db.books.bulkPut(nextBooks);
+        const revision = await incrementBookStoreRevisionInTransaction();
+        // IndexedDB 반영 후 중단되어도 로컬 누락 권수와 동기화 기준을 복구합니다.
+        await db.meta.put({
+            key: 'google-sync-pending',
+            revision,
+            previousMissingVolsMap: backup.missingVolsMap,
+            missingVolsMap: Object.fromEntries(nextBooks.map(book => [String(book.id), book.missingVols || []])),
+            checkpoint
+        });
+        if (getCurrentBookStoreIndexSignature() !== indexSignature) {
+            throw createBookStoreIndexChangedError(indexSignature, getCurrentBookStoreIndexSignature());
+        }
+        await assertBookStoreIndexSignatureInTransaction(indexSignature);
+        return { revision };
+    });
 }
 
 async function bookStorePublishChange(change, legacyType, legacyPayload = {}) {

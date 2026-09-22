@@ -1,4 +1,4 @@
-importScripts('dexie.min.js', 'db.js', 'common.js');
+importScripts('dexie.min.js', 'db.js', 'common.js', 'google-drive.js', 'google-sync.js');
 
 const rightClickedContexts = new Map();
 const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
@@ -1169,15 +1169,11 @@ async function createDailySnapshot() {
             dateStr,
             data: { ...storedData, bookList }
         };
-        await db.snapshots.add(snapshotData);
-
-        // 7개를 초과하면 가장 오래된 것 삭제
-        const count = await db.snapshots.count();
-        if (count > 7) {
-            const oldest = await db.snapshots.orderBy('timestamp').limit(count - 7).toArray();
-            const oldestIds = oldest.map(s => s.id);
-            await db.snapshots.bulkDelete(oldestIds);
-        }
+        await db.transaction('rw', db.snapshots, async () => {
+            if (await db.snapshots.where('dateStr').equals(dateStr).first()) return;
+            await db.snapshots.add(snapshotData);
+            await bookStorePruneSnapshots();
+        });
     } catch (e) { console.error("Snapshot creation failed:", e); }
 }
 
@@ -1365,31 +1361,33 @@ function getBookStoreErrorMessage(error) {
 }
 
 async function handleMissingVolUpdate(message) {
-    if (message.bookId === undefined || message.bookId === null) {
-        throw new TypeError('누락 권수를 저장할 도서 ID가 없습니다.');
-    }
+    return bookStoreWithSyncLock(async () => {
+        if (message.bookId === undefined || message.bookId === null) {
+            throw new TypeError('누락 권수를 저장할 도서 ID가 없습니다.');
+        }
 
-    const missingVols = Array.isArray(message.missingVols)
-        ? Array.from(new Set(message.missingVols.map(Number).filter(value => {
-            return Number.isInteger(value) && value > 0;
-        }))).sort((a, b) => a - b)
-        : [];
-    const data = await chrome.storage.local.get({ missingVolsMap: {} });
-    const currentMap = data.missingVolsMap && typeof data.missingVolsMap === 'object'
-        ? data.missingVolsMap
-        : {};
-    const missingVolsMap = {
-        ...currentMap,
-        [String(message.bookId)]: missingVols
-    };
-    const update = {
-        bookId: message.bookId,
-        missingVols,
-        timestamp: Date.now()
-    };
+        const missingVols = Array.isArray(message.missingVols)
+            ? Array.from(new Set(message.missingVols.map(Number).filter(value => {
+                return Number.isInteger(value) && value > 0;
+            }))).sort((a, b) => a - b)
+            : [];
+        const data = await chrome.storage.local.get({ missingVolsMap: {} });
+        const currentMap = data.missingVolsMap && typeof data.missingVolsMap === 'object'
+            ? data.missingVolsMap
+            : {};
+        const missingVolsMap = {
+            ...currentMap,
+            [String(message.bookId)]: missingVols
+        };
+        const update = {
+            bookId: message.bookId,
+            missingVols,
+            timestamp: Date.now()
+        };
 
-    await chrome.storage.local.set({ missingVolsMap, missingVolsUpdate: update });
-    return update;
+        await chrome.storage.local.set({ missingVolsMap, missingVolsUpdate: update });
+        return update;
+    });
 }
 
 async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
@@ -1987,3 +1985,5 @@ function initFocusLeftMacro() {
 }
 
 initFocusLeftMacro();
+
+void GoogleBookSync.initialize({ syncOnStart: false }).catch(() => {});

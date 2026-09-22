@@ -755,52 +755,54 @@ function setBookUndo(undoState) {
 }
 
 async function saveWithUndo(newList, successMsg, additionalValues = {}, previousList = null, expectedRevision = null) {
-    await ensureBookStoreReady();
+    return bookStoreWithSyncLock(async () => {
+        await ensureBookStoreReady();
 
-    let undoList = previousList;
-    let replaceRevision = expectedRevision;
-    if (undoList === null || replaceRevision === null) {
-        const currentSnapshot = await bookStoreGetAllWithRevision();
-        if (undoList === null) undoList = currentSnapshot.bookList;
-        if (replaceRevision === null) replaceRevision = currentSnapshot.revision;
-    }
-    const undoSnapshot = cloneUndoValue(undoList);
-    const settingKeys = Object.keys(additionalValues);
-    const knownSettingDefaults = {
-        allowedSites: [],
-        filterWords: [],
-        editionKeywords: getDefaultEditionKeywords(),
-        missingVolsMap: {},
-        titleCorrections: {}
-    };
-    const settingDefaults = Object.fromEntries(settingKeys.map(key => [
-        key,
-        Object.prototype.hasOwnProperty.call(knownSettingDefaults, key)
-            ? knownSettingDefaults[key]
-            : null
-    ]));
-    const previousSettings = settingKeys.length > 0
-        ? await storageLocalGet(settingDefaults)
-        : {};
+        let undoList = previousList;
+        let replaceRevision = expectedRevision;
+        if (undoList === null || replaceRevision === null) {
+            const currentSnapshot = await bookStoreGetAllWithRevision();
+            if (undoList === null) undoList = currentSnapshot.bookList;
+            if (replaceRevision === null) replaceRevision = currentSnapshot.revision;
+        }
+        const undoSnapshot = cloneUndoValue(undoList);
+        const settingKeys = Object.keys(additionalValues);
+        const knownSettingDefaults = {
+            allowedSites: [],
+            filterWords: [],
+            editionKeywords: getDefaultEditionKeywords(),
+            missingVolsMap: {},
+            titleCorrections: {}
+        };
+        const settingDefaults = Object.fromEntries(settingKeys.map(key => [
+            key,
+            Object.prototype.hasOwnProperty.call(knownSettingDefaults, key)
+                ? knownSettingDefaults[key]
+                : null
+        ]));
+        const previousSettings = settingKeys.length > 0
+            ? await storageLocalGet(settingDefaults)
+            : {};
 
-    const listToStore = hydrateRestoredBookMissingVols(newList, additionalValues.missingVolsMap);
-    const replaceResult = await bookStoreReplaceAll(listToStore, replaceRevision);
-    setBookUndo({
-        type: 'replace',
-        bookList: undoSnapshot,
-        settings: previousSettings,
-        expectedRevision: replaceResult.revision
+        const listToStore = hydrateRestoredBookMissingVols(newList, additionalValues.missingVolsMap);
+        const replaceResult = await bookStoreReplaceAll(listToStore, replaceRevision);
+        setBookUndo({
+            type: 'replace',
+            bookList: undoSnapshot,
+            settings: previousSettings,
+            expectedRevision: replaceResult.revision
+        });
+
+        if (settingKeys.length > 0) await storageLocalSet(additionalValues);
+        await bookStorePublishChange({
+            type: 'reload',
+            reason: 'options-bulk-update',
+            revision: replaceResult.revision
+        });
+
+        if (successMsg) showInfoToast(successMsg);
+        await renderCurrentBookList();
     });
-
-    if (settingKeys.length > 0) await storageLocalSet(additionalValues);
-    await bookStorePublishChange({
-        type: 'reload',
-        reason: 'options-bulk-update',
-        revision: replaceResult.revision
-    });
-
-    if (successMsg) showInfoToast(successMsg);
-    await renderCurrentBookList();
 }
 
 async function saveSingleBookWithUndo(book, previousBook, successMsg) {
@@ -863,18 +865,20 @@ if (undoButton) {
         try {
             await ensureBookStoreReady();
             if (undoState.type === 'replace') {
-                const replaceResult = await bookStoreReplaceAll(
-                    undoState.bookList,
-                    undoState.expectedRevision
-                );
-                if (Object.keys(undoState.settings).length > 0) {
-                    await storageLocalSet(undoState.settings);
-                    renderRestoredSettingPanels(undoState.settings);
-                }
-                await bookStorePublishChange({
-                    type: 'reload',
-                    reason: 'options-undo-bulk',
-                    revision: replaceResult.revision
+                await bookStoreWithSyncLock(async () => {
+                    const replaceResult = await bookStoreReplaceAll(
+                        undoState.bookList,
+                        undoState.expectedRevision
+                    );
+                    if (Object.keys(undoState.settings).length > 0) {
+                        await storageLocalSet(undoState.settings);
+                        renderRestoredSettingPanels(undoState.settings);
+                    }
+                    await bookStorePublishChange({
+                        type: 'reload',
+                        reason: 'options-undo-bulk',
+                        revision: replaceResult.revision
+                    });
                 });
             } else if (undoState.type === 'patch') {
                 const restoredBook = await bookStorePutByTarget({
@@ -1129,7 +1133,7 @@ async function renderSnapshots() {
     try {
         const snapshots = await db.snapshots.orderBy('timestamp').reverse().toArray();
         if (snapshots.length === 0) {
-            container.innerHTML = '<li style="font-size: 13px; color: var(--text-muted);">저장된 스냅샷이 없습니다. (자동 백업은 1일 뒤부터 생성됩니다)</li>';
+            container.innerHTML = '<li style="font-size: 13px; color: var(--text-muted);">저장된 복원 지점이 없습니다. 일일 백업 또는 Google 동기화로 목록을 교체하기 전에 생성됩니다.</li>';
             return;
         }
         container.innerHTML = snapshots.map(snap => {
@@ -2363,6 +2367,14 @@ async function flushExternalBookListRender() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.googleSyncState) {
+        const { oldValue, newValue } = changes.googleSyncState;
+        if (newValue?.runCompletedAt !== oldValue?.runCompletedAt
+            && document.getElementById('tab-backup')?.classList.contains('active')) {
+            void renderSnapshots();
+        }
+    }
+
     if (areaName === 'local' && changes.missingVolsMap && changes.missingVolsUpdate) {
         const searchInput = document.getElementById('searchInput');
         if (searchInput && searchInput.value === '#누락') {
