@@ -503,7 +503,7 @@ const PRE_DEFINED_SITES = [
 }, 
 { 
     url: "hellkaiv.net", 
-    selector: "#gall_ul .bo_tit", 
+    selector: "#gall_ul .bo_tit, .tbl_head01 .bo_tit",
     hideSelector: "li",
     autoConfirmKeywords: ["링크", "발급"], 
     allowedDLs: ["giga", "gofile", "hk"],
@@ -518,6 +518,9 @@ const PRE_DEFINED_SITES = [
         .bm-quick-actions.list-actions button {
             margin: 0 !important;
             flex-shrink: 0 !important;
+        }
+        .tbl_head01 .bo_tit > .bm-quick-actions.list-actions {
+            clear: both;
         }
     `,
 },
@@ -2741,6 +2744,17 @@ function getListRenderTargets(link) {
         usesSeparateTargets: false
     };
 
+    if (window.location.hostname.includes('hellkaiv.net')) {
+        const titleTarget = link.parentElement;
+        if (titleTarget?.matches('.tbl_head01 .td_subject .bo_tit')) {
+            return {
+                ...defaultTargets,
+                actionsTarget: titleTarget,
+                usesSeparateTargets: true
+            };
+        }
+    }
+
     if (!window.location.hostname.includes('chating.wiki')) return defaultTargets;
 
     const titleTarget = link.matches('a.cw-board-item')
@@ -2972,8 +2986,10 @@ function applyStyleToSingleLink(link) {
         if (renderTargets.usesSeparateTargets) {
             existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
             if (existingActions) {
-                actionsTarget.style.setProperty("display", "flex", "important");
-                actionsTarget.style.setProperty("flex-wrap", "wrap", "important");
+                if (isChatingWikiSite) {
+                    actionsTarget.style.setProperty("display", "flex", "important");
+                    actionsTarget.style.setProperty("flex-wrap", "wrap", "important");
+                }
                 existingActions.style.display = "flex";
                 existingActions.style.width = "100%";
                 existingActions.style.minWidth = "0";
