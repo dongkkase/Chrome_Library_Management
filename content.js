@@ -439,6 +439,7 @@ const PRE_DEFINED_SITES = [
 },
 {
     url: "chating.wiki",
+    shortcuts: { openSelector: '.cw-material-purchase-action', downloadSelector: '.auto-dl-btn', titleSelector: '.cw-article-header > h1' },
     selector: "a.cw-board-item",
     detailSelector: ".cw-article-header > h1",
     hideSelector: "a",

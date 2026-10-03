@@ -1407,7 +1407,7 @@ async function handleMissingVolUpdate(message) {
 function isShortcutDownloadSender(sender) {
     try {
         const hostname = new URL(sender.url || sender.tab?.url).hostname.toLowerCase();
-        return ['tcafe21.com', 'lamu.club'].some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+        return ['tcafe21.com', 'lamu.club', 'chating.wiki'].some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
     } catch (error) {
         return false;
     }

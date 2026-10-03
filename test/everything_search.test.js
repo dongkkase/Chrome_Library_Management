@@ -220,18 +220,18 @@ test('다운로드 동시 검색은 기본 OFF이며 부모와 하위 옵션이 
     }
 });
 
-test('두 티카페 도메인의 다운로드에서 정정된 제목을 사용하고 판본명은 제거한다', async () => {
+test('지원 사이트의 다운로드에서 정정된 제목을 사용하고 판본명은 제거한다', async () => {
     const harness = createEverythingSearchHarness({
         enableShortcuts: true, searchEverythingOnDownload: true,
         autoUpdateDownloadBook: false, connectEverything: false
     });
-    for (const hostname of ['tcafe21.com', 'lamu.club', 'www.tcafe21.com', 'www.lamu.club']) {
+    for (const hostname of ['tcafe21.com', 'lamu.club', 'chating.wiki', 'www.tcafe21.com', 'www.lamu.club', 'www.chating.wiki']) {
         const result = await harness.handleShortcutEverythingSearch({ title: '  정정한 작품명(번역판) (외전)  ' }, {
             url: `https://${hostname}/bbs/board.php`, tab: { id: 17 }
         });
         assert.equal(result.ok, true);
     }
-    assert.equal(harness.scriptCalls.length, 4);
+    assert.equal(harness.scriptCalls.length, 6);
     for (const call of harness.scriptCalls) {
         assert.deepEqual(Array.from(call.args), ['정정한 작품명 (외전)']);
         assert.equal(call.target.tabId, 17);
@@ -241,7 +241,7 @@ test('두 티카페 도메인의 다운로드에서 정정된 제목을 사용�
 
 test('검색 옵션 변경을 다음 다운로드부터 반영하고 미지원 사이트와 빈 제목은 무시한다', async () => {
     const harness = createEverythingSearchHarness({ enableShortcuts: true, searchEverythingOnDownload: true });
-    for (const hostname of ['example.org', 'nottcafe21.com', 'lamu.club.example.org']) {
+    for (const hostname of ['example.org', 'nottcafe21.com', 'lamu.club.example.org', 'chating.wiki.example.org', 'notchating.wiki']) {
         assert.equal((await harness.handleShortcutEverythingSearch({ title: '작품명' }, {
             url: `https://${hostname}`, tab: { id: 17 }
         })).skipped, true);

@@ -179,12 +179,16 @@ test('부모/하위 옵션 OFF 및 미지원/유사 도메인에서는 저장하
         assert.equal(harness.writes, 0);
     }
     const harness = createStoreHarness();
-    for (const domain of ['example.org', 'nottcafe21.com', 'lamu.club.example.org']) {
+    for (const domain of ['example.org', 'nottcafe21.com', 'lamu.club.example.org', 'chating.wiki.example.org', 'notchating.wiki']) {
         assert.equal((await harness.update('예시 도서 9권', domain)).skipped, true);
     }
     assert.equal(harness.writes, 0);
-    assert.equal((await harness.update('예시 도서 9권', 'www.tcafe21.com')).ok, true);
-    assert.equal(harness.writes, 1);
+    for (const domain of ['tcafe21.com', 'lamu.club', 'chating.wiki', 'www.tcafe21.com', 'www.lamu.club', 'www.chating.wiki']) {
+        const supported = createStoreHarness();
+        assert.equal((await supported.update('예시 도서 9권', domain)).book.lastVol, '9');
+        assert.deepEqual(plain(supported.currentBook.missingVols), [7, 8]);
+        assert.equal(supported.writes, 1);
+    }
 });
 
 test('미등록 도서는 새 ID로 등록하고 저장 실패는 성공 알림을 내보내지 않는다', async () => {

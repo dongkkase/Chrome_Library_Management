@@ -15,7 +15,7 @@ const browserPath = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ].find(candidate => candidate && fs.existsSync(candidate));
 
-test('티카페 단축키: 실제 DOM과 키 이벤트로 동작 검증', { skip: !browserPath && 'CHROME_BIN에 Chromium 실행 파일을 지정하세요.' }, async t => {
+test('지원 사이트 단축키: 실제 DOM과 키 이벤트로 동작 검증', { skip: !browserPath && 'CHROME_BIN에 Chromium 실행 파일을 지정하세요.' }, async t => {
     const temporaryRoot = fs.realpathSync(os.tmpdir());
     const directory = fs.mkdtempSync(path.join(temporaryRoot, 'book-shortcuts-test-'));
     t.after(() => {
@@ -31,7 +31,7 @@ test('티카페 단축키: 실제 DOM과 키 이벤트로 동작 검증', { skip
         const shortcuts = (function(window) { ${source}; return BookShortcuts; })(testWindow);
         ${siteConfig[0]}
         ${runShortcutTests.toString()}
-        const results = ['tcafe21.com', 'lamu.club'].flatMap(hostname =>
+        const results = ['tcafe21.com', 'lamu.club', 'chating.wiki'].flatMap(hostname =>
             runShortcutTests(shortcuts, testWindow, PRE_DEFINED_SITES, hostname)
                 .map(result => ({ ...result, name: hostname + ': ' + result.name })));
         document.body.textContent = '';
@@ -52,7 +52,7 @@ test('티카페 단축키: 실제 DOM과 키 이벤트로 동작 검증', { skip
     const match = result.stdout.match(/<pre id="results">([\s\S]*?)<\/pre>/);
     assert.ok(match, `브라우저 테스트 결과가 없습니다: ${result.stderr}\n${result.stdout}`);
     const results = JSON.parse(match[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
-    assert.equal(results.length, 36);
+    assert.equal(results.length, 54);
     for (const result of results) {
         await t.test(result.name, () => assert.equal(result.ok, true, result.error));
     }
@@ -60,6 +60,9 @@ test('티카페 단축키: 실제 DOM과 키 이벤트로 동작 검증', { skip
 
 function runShortcutTests(BookShortcuts, testWindow, sites, siteHostname) {
     const results = [];
+    const openAttributes = siteHostname === 'chating.wiki'
+        ? 'class="cw-material-purchase-action"'
+        : 'id="clink-open-btn" class="btn btn-black btn-sm"';
     let valid = true;
     const controller = BookShortcuts.create({ sites, isContextValid: () => valid });
     let clicks;
@@ -128,10 +131,8 @@ function runShortcutTests(BookShortcuts, testWindow, sites, siteHostname) {
     });
 
     test('열람 후 동적으로 생성된 버튼은 다음 D 입력에서 다운로드', () => {
-        const open = document.createElement('button');
-        open.id = 'clink-open-btn';
-        open.textContent = '링크 열람';
-        fixture.appendChild(open);
+        fixture.innerHTML = `<button ${openAttributes}>링크 열람</button>`;
+        const open = fixture.firstElementChild;
         let opened = 0;
         open.onclick = () => {
             opened++;
@@ -143,9 +144,9 @@ function runShortcutTests(BookShortcuts, testWindow, sites, siteHostname) {
         assert(press('d') && clicks.join() === '1');
     });
 
-    test('제공된 링크 열람 HTML의 인라인 openClink 핸들러를 실행한다', () => {
+    test('링크 열람 버튼의 페이지 인라인 핸들러를 실행한다', () => {
         fixture.innerHTML = `<div class="text-center" style="margin-top:10px;">
-            <button type="button" id="clink-open-btn" class="btn btn-black btn-sm" onclick="openClink()">
+            <button type="button" ${openAttributes} onclick="openClink()">
                 <i class="fa fa-unlock-alt"></i> <b>링크 열람(100P)</b>
             </button>
         </div>`;
@@ -160,7 +161,7 @@ function runShortcutTests(BookShortcuts, testWindow, sites, siteHostname) {
 
     test('지원하지 않는 사이트 및 유사 도메인 차단, 실제 하위 도메인 허용', () => {
         download();
-        for (const hostname of ['tcafe21.com.example.org', 'nottcafe21.com', 'lamu.club.example.org', 'notlamu.club', 'example.org']) {
+        for (const hostname of ['tcafe21.com.example.org', 'nottcafe21.com', 'lamu.club.example.org', 'notlamu.club', 'chating.wiki.example.org', 'notchating.wiki', 'example.org']) {
             testWindow.location.hostname = hostname;
             assert(!press('d') && clicks.length === 0, hostname);
         }
@@ -230,7 +231,7 @@ function runShortcutTests(BookShortcuts, testWindow, sites, siteHostname) {
         assert(!press('d'));
         button.removeAttribute('aria-disabled');
         button.remove();
-        fixture.innerHTML = '<button id="clink-open-btn" disabled>링크 열람</button>';
+        fixture.innerHTML = `<button ${openAttributes} disabled>링크 열람</button>`;
         assert(!press('d'));
     });
 
