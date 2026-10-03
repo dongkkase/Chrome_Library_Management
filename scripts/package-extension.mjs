@@ -74,8 +74,8 @@ if (existsSync(output)) throw new Error(`기존 파일을 덮어쓸 수 없습�
 const stage = mkdtempSync(path.join(tmpdir(), 'book-manager-release-'));
 const files = [
     'db.js', 'dexie.min.js', 'background.js', 'common.js', 'content.js',
-    'google-drive.js', 'google-sync.js', 'google-sync-ui.js',
-    'book-ui.js', 'book-ui.css', 'icon.png', 'manifest.json',
+    'google-drive.js', 'google-sync.js', 'google-sync-ui.js', 'download-book-update.js',
+    'book-ui.js', 'book-ui.css', 'book-shortcuts.js', 'icon.png', 'manifest.json',
     'options.html', 'options.css', 'options.js', 'help.html', 'help.css',
     'help.js', 'images', 'author.json'
 ];

@@ -557,6 +557,25 @@ async function bookStorePutByTarget(target, updateBook) {
     return result.books[0] || null;
 }
 
+async function bookStoreApplyDownloadUpdate(target, metadata, missingVolsMap) {
+    await ensureBookStoreReady();
+    const result = await runBookStoreIndexTransaction('rw', async () => {
+        const existingBook = toPublicBook(await findStoredBookByTarget(target));
+        const nextBook = DownloadBookUpdate.updateBook(existingBook, target.title, metadata,
+            getBookMissingVols(existingBook, missingVolsMap));
+        if (!nextBook) return null;
+        const storedBook = prepareBookForStore(nextBook);
+        const id = await db.books.put(storedBook);
+        const revision = await incrementBookStoreRevisionInTransaction();
+        await Dexie.waitFor(chrome.storage.local.set({
+            missingVolsMap: { ...missingVolsMap, [String(id)]: nextBook.missingVols },
+            missingVolsUpdate: { bookId: id, missingVols: nextBook.missingVols, timestamp: Date.now() }
+        }));
+        return { book: { ...storedBook, id }, revision };
+    });
+    return result ? attachBookStoreRevision(result.book, result.revision) : null;
+}
+
 async function bookStorePutManyByTarget(entries) {
     await ensureBookStoreReady();
     if (!Array.isArray(entries)) {

@@ -50,15 +50,27 @@ function extractFunction(source, name) {
     return source.slice(match.index, openingBraceIndex) + extractBalancedBlock(source, openingBraceIndex);
 }
 
-function createEverythingSearchHarness() {
+function createEverythingSearchHarness(preferences = {}) {
     const scriptCalls = [];
     const tabCalls = [];
+    const settings = { ...preferences };
     const context = vm.createContext({
+        URL,
         console: {
             log() {},
             error() {}
         },
         chrome: {
+            storage: {
+                local: {
+                    get(defaults, callback) {
+                        const values = { ...defaults, ...settings };
+                        if (callback) callback(values);
+                        return Promise.resolve(values);
+                    }
+                },
+                onChanged: { addListener() {} }
+            },
             scripting: {
                 executeScript(options) {
                     scriptCalls.push(options);
@@ -76,17 +88,22 @@ function createEverythingSearchHarness() {
 
     vm.runInContext(commonSource, context);
     vm.runInContext(`
+        ${extractFunction(backgroundSource, 'isShortcutDownloadSender')}
+        ${extractFunction(backgroundSource, 'normalizeExactBookTitle')}
         ${extractFunction(backgroundSource, 'stripEditionTagsForEverythingSearch')}
         ${extractFunction(backgroundSource, 'executeEverythingSearch')}
+        ${extractFunction(backgroundSource, 'handleShortcutEverythingSearch')}
     `, context);
 
     return {
         stripEditionTagsForEverythingSearch: context.stripEditionTagsForEverythingSearch,
         executeEverythingSearch: context.executeEverythingSearch,
+        handleShortcutEverythingSearch: context.handleShortcutEverythingSearch,
         setEditionKeywords: context.setEditionKeywords,
         cleanSiteTitle: context.cleanSiteTitle,
         scriptCalls,
-        tabCalls
+        tabCalls,
+        settings
     };
 }
 
@@ -187,6 +204,55 @@ test('백그라운드 에브리띵 실행 직전에 판본명을 제거한다', 
     assert.equal(scriptCalls[0].target.tabId, 17);
     assert.equal(tabCalls.length, 1);
     assert.equal(tabCalls[0].url, `es:${encodeURIComponent('다른 작품')}`);
+});
+
+test('다운로드 동시 검색은 기본 OFF이며 부모와 하위 옵션이 모두 켜져야 실행한다', async () => {
+    for (const preferences of [{}, { enableShortcuts: true }, { searchEverythingOnDownload: true },
+        { enableShortcuts: false, searchEverythingOnDownload: true },
+        { enableShortcuts: true, searchEverythingOnDownload: false }]) {
+        const harness = createEverythingSearchHarness(preferences);
+        const result = await harness.handleShortcutEverythingSearch({ title: '작품명' }, {
+            url: 'https://tcafe21.com/bbs/board.php', tab: { id: 17 }
+        });
+        assert.equal(result.skipped, true);
+        assert.equal(harness.scriptCalls.length, 0);
+        assert.equal(harness.tabCalls.length, 0);
+    }
+});
+
+test('두 티카페 도메인의 다운로드에서 정정된 제목을 사용하고 판본명은 제거한다', async () => {
+    const harness = createEverythingSearchHarness({
+        enableShortcuts: true, searchEverythingOnDownload: true,
+        autoUpdateDownloadBook: false, connectEverything: false
+    });
+    for (const hostname of ['tcafe21.com', 'lamu.club', 'www.tcafe21.com', 'www.lamu.club']) {
+        const result = await harness.handleShortcutEverythingSearch({ title: '  정정한 작품명(번역판) (외전)  ' }, {
+            url: `https://${hostname}/bbs/board.php`, tab: { id: 17 }
+        });
+        assert.equal(result.ok, true);
+    }
+    assert.equal(harness.scriptCalls.length, 4);
+    for (const call of harness.scriptCalls) {
+        assert.deepEqual(Array.from(call.args), ['정정한 작품명 (외전)']);
+        assert.equal(call.target.tabId, 17);
+    }
+    assert.equal(harness.tabCalls.length, 0);
+});
+
+test('검색 옵션 변경을 다음 다운로드부터 반영하고 미지원 사이트와 빈 제목은 무시한다', async () => {
+    const harness = createEverythingSearchHarness({ enableShortcuts: true, searchEverythingOnDownload: true });
+    for (const hostname of ['example.org', 'nottcafe21.com', 'lamu.club.example.org']) {
+        assert.equal((await harness.handleShortcutEverythingSearch({ title: '작품명' }, {
+            url: `https://${hostname}`, tab: { id: 17 }
+        })).skipped, true);
+    }
+    const sender = { url: 'https://lamu.club/bbs/board.php', tab: { id: 17 } };
+    assert.equal((await harness.handleShortcutEverythingSearch({ title: '  ' }, sender)).skipped, true);
+    assert.equal(harness.scriptCalls.length, 0);
+    await harness.handleShortcutEverythingSearch({ title: '작품명' }, sender);
+    harness.settings.searchEverythingOnDownload = false;
+    assert.equal((await harness.handleShortcutEverythingSearch({ title: '작품명' }, sender)).skipped, true);
+    assert.equal(harness.scriptCalls.length, 1);
 });
 
 test('채팅 위키 우클릭은 앵커 전체 텍스트보다 콘텐츠에서 추출한 제목을 사용한다', async () => {

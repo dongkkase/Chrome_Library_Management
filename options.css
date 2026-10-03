@@ -906,6 +906,21 @@ select.edit-type {
 .sub-options .quick-options > label { padding: 0 !important; border: 0 !important; border-radius: 0; background: transparent; }
 .sub-options .quick-options > label:hover { background: transparent; }
 .sub-options .quick-options > .quick-options-child { margin: 12px 0 0 28px !important; padding: 10px 0 0 12px !important; border-left: 2px solid var(--border) !important; }
+.shortcut-key-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    margin-right: 4px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: 5px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.5;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
 .settings-group > label:has(#connectEverythingCheckbox) { grid-column: 1 / -1; }
 .settings-group details { max-width: none !important; margin-top: 10px !important; }
 .settings-group details summary { min-height: 40px; padding: 10px 12px !important; font-size: 12px !important; }

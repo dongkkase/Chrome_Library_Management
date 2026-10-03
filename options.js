@@ -27,6 +27,21 @@ function storageLocalSet(values) {
     });
 }
 
+function updateShortcutSettingsUI(settings = {}) {
+    const shortcuts = document.getElementById('enableShortcutsCheckbox');
+    if (shortcuts && Object.prototype.hasOwnProperty.call(settings, 'enableShortcuts')) {
+        shortcuts.checked = settings.enableShortcuts === true;
+    }
+    for (const key of ['autoUpdateDownloadBook', 'searchEverythingOnDownload']) {
+        const checkbox = document.getElementById(`${key}Checkbox`);
+        if (!checkbox) continue;
+        if (Object.prototype.hasOwnProperty.call(settings, key)) {
+            checkbox.checked = settings[key] === true;
+        }
+        checkbox.disabled = !shortcuts?.checked;
+    }
+}
+
 function requestRuntimeResult(message) {
     return new Promise(resolve => {
         try {
@@ -1882,6 +1897,30 @@ document.addEventListener('DOMContentLoaded', () => {
     initVersionCheck();
 
     const uiCheckbox = document.getElementById('showDownloadUICheckbox');
+    const shortcutsCheckbox = document.getElementById('enableShortcutsCheckbox');
+    const autoUpdateDownloadBookCheckbox = document.getElementById('autoUpdateDownloadBookCheckbox');
+    const searchEverythingOnDownloadCheckbox = document.getElementById('searchEverythingOnDownloadCheckbox');
+    const shortcutDefaults = { enableShortcuts: false, autoUpdateDownloadBook: false, searchEverythingOnDownload: false };
+    chrome.storage.local.get(shortcutDefaults, updateShortcutSettingsUI);
+    for (const [checkbox, key] of [
+        [shortcutsCheckbox, 'enableShortcuts'],
+        [autoUpdateDownloadBookCheckbox, 'autoUpdateDownloadBook'],
+        [searchEverythingOnDownloadCheckbox, 'searchEverythingOnDownload']
+    ]) {
+        if (!checkbox) continue;
+        checkbox.addEventListener('change', () => {
+            const checked = checkbox.checked;
+            updateShortcutSettingsUI();
+            void runOptionsAsyncTask(async () => {
+                try {
+                    await storageLocalSet({ [key]: checked });
+                } catch (error) {
+                    updateShortcutSettingsUI(await storageLocalGet(shortcutDefaults));
+                    throw error;
+                }
+            }, '단축키 설정 저장');
+        });
+    }
     const confirmCheckbox = document.getElementById('autoConfirmCheckbox');
     const folderCheckbox = document.getElementById('autoFolderCheckbox'); 
     const focusLeftCheckbox = document.getElementById('focusLeftTabCheckbox');
@@ -2367,6 +2406,13 @@ async function flushExternalBookListRender() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && (changes.enableShortcuts || changes.autoUpdateDownloadBook || changes.searchEverythingOnDownload)) {
+        const settings = {};
+        for (const key of ['enableShortcuts', 'autoUpdateDownloadBook', 'searchEverythingOnDownload']) {
+            if (changes[key]) settings[key] = changes[key].newValue;
+        }
+        updateShortcutSettingsUI(settings);
+    }
     if (areaName === 'local' && changes.googleSyncState) {
         const { oldValue, newValue } = changes.googleSyncState;
         if (newValue?.runCompletedAt !== oldValue?.runCompletedAt

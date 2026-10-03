@@ -136,6 +136,7 @@ function stripEditionTagsForEverythingSearch(title) {
 const PRE_DEFINED_SITES = [
 { 
     url: "tcafe21.com", 
+    shortcuts: { openSelector: '#clink-open-btn', downloadSelector: '.auto-dl-btn', titleSelector: '.view-wrap > h1' },
     selector: ".board-hot-posts, #fboardlist .list-subject",
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
@@ -266,6 +267,7 @@ const PRE_DEFINED_SITES = [
 },
 { 
     url: "lamu.club", 
+    shortcuts: { openSelector: '#clink-open-btn', downloadSelector: '.auto-dl-btn', titleSelector: '.view-wrap > h1' },
     selector: ".board-hot-posts, #fboardlist .list-subject",
     detailSelector: ".view-wrap > h1",
     thumbSelector: "img", 
@@ -576,6 +578,11 @@ let lastRightClickedContext = null;
 let isRightClickedContextCaptureInstalled = false;
 
 let isDownloadUIEnabled = false;
+
+const bookShortcuts = BookShortcuts.create({ sites: PRE_DEFINED_SITES, isContextValid: isExtensionContextValid });
+safeStorageGet({ enableShortcuts: false }, (data) => {
+    bookShortcuts.setEnabled(data.enableShortcuts);
+});
 
 function setDownloadUIEnabled(enabled) {
     isDownloadUIEnabled = enabled;
@@ -2106,9 +2113,13 @@ function injectDirectDownloadButtons(allowedDLs) {
 
     function extractTargetBookTitle(element) {
         let hasTranslation = false;
+        const hostname = window.location.hostname.toLowerCase();
+        const shortcutSite = PRE_DEFINED_SITES.find(site => site.shortcuts
+            && (hostname === site.url || hostname.endsWith(`.${site.url}`)));
+        const detailSelector = globalDetailSelector || shortcutSite?.shortcuts.titleSelector;
 
-        if (typeof globalDetailSelector !== 'undefined' && globalDetailSelector) {
-            const detailEl = document.querySelector(globalDetailSelector);
+        if (detailSelector) {
+            const detailEl = document.querySelector(detailSelector);
             if (detailEl) {
                 const temp = document.createElement('div');
                 temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
@@ -2122,6 +2133,15 @@ function injectDirectDownloadButtons(allowedDLs) {
                 else if (isSupportSingleCharEnabled && title.length === 1 && /^[a-zA-Z0-9]$/.test(title)) skip = true;
                 if (!skip) return { title: title, hasTranslation: hasTranslation, sourceText: rawText };
             }
+        }
+
+        if (shortcutSite) {
+            const pageTitle = document.title.split(/\s+[>|]\s+/)[0].trim();
+            return {
+                title: getResolvedSiteTitle(pageTitle).title,
+                hasTranslation: hasTranslationEditionMarker(pageTitle),
+                sourceText: pageTitle
+            };
         }
 
         let container = element.closest('.bsx-body, tr, li, td, .list-item, div.item, .bo_v_atc') || element.parentElement;
@@ -2170,6 +2190,7 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
         const autoBtn = document.createElement('a');
         autoBtn.href = "#";
         autoBtn.className = "auto-dl-btn";
+        autoBtn.dataset.downloadUrl = url;
         
         let btnText = "⚡ 바로다운로드";
         let bgColor = "#17a2b8";
@@ -2212,17 +2233,41 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
                     ? findMatchingBook(downloadTitleParts, resolvedDownloadTitle ? resolvedDownloadTitle.bookId : null)
                     : { book: null };
                 const matchedBook = match && match.book ? match.book : null;
-                let bType = matchedBook ? matchedBook.type : null;
-                if (bType === 'incomplete') finalTitle = "(미완)" + finalTitle;
-                const downloadFolder = buildDownloadFolder(matchedBook && matchedBook.folderRule, finalTitle);
-                sendRuntimeMessage({
-                    action: "DOWNLOAD_" + targetType,
-                    url: url,
-                    password: pw,
-                    title: finalTitle,
-                    downloadFolder: downloadFolder,
-                    bookId: matchedBook ? matchedBook.id : null
-                });
+                const updateTitle = finalTitle;
+                const isShortcutDownload = BookShortcuts.isDownloadTrigger(autoBtn);
+                const startDownload = downloadBook => {
+                    const downloadTitle = downloadBook?.type === 'incomplete' ? '(미완)' + updateTitle : updateTitle;
+                    const downloadFolder = buildDownloadFolder(downloadBook?.folderRule, downloadTitle);
+                    sendRuntimeMessage({
+                        action: "DOWNLOAD_" + targetType,
+                        url: url,
+                        password: pw,
+                        title: downloadTitle,
+                        downloadFolder: downloadFolder,
+                        bookId: downloadBook?.id ?? null
+                    });
+                    if (isShortcutDownload) {
+                        requestRuntimeResponse({
+                            action: 'SEARCH_EVERYTHING_ON_DOWNLOAD',
+                            title: updateTitle
+                        }, response => {
+                            if (response?.ok === false) showInfoToast('에브리띵 검색을 실행하지 못했습니다.', true);
+                        });
+                    }
+                };
+                if (isShortcutDownload) {
+                    requestRuntimeResponse({
+                        action: 'AUTO_UPDATE_DOWNLOAD_BOOK',
+                        bookId: matchedBook ? matchedBook.id : null,
+                        title: updateTitle,
+                        sourceTitle: sourceTitleText
+                    }, response => {
+                        if (response?.ok === false) showInfoToast('다운로드 도서 상태를 갱신하지 못했습니다.', true);
+                        startDownload(response?.ok === true && response.book ? response.book : matchedBook);
+                    });
+                } else {
+                    startDownload(matchedBook);
+                }
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
             }
@@ -3692,6 +3737,10 @@ try {
     if (isExtensionContextValid()) {
         chrome.storage.onChanged.addListener((changes, namespace) => {
             if (namespace !== 'local') return;
+
+            if (changes.enableShortcuts) {
+                bookShortcuts.setEnabled(changes.enableShortcuts.newValue);
+            }
 
             if (changes.showDownloadUI) {
                 setDownloadUIEnabled(changes.showDownloadUI.newValue !== false);

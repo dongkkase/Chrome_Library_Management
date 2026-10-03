@@ -1,4 +1,4 @@
-importScripts('dexie.min.js', 'db.js', 'common.js', 'google-drive.js', 'google-sync.js');
+importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'google-drive.js', 'google-sync.js');
 
 const rightClickedContexts = new Map();
 const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
@@ -427,6 +427,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 isError: true
             });
             sendResponse({ ok: false, error: errorMessage });
+        });
+        return true;
+    }
+
+    else if (message.action === 'SEARCH_EVERYTHING_ON_DOWNLOAD') {
+        handleShortcutEverythingSearch(message, sender).then(sendResponse).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
+
+    else if (message.action === 'AUTO_UPDATE_DOWNLOAD_BOOK') {
+        enqueueBookMutation(() => handleDownloadBookUpdate(message, sender)).then(sendResponse).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
         });
         return true;
     }
@@ -1387,6 +1401,47 @@ async function handleMissingVolUpdate(message) {
 
         await chrome.storage.local.set({ missingVolsMap, missingVolsUpdate: update });
         return update;
+    });
+}
+
+function isShortcutDownloadSender(sender) {
+    try {
+        const hostname = new URL(sender.url || sender.tab?.url).hostname.toLowerCase();
+        return ['tcafe21.com', 'lamu.club'].some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+    } catch (error) {
+        return false;
+    }
+}
+
+async function handleShortcutEverythingSearch(message, sender) {
+    if (!isShortcutDownloadSender(sender)) return { ok: true, skipped: true };
+    const settings = await chrome.storage.local.get({ enableShortcuts: false, searchEverythingOnDownload: false });
+    if (settings.enableShortcuts !== true || settings.searchEverythingOnDownload !== true) return { ok: true, skipped: true };
+    await customFiltersReady;
+    const title = normalizeExactBookTitle(message.title);
+    if (!title) return { ok: true, skipped: true };
+    executeEverythingSearch(title, sender.tab?.id);
+    return { ok: true };
+}
+
+async function handleDownloadBookUpdate(message, sender) {
+    if (!isShortcutDownloadSender(sender)) return { ok: true, skipped: true };
+    await customFiltersReady;
+    return bookStoreWithSyncLock(async () => {
+        const settings = await chrome.storage.local.get({ enableShortcuts: false, autoUpdateDownloadBook: false, missingVolsMap: {} });
+        if (settings.enableShortcuts !== true || settings.autoUpdateDownloadBook !== true) return { ok: true, skipped: true };
+        const title = String(message.title || '').trim();
+        if (!title || !message.sourceTitle) return { ok: true, skipped: true };
+        const metadata = DownloadBookUpdate.parseTitle(message.sourceTitle);
+        const savedBook = await bookStoreApplyDownloadUpdate({
+            id: message.bookId,
+            title,
+            rejectLowCoverageId: true
+        }, metadata, settings.missingVolsMap);
+        if (!savedBook) return { ok: true, skipped: true };
+        await bookStorePublishChange({ type: 'upsert', reason: 'shortcut-download', book: savedBook });
+        sendTabMessage(sender.tab?.id, { action: 'SHOW_TOAST', book: savedBook });
+        return { ok: true, book: savedBook };
     });
 }
 

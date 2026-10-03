@@ -60,6 +60,7 @@
             "js": [
                 "common.js",
                 "book-ui.js",
+                "book-shortcuts.js",
                 "content.js"
             ],
             "css": [

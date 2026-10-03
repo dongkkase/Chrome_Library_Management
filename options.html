@@ -197,6 +197,23 @@
                 <div class="panel-box sub-options">
                     <h4 style="font-size: 14px;">⚙️ 확장 기능 설정</h4>
                     <fieldset class="settings-group"><legend>다운로드</legend>
+                        <div class="quick-options" role="group" aria-label="다운로드 단축키 설정">
+                            <label>
+                                <input type="checkbox" id="enableShortcutsCheckbox">
+                                <b>단축키 사용</b>
+                                <span><kbd class="shortcut-key-badge">D key:</kbd> 링크 열람 / 바로다운로드 · 여러 주소는 1~9로 선택 (입력 중 제외)</span>
+                            </label>
+                            <label class="quick-options-child">
+                                <input type="checkbox" id="autoUpdateDownloadBookCheckbox" disabled>
+                                <b>다운로드 시 미완·완결 자동 업데이트</b>
+                                <span>단축키로 다운로드를 요청하면 제목의 ‘완결’ 여부와 권수를 반영합니다. 건너뛴 권수는 누락으로 등록하고, 받은 권수는 누락에서 제거합니다. 미등록 도서도 자동 등록합니다.</span>
+                            </label>
+                            <label class="quick-options-child">
+                                <input type="checkbox" id="searchEverythingOnDownloadCheckbox" disabled>
+                                <b>에브리띵 같이 검색</b>
+                                <span>단축키로 다운로드를 요청할 때 해당 도서 제목으로 Everything도 검색합니다. Everything 설치와 es: 연결이 필요합니다.</span>
+                            </label>
+                        </div>
                         <label>
                             <input type="checkbox" id="autoFolderCheckbox" checked>
                             <b>자동 폴더 생성 다운로드</b>
