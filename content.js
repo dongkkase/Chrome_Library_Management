@@ -571,6 +571,7 @@ let pendingOptimisticChanges = new Map();
 let optimisticRecoveryTimer = null;
 let isDataLoaded = false;
 let titleCorrections = {};
+let siteTitleColorObserver = null;
 
 let similarityCache = {};
 let lastRightClickedLink = null; 
@@ -798,7 +799,8 @@ function sanitizeDownloadFolderSegment(name) {
     return String(name || '')
         .replace(/[\\/:*?"<>|]/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim()
+        .replace(/[.\s]+$/, '');
 }
 
 function buildDownloadFolder(folderRule, fallbackTitle) {
@@ -1707,17 +1709,17 @@ function getPureLinkText(link) {
     const chatingWikiTitle = getChatingWikiListTitle(link);
     if (chatingWikiTitle !== null) return chatingWikiTitle;
 
-  let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
-  const temp = document.createElement('div');
-  temp.innerHTML = safeHTML;
-  const unwantedElements = temp.querySelectorAll('.count, .book-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em, .cw-board-item__tags, .cw-board-item__meta');
-  unwantedElements.forEach(el => el.remove());
-  const walker = document.createTreeWalker(temp, NodeFilter.SHOW_COMMENT, null, false);
-  let commentNode;
-  const commentsToRemove = [];
-  while (commentNode = walker.nextNode()) { commentsToRemove.push(commentNode); }
-  commentsToRemove.forEach(node => node.remove());
-  return temp.textContent.trim();
+    let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
+    const temp = document.createElement('div');
+    temp.innerHTML = safeHTML;
+    const unwantedElements = temp.querySelectorAll('.count, .book-badge, .bm-site-color-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em, .cw-board-item__tags, .cw-board-item__meta');
+    unwantedElements.forEach(el => el.remove());
+    const walker = document.createTreeWalker(temp, NodeFilter.SHOW_COMMENT, null, false);
+    let commentNode;
+    const commentsToRemove = [];
+    while (commentNode = walker.nextNode()) { commentsToRemove.push(commentNode); }
+    commentsToRemove.forEach(node => node.remove());
+    return temp.textContent.trim();
 }
 
 function getCurrentRightClickedContext() {
@@ -2352,6 +2354,57 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
     });
 }
 
+function syncSiteTitleColorBadges(element) {
+    const hostname = window.location.hostname;
+    if (!['tcafe21.com', 'lamu.club'].some(domain => hostname === domain || hostname.endsWith(`.${domain}`))) return;
+
+    const markers = Array.from(element.querySelectorAll('.nm-mark'));
+    if (element.matches('.nm-mark')) markers.unshift(element);
+    if (!markers.length) return;
+
+    if (!siteTitleColorObserver) {
+        siteTitleColorObserver = new MutationObserver(records => {
+            if (!isExtensionContextValid()) {
+                siteTitleColorObserver.disconnect();
+                return;
+            }
+            const changedMarkers = new Set(records.map(record => record.target));
+            changedMarkers.forEach(marker => {
+                if (marker.isConnected) syncSiteTitleColorBadges(marker);
+            });
+        });
+    }
+
+    markers.forEach(marker => {
+        siteTitleColorObserver.observe(marker, { attributes: true, attributeFilter: ['style'] });
+        // 사이트의 인라인 색상은 보존하고, 실제 제목에는 CSS로 부모 스타일을 상속한다.
+        const originalColor = marker.style.color;
+        let badge = marker.querySelector(':scope > .bm-site-color-badge');
+        if (!originalColor || /^(inherit|initial|unset|revert|revert-layer|currentcolor)$/i.test(originalColor)) {
+            badge?.remove();
+            delete marker.dataset.bmSiteColor;
+            return;
+        }
+
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'bm-site-color-badge';
+            badge.setAttribute('role', 'img');
+            // 갤러리 테마의 span 스타일보다 우선하여 뱃지 크기와 간격을 유지한다.
+            badge.style.cssText = 'display:inline-block !important; width:0.65em !important; height:0.65em !important; margin:0 0.35em 0 0 !important; padding:0 !important; border:0 !important; border-radius:2px !important; vertical-align:0.02em !important; flex-shrink:0 !important;';
+            marker.prepend(badge);
+        }
+
+        if (marker.dataset.bmSiteColor !== originalColor) marker.dataset.bmSiteColor = originalColor;
+        if (badge.style.backgroundColor !== originalColor) {
+            badge.style.setProperty('background-color', originalColor, 'important');
+            const label = `사이트 원래 제목 색상: ${originalColor}`;
+            badge.setAttribute('title', label);
+            badge.setAttribute('aria-label', label);
+        }
+    });
+}
+
 function setManagedTitleStyle(target, property, value) {
     if (!target) return;
     target.style.setProperty(property, value, "important");
@@ -2854,6 +2907,7 @@ function applyStyleToSingleLink(link) {
     // 핵심 방어: 이미 상세페이지 로직이 처리한 요소면 일반 링크 함수는 쳐다보지도 않고 도망감 (무한루프 차단)
     if (link.dataset.bmIsDetail === "true") return; 
 
+    syncSiteTitleColorBadges(link);
     const renderTargets = getListRenderTargets(link);
     const badgeTarget = renderTargets.badgeTarget;
     const actionsTarget = renderTargets.actionsTarget;
@@ -3076,6 +3130,7 @@ function applyStyleToDetailElement(el) {
     // 핵심 방어 마커 부착: 내가 상세페이지 로직으로 찜했으니 단일 링크 로직은 건들지 마라 선언
     el.dataset.bmIsDetail = "true"; 
 
+    syncSiteTitleColorBadges(el);
     const renderTargets = getDetailRenderTargets(el);
     const badgeTarget = renderTargets.badgeTarget;
     const actionsTarget = renderTargets.actionsTarget;

@@ -46,10 +46,11 @@ async function waitForBookStoreTitleRules() {
 }
 
 function getCurrentBookStoreIndexSignature() {
-    if (typeof getEditionKeywordsSignature === 'function') {
-        return getEditionKeywordsSignature();
-    }
-    return '';
+    const editionSignature = typeof getEditionKeywordsSignature === 'function'
+        ? getEditionKeywordsSignature()
+        : '';
+    // 제목 끝 마침표 정규화가 반영되도록 기존 검색 키를 다시 생성한다.
+    return `title-v2:${editionSignature}`;
 }
 
 async function reindexBookStoreForSignature(indexSignature) {
@@ -145,7 +146,7 @@ function prepareBookForStore(book) {
         delete storedBook.id;
     }
 
-    storedBook.title = String(storedBook.title || '').trim();
+    storedBook.title = String(storedBook.title || '').trim().replace(/[.\s]+$/, '');
     if (!storedBook.title) {
         throw new TypeError('도서 제목은 비워둘 수 없습니다.');
     }

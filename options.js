@@ -248,7 +248,8 @@ function sanitizeFolderRulePreviewSegment(value) {
     return String(value || '')
         .replace(/[\\/:*?"<>|]/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim()
+        .replace(/[.\s]+$/, '');
 }
 
 function getFolderRulePreviewData(folderInput) {

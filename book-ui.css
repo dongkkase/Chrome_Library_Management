@@ -1,3 +1,8 @@
+.nm-mark[data-bm-site-color] {
+    color: inherit !important;
+    font-weight: inherit !important;
+}
+
 .bm-hide-panel {
     --bm-qh-panel: #ffffff;
     --bm-qh-text: #243249;

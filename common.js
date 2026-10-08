@@ -305,7 +305,8 @@ function getTitleMatchParts(title) {
         .replace(/&lt;/gi, '(')
         .replace(/&gt;/gi, ')')
         .replace(/</g, '(')
-        .replace(/>/g, ')');
+        .replace(/>/g, ')')
+        .replace(/[.\s]+$/, '');
     const editionQualifiers = [];
     let hasNegativeEditionQualifier = false;
     let hasOriginalEditionMarker = false;

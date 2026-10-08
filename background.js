@@ -10,7 +10,8 @@ function sanitizeDownloadFolderSegment(segment) {
     return String(segment || '')
         .replace(/[\\/:*?"<>|]/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim()
+        .replace(/[.\s]+$/, '');
 }
 
 function sanitizeDownloadFolderPath(rawPath) {
