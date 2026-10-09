@@ -133,6 +133,7 @@ function createChatingWikiTitleHarness() {
     });
 
     vm.runInContext(`
+        ${extractFunction(contentSource, 'getTitleTextContent')}
         ${extractFunction(contentSource, 'getChatingWikiListTitle')}
         ${extractFunction(contentSource, 'getPureLinkText')}
     `, context);
@@ -284,9 +285,15 @@ test('채팅 위키 우클릭은 앵커 전체 텍스트보다 콘텐츠에서 �
 
 test('채팅 위키 제목은 게시물 내부 요소에서 호출해도 strong 텍스트만 추출한다', () => {
     const cleanLinkTitle = '[스에히로 마치] 질투는 여우빛 (단권)';
+    const titleElement = {
+        textContent: cleanLinkTitle,
+        cloneNode() {
+            return { textContent: cleanLinkTitle, matches: () => false, querySelectorAll: () => [] };
+        }
+    };
     const titleContainer = {
         querySelector(selector) {
-            return selector === 'strong' ? { textContent: cleanLinkTitle } : null;
+            return selector === 'strong' ? titleElement : null;
         }
     };
     const item = {

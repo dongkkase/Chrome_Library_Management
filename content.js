@@ -1682,6 +1682,17 @@ function processUselessComments() {
     }
 }
 
+function getTitleTextContent(element, excludedSelector = '') {
+    const clone = element.cloneNode(true);
+    const ignoredSelector = 'style, script, noscript, template, img, .count, .book-badge, .bm-site-color-badge, .comment-badge, .bm-quick-actions';
+    const selector = excludedSelector ? `${ignoredSelector}, ${excludedSelector}` : ignoredSelector;
+    if (clone.matches(selector)) return '';
+
+    // textContent는 스타일과 스크립트 본문도 포함하므로 복제본에서 먼저 제외한다.
+    clone.querySelectorAll(selector).forEach(node => node.remove());
+    return clone.textContent.trim();
+}
+
 function getChatingWikiListTitle(link) {
     if (!link || !window.location.hostname.includes('chating.wiki')) return null;
     if (typeof link.matches !== 'function') return null;
@@ -1696,30 +1707,19 @@ function getChatingWikiListTitle(link) {
     if (!titleContainer) return null;
 
     const titleElement = titleContainer.querySelector('strong');
-    if (titleElement && titleElement.textContent.trim()) return titleElement.textContent.trim();
+    if (titleElement) {
+        const title = getTitleTextContent(titleElement);
+        if (title) return title;
+    }
 
-    const clone = titleContainer.cloneNode(true);
-    clone.querySelectorAll('.cw-board-item__comments, .cw-board-item__tags, .book-badge, .bm-quick-actions').forEach(element => {
-        element.remove();
-    });
-    return clone.textContent.trim() || null;
+    return getTitleTextContent(titleContainer, '.cw-board-item__comments, .cw-board-item__tags') || null;
 }
 
 function getPureLinkText(link) {
     const chatingWikiTitle = getChatingWikiListTitle(link);
     if (chatingWikiTitle !== null) return chatingWikiTitle;
 
-    let safeHTML = link.innerHTML.replace(/<img[^>]*>/gi, '');
-    const temp = document.createElement('div');
-    temp.innerHTML = safeHTML;
-    const unwantedElements = temp.querySelectorAll('.count, .book-badge, .bm-site-color-badge, .comment-badge, .bm-quick-actions, .cw-board-item__title > em, .cw-board-item__tags, .cw-board-item__meta');
-    unwantedElements.forEach(el => el.remove());
-    const walker = document.createTreeWalker(temp, NodeFilter.SHOW_COMMENT, null, false);
-    let commentNode;
-    const commentsToRemove = [];
-    while (commentNode = walker.nextNode()) { commentsToRemove.push(commentNode); }
-    commentsToRemove.forEach(node => node.remove());
-    return temp.textContent.trim();
+    return getTitleTextContent(link, '.cw-board-item__title > em, .cw-board-item__tags, .cw-board-item__meta');
 }
 
 function getCurrentRightClickedContext() {
@@ -2124,10 +2124,7 @@ function injectDirectDownloadButtons(allowedDLs) {
         if (detailSelector) {
             const detailEl = document.querySelector(detailSelector);
             if (detailEl) {
-                const temp = document.createElement('div');
-                temp.innerHTML = detailEl.innerHTML.replace(/<img[^>]*>/gi, '');
-                temp.querySelectorAll('.bm-quick-actions, .book-badge, button, .auto-dl-btn').forEach(e => e.remove());
-                let rawText = temp.textContent;
+                const rawText = getTitleTextContent(detailEl, 'button, .auto-dl-btn');
                 if (hasTranslationEditionMarker(rawText)) hasTranslation = true;
                 let title = getResolvedSiteTitle(rawText).title;
                 let skip = false;
@@ -2149,10 +2146,8 @@ function injectDirectDownloadButtons(allowedDLs) {
 
         let container = element.closest('.bsx-body, tr, li, td, .list-item, div.item, .bo_v_atc') || element.parentElement;
         if (container) {
-            const temp = document.createElement('div');
-            temp.innerHTML = container.innerHTML.replace(/<img[^>]*>/gi, '');
-            temp.querySelectorAll('.bm-quick-actions, .book-badge, .auto-dl-btn, button, .count').forEach(e => e.remove());
-            let rawText = temp.textContent.replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
+            const rawText = getTitleTextContent(container, 'button, .auto-dl-btn')
+                .replace(/탭열기|다운로드\s*링크\s*발급|복사|제외|미완|완결|삭제|검색/gi, ' ').replace(/\s+/g, ' ').trim();
             if (hasTranslationEditionMarker(rawText)) hasTranslation = true;
             let title = getResolvedSiteTitle(rawText).title;
             let skip = false;

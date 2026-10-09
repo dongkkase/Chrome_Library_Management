@@ -42,7 +42,7 @@ test('사이트 제목 색상: 실제 DOM에서 원본 색상 배지와 확장 �
     assert.ok(galleryCss, '기존 갤러리 스타일을 찾을 수 없습니다.');
     const functions = [
         'syncSiteTitleColorBadges', 'getListRenderTargets', 'getDetailRenderTargets',
-        'getChatingWikiListTitle', 'getPureLinkText', 'setManagedTitleStyle',
+        'getTitleTextContent', 'getChatingWikiListTitle', 'getPureLinkText', 'setManagedTitleStyle',
         'clearManagedTitleStyles', 'removeBadge', 'applyStyleToSingleLink', 'applyStyleToDetailElement'
     ].map(name => extractFunction(source, name)).join('\n');
     const html = `<!doctype html><html lang="ko"><meta charset="utf-8">
