@@ -1238,14 +1238,7 @@ bulkInput.addEventListener('input', async () => {
     const line = lines[0]; 
     
     const resMatch = line.match(/\d{3,4}\s*px/gi);
-    const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-    const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
-    const endNumMatch = line.match(/(\d+)\s*$/);
-    
-    let parsedVol = "";
-    if (rangeMatch) parsedVol = parseInt(rangeMatch[2], 10).toString();
-    else if (singleMatch) parsedVol = parseInt(singleMatch[1], 10).toString();
-    else if (endNumMatch) parsedVol = parseInt(endNumMatch[1], 10).toString();
+    const parsedVol = String(getBookVolume(line, 'bulk') || '');
     
     let cleanTitle = cleanSiteTitle(line)
       .replace(/\d+\s*권/g, '')
@@ -1306,15 +1299,7 @@ document.getElementById('saveBtn').onclick = async () => {
             lines.forEach(line => {
                 const resMatch = line.match(/\d{3,4}\s*px/gi);
 
-                // 이전에 수정한 부(?!터) 정규식 그대로 유지
-                const rangeMatch = line.match(/(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-                const singleMatch = line.match(/(\d+)\s*(?:권|완결|화|부(?!터))/);
-                const endNumMatch = line.match(/(\d+)\s*$/);
-
-                let parsedVol = "";
-                if (rangeMatch) parsedVol = parseInt(rangeMatch[2], 10).toString();
-                else if (singleMatch) parsedVol = parseInt(singleMatch[1], 10).toString();
-                else if (endNumMatch) parsedVol = parseInt(endNumMatch[1], 10).toString();
+                const parsedVol = String(getBookVolume(line, 'bulk') || '');
 
                 let cleanTitle = cleanSiteTitle(line)
                     .replace(/\d+\s*권/g, '')

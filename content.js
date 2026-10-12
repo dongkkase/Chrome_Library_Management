@@ -2943,15 +2943,7 @@ function applyStyleToSingleLink(link) {
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
-            let siteVol = 0;
-            // [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_,\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-            const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
-            const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
-            
-            if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
-            else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
-            else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
+            const siteVol = getBookVolume(originalText);
 
             link._bmData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText, hasSiteTranslationEdition: hasContextTranslationEdition };
         }
@@ -3156,15 +3148,7 @@ function applyStyleToDetailElement(el) {
             const siteResMatch = originalText.match(/(\d{3,4})\s*p(?:x)?/i);
             const siteRes = siteResMatch ? parseInt(siteResMatch[1], 10) : 0;
             
-            let siteVol = 0;
-            // [수정] 범위 뒤에 나오는 숫자가 px나 p로 끝나면 권수로 인식하지 않도록 방어 코드 추가
-            const rangeMatch = originalText.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_,\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-            const singleMatch = originalText.match(/(\d+)\s*(?:권|화)/);
-            const lastNumMatch = originalText.match(/(\d+)\s*(?=[\[\(]|$)/);
-
-            if (rangeMatch) siteVol = parseInt(rangeMatch[2], 10);
-            else if (singleMatch) siteVol = parseInt(singleMatch[1], 10);
-            else if (lastNumMatch) siteVol = parseInt(lastNumMatch[1], 10);
+            const siteVol = getBookVolume(originalText);
 
             el._bmDetailData = { skip: false, pureTitle, autoTitle: resolvedTitle.autoTitle, isTitleCorrected: resolvedTitle.isCorrected, correctionBookId: resolvedTitle.bookId, titleParts, siteBodyOriginal: titleParts.baseOriginal, siteBodyNoSpace: titleParts.baseNoSpace, siteMatchKey: titleParts.matchKey, siteRes, siteVol, raw: currentRawText, originalText };
         }

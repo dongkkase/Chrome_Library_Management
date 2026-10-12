@@ -5,7 +5,8 @@ const DownloadBookUpdate = (() => {
         const text = String(rawTitle || '').normalize('NFKC');
         const complete = /완결/.test(text.replace(/미\s*완결|완결\s*(?:예정|미정|아님)/g, ''));
         const resolutions = [...text.matchAll(/(\d{3,4})\s*p(?:x)?\b/gi)].map(match => `${match[1]}px`);
-        const volumeText = text
+        const volumeSuffix = parseBookVolumeSuffix(text);
+        const volumeText = (volumeSuffix ? volumeSuffix.volumeText : text)
             .replace(/\d{3,4}\s*p(?:x)?\b/gi, ' ')
             .replace(/\d+(?:[.,]\d+)?\s*(?:KB|MB|GB|TB|%)/gi, ' ');
         const volumes = new Set();
@@ -40,28 +41,31 @@ const DownloadBookUpdate = (() => {
         if (!volumes.size) {
             const range = volumeText.match(/\b\d+\s*[~\-～〜〰∼–—ㅡ_]\s*\d+\b/);
             if (range) addSequence(range[0]);
-            else {
+            else if (!volumeSuffix) {
                 const suffix = volumeText.replace(/[[({【（]\s*완결\s*[\])}】）]|완결/g, ' ').replace(/[[\](){}【】（）]/g, ' ');
                 const number = suffix.match(/(?:^|\s)(\d+)\s*$/);
                 if (number) addVolume(Number(number[1]));
             }
         }
+        const sortedVolumes = [...volumes].sort((a, b) => a - b);
         return {
             complete,
-            volumes: [...volumes].sort((a, b) => a - b),
+            volumes: sortedVolumes,
+            lastVolume: sortedVolumes.length ? sortedVolumes[sortedVolumes.length - 1] : volumeSuffix?.lastVolume || 0,
             resolution: [...new Set(resolutions)].join(',')
         };
     }
 
     function updateBook(existingBook, title, metadata, missingVols = []) {
         const volumes = metadata.volumes;
-        if (!metadata.complete && !volumes.length) return null;
+        if (!metadata.complete && !volumes.length && !metadata.lastVolume) return null;
         const previousVolume = Math.max(0, Number(existingBook?.lastVol) || 0);
-        const downloadedVolume = volumes.length ? volumes[volumes.length - 1] : 0;
+        const downloadedVolume = volumes.length ? volumes[volumes.length - 1] : metadata.lastVolume || 0;
         const latestVolume = Math.max(previousVolume, downloadedVolume);
         const downloaded = new Set(volumes);
         const missing = new Set(missingVols.map(Number).filter(volume => Number.isSafeInteger(volume) && volume > 0));
-        if (downloadedVolume > previousVolume) {
+        // 괄호의 권수만으로는 실제 포함 권수를 알 수 없으므로 기존 누락 목록을 유지합니다.
+        if (volumes.length && downloadedVolume > previousVolume) {
             for (let volume = Math.floor(previousVolume) + 1; volume < downloadedVolume; volume++) {
                 if (!downloaded.has(volume)) missing.add(volume);
             }

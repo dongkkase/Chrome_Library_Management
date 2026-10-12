@@ -7,7 +7,7 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const sources = Object.fromEntries(['download-book-update.js', 'background.js', 'db.js', 'content.js', 'options.js', 'common.js']
     .map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
-const api = vm.runInNewContext(`${sources['download-book-update.js']}\nDownloadBookUpdate;`);
+const api = vm.runInNewContext(`${sources['common.js']}\n${sources['download-book-update.js']}\nDownloadBookUpdate;`);
 const plain = value => JSON.parse(JSON.stringify(value));
 const book = extra => ({ id: 1, title: '예시 도서', type: 'incomplete', lastVol: '6', resolution: '1500px', folderRule: '만화', ...extra });
 const update = (existing, title, missing = existing?.missingVols || []) => api.updateBook(existing, '예시 도서', api.parseTitle(title), missing);

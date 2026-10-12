@@ -458,6 +458,87 @@ function isUselessComment(text) {
     );
 }
 
+// 제목 끝의 보조 권수 표기만 해석합니다. 포함 범위가 없는 괄호 숫자는 최대 권수로만 사용합니다.
+function parseBookVolumeSuffix(value) {
+    const source = String(value || '')
+        .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060]/g, '')
+        .replace(/\\~/g, '~');
+    // 인덱스 길이가 같은 전각 메타데이터 문자만 변환하고 제목의 원래 표기는 보존합니다.
+    const text = source.replace(/[０-９Ｅｅ（）［］]/g, character => character.normalize('NFKC'));
+    if (!/\d\s*E|완외|\(\s*\d+\s*\)/i.test(text)) return null;
+    let core = text.trimEnd();
+    const metadataPattern = /^(?:완결|미완결|완|미완|\d{3,4}\s*p(?:x)?|\d+(?:[.,]\d+)?\s*(?:KB|MB|GB|TB)|epub|pdf|txt)$/i;
+    while (core) {
+        const bracket = core.match(/\(([^()]*)\)$|\[([^\[\]]*)\]$|【([^【】]*)】$/);
+        if (bracket && (metadataPattern.test((bracket[1] ?? bracket[2] ?? bracket[3]).trim())
+            || isEditionQualifier(bracket[1] ?? bracket[2] ?? bracket[3]))) {
+            core = core.slice(0, bracket.index).trimEnd();
+            continue;
+        }
+        const token = core.match(/\s+(?:완결|미완결|완|미완|\d{3,4}\s*p(?:x)?|\d+(?:[.,]\d+)?\s*(?:KB|MB|GB|TB)|epub|pdf|txt)$/i);
+        if (!token) break;
+        core = core.slice(0, token.index).trimEnd();
+    }
+
+    const tail = source.slice(core.length);
+    const validVolume = number => Number.isSafeInteger(number) && number > 0 && number <= 100000;
+    const makeResult = (match, lastVolume, replacement = '') => {
+        const prefix = source.slice(0, match.index).trimEnd();
+        if (!prefix || !replaceParentheticalSegments(prefix, () => '').trim()) return null;
+        return {
+            lastVolume,
+            title: prefix + tail,
+            volumeText: core.slice(0, match.index).trimEnd() + (replacement ? ` ${replacement}` : '') + tail
+        };
+    };
+
+    const episode = core.match(/\s+(\d+)(?:\s*[~\-～〜〰∼–—ㅡ_]\s*(\d+))?\s*E(?:\s*\(\s*(\d+)(?:\s*[~\-～〜〰∼–—ㅡ_]\s*(\d+))?\s*\))?$/i);
+    if (episode) {
+        const start = Number(episode[4] ? episode[3] : episode[1]);
+        const end = Number(episode[4] || episode[2] || episode[1]);
+        if (episode.slice(1).some(number => number !== undefined && !validVolume(Number(number))) || start > end) return null;
+        const explicitVolume = /\d+\s*(?:권|화)(?![가-힣a-zA-Z0-9])/.test(core.slice(0, episode.index));
+        return makeResult(episode, explicitVolume ? 0 : end,
+            explicitVolume ? '' : start === end ? `${end}권` : `${start}~${end}권`);
+    }
+
+    const extra = core.match(/\s+완외(?:\s*\(\s*(\d+)\s*\+\s*(\d+)\s*\))?$/);
+    if (extra) {
+        const mainVolume = Number(extra[1]);
+        const extraVolume = Number(extra[2]);
+        const lastVolume = validVolume(mainVolume) && Number.isSafeInteger(extraVolume)
+            && extraVolume >= 0 && extraVolume <= 100000 ? mainVolume : 0;
+        return makeResult(extra, lastVolume);
+    }
+
+    const count = core.match(/\(\s*(\d+)\s*\)$/);
+    if (!count) return null;
+    const number = Number(count[1]);
+    // 연령 표시와 연도로 보이는 숫자는 단위 없는 권수로 추정하지 않습니다.
+    const lastVolume = validVolume(number) && number !== 15 && number !== 19
+        && !(number >= 1000 && number <= 2999) ? number : 0;
+    return makeResult(count, lastVolume);
+}
+
+function getBookVolume(value, mode = 'site') {
+    const text = String(value || '');
+    const suffix = parseBookVolumeSuffix(text);
+    const volumeText = suffix ? suffix.volumeText : text;
+    // 기존 경로별 범위 구분자와 일괄 등록의 '부' 지원을 유지합니다.
+    const rangePattern = mode === 'bulk'
+        ? /(\d+)\s*(?:권|화|부(?!터))?\s*[~\-ㅡ]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i
+        : mode === 'context'
+            ? /(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i
+            : /(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_,\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i;
+    const range = volumeText.match(rangePattern);
+    const single = volumeText.match(mode === 'bulk' ? /(\d+)\s*(?:권|완결|화|부(?!터))/ : /(\d+)\s*(?:권|화)/);
+    if (range) return Number(range[2]);
+    if (single) return Number(single[1]);
+    if (suffix) return suffix.lastVolume;
+    const trailing = text.match(mode === 'bulk' ? /(\d+)\s*$/ : /(\d+)\s*(?=[\[\(]|$)/);
+    return trailing ? Number(trailing[1]) : 0;
+}
+
 function cleanSiteTitle(title) {
     if (!title) return "";
 
@@ -550,6 +631,8 @@ function cleanSiteTitle(title) {
 
     // 권수나 해상도 뒤에 있는 판본명도 잘라내기 전에 별도로 보존합니다.
     const preservedEditionQualifiers = getEditionQualifiers(cleaned);
+    const volumeSuffix = parseBookVolumeSuffix(cleaned);
+    if (volumeSuffix) cleaned = volumeSuffix.title;
 
     // 해상도, 권수 등을 구분자로 삼아 그 뒤를 잘라냄
     // 수정: 정규식에서 쉼표(,)를 제거하여 21,000과 같은 형태에서 제목이 잘리지 않도록 함

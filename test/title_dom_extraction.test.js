@@ -125,7 +125,7 @@ test('제목 DOM: 사이트 스타일이 추출, 매칭, 등록 및 다운로드
     const match = browser.stdout.match(/<pre id="results">([\s\S]*?)<\/pre>/);
     assert.ok(match, `브라우저 테스트 결과가 없습니다: ${browser.stderr}\n${browser.stdout}`);
     const results = JSON.parse(match[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
-    assert.equal(results.length, 14, '필수 브라우저 테스트가 실행되지 않았습니다.');
+    assert.equal(results.length, 15, '필수 브라우저 테스트가 실행되지 않았습니다.');
     for (const result of results) {
         await t.test(result.name, () => assert.equal(result.ok, true, result.error));
     }
@@ -219,6 +219,28 @@ function runTitleDomExtractionTests(api, testWindow) {
             assert(api.messages.length === 1 && api.messages[0].title === title);
         });
     }
+
+    check('E와 괄호 권수는 목록, 상세 및 빠른 등록에서 같은 제목과 권수로 추출', () => {
+        const cases = [
+            ['[어느새] S급 병약 에스퍼가 광공을 길들임 1-4E (1-4)', 'S급 병약 에스퍼가 광공을 길들임', 4],
+            ['[유화과] 오후의 소네트 3E (1-3)', '오후의 소네트', 3],
+            ['[이드] 어나더 선샤인 (Another Sunshine) 3E (1-3)', '어나더 선샤인', 3],
+            ['[오토auto]19층 도서관 시리즈 (12)', '19층 도서관 시리즈', 12],
+            ['[연희담]9회말 2아웃 러버 완외 (4+1)', '9회말 2아웃 러버', 4]
+        ];
+        for (const [raw, expectedTitle, volume] of cases) {
+            const link = createTitle('a', raw);
+            const detail = createTitle('h1', raw);
+            api.applyStyleToSingleLink(link);
+            api.applyStyleToDetailElement(detail);
+            for (const data of [link._bmData, detail._bmDetailData]) {
+                assert(data.pureTitle === expectedTitle, `${raw}: ${data.pureTitle}`);
+                assert(data.siteVol === volume, `${raw}: ${data.siteVol}`);
+            }
+            assert(api.getResolvedQuickActionTitle(link._bmData, link).title === expectedTitle);
+            assert(api.getResolvedQuickActionTitle(detail._bmDetailData, detail).title === expectedTitle);
+        }
+    });
 
     check('스타일, 스크립트, 비표시 콘텐츠와 배지를 제외하고 중첩된 제목 텍스트 보존', () => {
         const element = document.createElement('a');

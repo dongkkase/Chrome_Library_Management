@@ -36,6 +36,7 @@ test('사이트 제목 색상: 실제 DOM에서 원본 색상 배지와 확장 �
         fs.rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     });
     const source = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
+    const commonSource = fs.readFileSync(path.join(root, 'common.js'), 'utf8');
     const uiSource = fs.readFileSync(path.join(root, 'book-ui.js'), 'utf8');
     const css = fs.readFileSync(path.join(root, 'book-ui.css'), 'utf8');
     const galleryCss = source.match(/#fboardlist td:nth-child\(3\) span\s*\{[^}]+\}/);
@@ -48,6 +49,7 @@ test('사이트 제목 색상: 실제 DOM에서 원본 색상 배지와 확장 �
     const html = `<!doctype html><html lang="ko"><meta charset="utf-8">
         <style>.test-title { color: rgb(48, 49, 50); font-weight: 400; font-size: 16px; } ${css}</style>
         <style>${galleryCss[0]}</style><body><script>
+        ${commonSource}
         ${uiSource}
         const testWindow = { location: { hostname: 'tcafe21.com' }, getComputedStyle: window.getComputedStyle.bind(window) };
         const api = (function(window) {

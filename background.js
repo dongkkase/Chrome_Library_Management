@@ -1627,16 +1627,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         let lower = s.toLowerCase();
         return lower.endsWith('px') ? lower : lower + 'x';
     }).join(',') : "";
-    let lastVol = "";
-
-    // [수정] 21,000과 같은 숫자에서 쉼표를 범위로 오인하지 않도록 정규식에서 쉼표(,) 제거
-    const rangeMatch = rawTitle.match(/(\d+)\s*(?:권|화)?\s*[\~\-～〜〰∼–—ㅡ_\/&・·･]\s*(\d+)(?!\d|\s*(?:px|p)\b)/i);
-    const volMatch = rawTitle.match(/(\d+)\s*(?:권|화)/);
-    const endNumMatch = rawTitle.match(/(\d+)\s*(?=[\[\(]|$)/);
-
-    if (rangeMatch) lastVol = parseInt(rangeMatch[2], 10).toString();
-    else if (volMatch) lastVol = parseInt(volMatch[1], 10).toString();
-    else if (endNumMatch) lastVol = parseInt(endNumMatch[1], 10).toString();
+    const lastVol = String(getBookVolume(rawTitle, 'context') || '');
 
     const dateString = new Date().toISOString();
 
