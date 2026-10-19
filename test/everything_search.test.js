@@ -298,7 +298,7 @@ test('채팅 위키 제목은 게시물 내부 요소에서 호출해도 strong 
     };
     const item = {
         matches(selector) {
-            return selector === 'a.cw-board-item';
+            return selector === '.cw-board-item';
         },
         querySelector(selector) {
             return selector.includes('.cw-board-item__title') ? titleContainer : null;
@@ -309,7 +309,7 @@ test('채팅 위키 제목은 게시물 내부 요소에서 호출해도 strong 
             return false;
         },
         closest(selector) {
-            return selector === 'a.cw-board-item' ? item : null;
+            return selector === '.cw-board-item' ? item : null;
         }
     };
 

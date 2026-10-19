@@ -440,10 +440,10 @@ const PRE_DEFINED_SITES = [
 {
     url: "chating.wiki",
     shortcuts: { openSelector: '.cw-material-purchase-action', downloadSelector: '.auto-dl-btn', titleSelector: '.cw-article-header > h1' },
-    selector: "a.cw-board-item",
+    selector: "a.cw-board-item, .cw-board-item > a.cw-board-item__title",
     detailSelector: ".cw-article-header > h1",
-    hideSelector: "a",
-    translationDetector: link => /번역/.test(link.getAttribute('data-attributes') || ''),
+    hideSelector: ".cw-board-item",
+    translationDetector: link => /번역/.test((link.closest('.cw-board-item') || link).getAttribute('data-attributes') || ''),
     allowedDLs: ["giga", "gofile", "transfer"],
     autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
     boardFilter: new RegExp([
@@ -1697,9 +1697,9 @@ function getChatingWikiListTitle(link) {
     if (!link || !window.location.hostname.includes('chating.wiki')) return null;
     if (typeof link.matches !== 'function') return null;
 
-    const item = link.matches('a.cw-board-item')
+    const item = link.matches('.cw-board-item')
         ? link
-        : (typeof link.closest === 'function' ? link.closest('a.cw-board-item') : null);
+        : (typeof link.closest === 'function' ? link.closest('.cw-board-item') : null);
     if (!item) return null;
 
     const titleContainer = item.querySelector(':scope > .cw-board-item__title')
@@ -1708,11 +1708,11 @@ function getChatingWikiListTitle(link) {
 
     const titleElement = titleContainer.querySelector('strong');
     if (titleElement) {
-        const title = getTitleTextContent(titleElement);
+        const title = getTitleTextContent(titleElement, '.cw-post-media');
         if (title) return title;
     }
 
-    return getTitleTextContent(titleContainer, '.cw-board-item__comments, .cw-board-item__tags') || null;
+    return getTitleTextContent(titleContainer, '.cw-post-media, .cw-board-item__comments, .cw-board-item__tags') || null;
 }
 
 function getPureLinkText(link) {
@@ -2851,14 +2851,14 @@ function getListRenderTargets(link) {
 
     if (!window.location.hostname.includes('chating.wiki')) return defaultTargets;
 
-    const titleTarget = link.matches('a.cw-board-item')
+    const titleTarget = link.matches('.cw-board-item')
         ? link.querySelector(':scope > .cw-board-item__title')
         : link.closest('.cw-board-item__title');
     if (!titleTarget) return defaultTargets;
 
     const titleStyleTarget = titleTarget.querySelector('strong') || link;
 
-    const itemTarget = link.matches('a.cw-board-item') ? link : link.closest('a.cw-board-item');
+    const itemTarget = link.closest('.cw-board-item');
     const tagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags')
         || itemTarget?.querySelector(':scope > .cw-board-item__tags');
     if (tagsTarget) {
@@ -2964,13 +2964,14 @@ function applyStyleToSingleLink(link) {
     const isTcafeSite = hostname.includes('lamu') || hostname.includes('tcafe') || hostname.includes('tcafed');
     const tcafeRow = isTcafeSite ? link.closest('tr') : null;
     const isChatingWikiSite = hostname.includes('chating.wiki');
+    const chatingWikiItem = isChatingWikiSite ? link.closest('.cw-board-item') : null;
     const chatingWikiTagText = isChatingWikiSite
         ? Array.from(link.querySelectorAll('.cw-board-item__tags > i:not([data-kind])')).map(tag => tag.textContent || '').join(' ')
         : '';
     const translationText = tcafeRow
         ? tcafeRow.textContent || ''
         : isChatingWikiSite
-            ? `${originalText || ''} ${link.dataset.attributes || ''} ${chatingWikiTagText}`
+            ? `${originalText || ''} ${chatingWikiItem?.dataset.attributes || ''} ${chatingWikiTagText}`
             : originalText || '';
     const hasTranslationTag = link._bmData.hasSiteTranslationEdition || hasTranslationEditionMarker(translationText);
     const match = findMatchingBook(titleParts, link._bmData.correctionBookId);

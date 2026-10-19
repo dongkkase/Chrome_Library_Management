@@ -2145,16 +2145,18 @@ async function initVersionCheck() {
     const isStoreInstall = extensionInfo.installType === 'normal';
 
     if (manualBtn) {
-        manualBtn.textContent = isStoreInstall
+        const updateCheckLabel = isStoreInstall || isManualInstall
             ? "업데이트 확인"
-            : isManualInstall
-                ? "업데이트 확인"
-                : "GitHub 버전 확인";
-        manualBtn.style.display = 'inline-block';
+            : "GitHub 버전 확인";
+        manualBtn.setAttribute('aria-label', updateCheckLabel);
+        const tooltipLabel = manualBtn.querySelector('.header-tooltip > span');
+        if (tooltipLabel) tooltipLabel.textContent = updateCheckLabel;
+        manualBtn.style.display = 'inline-flex';
     }
 
     const GITHUB_RAW_URL = "https://raw.githubusercontent.com/dongkkase/Chrome_Library_Management/main/version.json";
     let statusHideTimer = null;
+    let refreshAnimationTimer = null;
     let storeUpdateUiTimeout = null;
     let isApplyingStoreUpdate = false;
 
@@ -2188,7 +2190,10 @@ async function initVersionCheck() {
     };
 
     const setControlsBusy = (isBusy) => {
-        if (manualBtn) manualBtn.disabled = isBusy;
+        if (manualBtn) {
+            manualBtn.disabled = isBusy;
+            manualBtn.setAttribute('aria-busy', String(isBusy));
+        }
         if (updateLink) {
             updateLink.style.pointerEvents = isBusy ? "none" : "auto";
             updateLink.style.opacity = isBusy ? "0.65" : "1";
@@ -2353,7 +2358,17 @@ async function initVersionCheck() {
     checkVersion(false);
 
     if (manualBtn) {
-        manualBtn.addEventListener('click', () => checkVersion(true));
+        manualBtn.addEventListener('click', () => {
+            if (refreshAnimationTimer) clearTimeout(refreshAnimationTimer);
+            manualBtn.classList.remove('is-refreshing');
+            void manualBtn.offsetWidth;
+            manualBtn.classList.add('is-refreshing');
+            refreshAnimationTimer = setTimeout(() => {
+                manualBtn.classList.remove('is-refreshing');
+                refreshAnimationTimer = null;
+            }, 700);
+            checkVersion(true);
+        });
     }
 }
 

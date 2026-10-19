@@ -27,14 +27,30 @@
                     <div class="version-group" role="group" aria-label="버전 및 업데이트">
                         <span class="version-chip" title="현재 버전"><b id="current-version">v1.0</b></span>
                         <div class="update-check-control">
-                            <button id="manual-check-btn" style="display: none;">업데이트 확인</button>
+                            <button id="manual-check-btn" class="has-header-tooltip" type="button" aria-label="업데이트 확인" aria-describedby="update-check-tooltip" style="display: none;">
+                                <span class="header-action-icon refresh-icon" aria-hidden="true"></span>
+                                <span id="update-check-tooltip" class="header-tooltip" role="tooltip"><span>업데이트 확인</span></span>
+                            </button>
                             <span id="update-status-tooltip" role="status" aria-live="polite" aria-atomic="true"></span>
                         </div>
                     </div>
                     <span id="update-status-msg" style="margin-left: 10px; font-size: 11px; display: none; font-weight: bold;"></span>
                     <a id="update-link" href="#" target="_blank" style="display: none; margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🚀 새 버전 업데이트 가능!</a>
 
-                    <a class="feedback-link" href="https://discord.gg/DRVUbPewaV" target="_blank" style="margin-left: 10px; font-size: 11px; background: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-weight: bold;">🐞 버그 신고 및 건의</a>
+                    <div class="header-community-links">
+                        <a class="feedback-link has-header-tooltip" href="https://discord.gg/DRVUbPewaV" target="_blank" rel="noopener noreferrer" aria-label="버그 신고 및 건의" aria-describedby="feedback-tooltip">
+                            <span class="header-action-icon discord-icon" aria-hidden="true"></span>
+                            <span>버그 신고 및 건의</span>
+                            <span id="feedback-tooltip" class="header-tooltip" role="tooltip"><span>버그 신고 및 건의</span></span>
+                        </a>
+                        <a class="support-link has-header-tooltip" href="https://buymeacoffee.com/dongkkase" target="_blank" rel="noopener noreferrer" aria-label="후원하기" aria-describedby="support-tooltip">
+                            <span class="support-icon-wrap" aria-hidden="true">
+                                <span class="header-action-icon support-icon"></span>
+                            </span>
+                            <span>후원하기</span>
+                            <span id="support-tooltip" class="header-tooltip" role="tooltip"><span>BookManager 후원</span></span>
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -158,18 +174,24 @@
                     <div><p class="eyebrow">PREFERENCES</p><h3>사이트와 사용 환경</h3></div>
                     <p>작동할 사이트와 제목 인식, 화면 표시를 설정하세요.</p>
                 </div>
-                <div class="panel-box">
-                    <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
+                <details class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary">
+                        <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
+                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                    </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">확장프로그램이 작동할 사이트를 관리합니다. 낯선 사이트는 상세페이지에서 <b>[우클릭 ➡️ 요소를 상세페이지 제목으로 등록]</b> 기능을 사용하면 훨씬 정확하게 등록됩니다.</p>
                     <div class="flex-row">
                         <input type="text" aria-label="작동 허용 사이트 도메인" id="siteInput" placeholder="직접 추가 (예: domain.com)">
                         <button id="addSiteBtn">수동 추가</button>
                     </div>
                     <div id="siteList" style="margin-top: 10px; display: flex; flex-wrap: wrap;"></div>
-                </div>
+                </details>
 
-                <div class="panel-box">
-                    <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
+                <details class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary">
+                        <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
+                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                    </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
                         웹사이트 제목에서 <b>무조건 삭제하고 싶은 단어(작가명, 스캔팀 등)</b>를 등록하세요. <br>
                         <span style="color:#e83e8c;">💡 예시:</span> '신카이 마코토'를 등록하면 👉 "별의 목소리 신카이 마코토"가 "별의 목소리"로 자동 정제됩니다. (주의: 일반 명사를 등록하면 정상적인 책 제목도 잘릴 수 있습니다.)
@@ -179,10 +201,13 @@
                         <button id="addFilterBtn" style="background:#dc3545;">금지어 추가</button>
                     </div>
                     <div id="filterList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
-                </div>
+                </details>
 
-                <div class="panel-box">
-                    <h4 style="font-size: 14px; color: #20c997; border-bottom: 1px solid rgba(32,201,151,0.3);">판본 식별 괄호 키워드</h4>
+                <details class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary">
+                        <h4 style="font-size: 14px; color: #20c997; border-bottom: 1px solid rgba(32,201,151,0.3);">판본 식별 괄호 키워드</h4>
+                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                    </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
                         등록된 키워드가 괄호 안이나 제목 끝에 있으면 판본명으로 보존하고 별도 작품으로 매칭합니다.<br>
                         <span style="color:#20c997;">예시:</span> "오! 나의 여신님(신장판)"과 "오! 나의 여신님 신장판"은 같은 판본으로 인식합니다.
@@ -192,7 +217,7 @@
                         <button id="addEditionKeywordBtn" style="background:#20c997;">판본 키워드 추가</button>
                     </div>
                     <div id="editionKeywordList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
-                </div>
+                </details>
 
                 <div class="panel-box sub-options">
                     <h4 style="font-size: 14px;">⚙️ 확장 기능 설정</h4>
