@@ -55,9 +55,9 @@ function requestRuntimeResult(message) {
     });
 }
 
-function runOptionsAsyncTask(task, actionLabel = '도서 목록 처리') {
+function runOptionsAsyncTask(task, actionLabel = '도서 목록 처리', button = null) {
     return Promise.resolve()
-        .then(task)
+        .then(() => button ? ButtonUI.run(button, task) : task())
         .catch(error => {
             showInfoToast(`❌ ${actionLabel} 중 오류가 발생했습니다.`, true);
             console.error(`${actionLabel} 실패:`, error);
@@ -128,10 +128,10 @@ function renderSites() {
             return `<span class="site-tag">
                       <b style="font-size:13px; color:#0d6efd;">${s.url}</b> 
                       <span style="color:var(--text-muted);">상세: <code>${detailTxt}</code></span> 
-                      <b style="color:red; cursor:pointer; font-size:14px; margin-left:4px;" data-site="${s.url}">×</b>
+                      <button type="button" class="tag-delete" aria-label="사이트 삭제" data-site="${escapeOptionsHtml(s.url)}">×</button>
                     </span>`;
         } else {
-            return `<span class="site-tag"><b>${s}</b> <b style="color:red; cursor:pointer;" data-site="${s}">×</b></span>`;
+            return `<span class="site-tag"><b>${s}</b> <button type="button" class="tag-delete" aria-label="사이트 삭제" data-site="${escapeOptionsHtml(s)}">×</button></span>`;
         }
     }).join('');
   });
@@ -143,7 +143,7 @@ function renderFilters() {
     document.getElementById('filterList').innerHTML = filters.map(f => {
         return `<span class="site-tag" style="background: rgba(220,53,69,0.05); border-color: rgba(220,53,69,0.2); margin:0;">
                   <b style="font-size:13px; color:#dc3545;">${f}</b> 
-                  <b style="color:#dc3545; cursor:pointer; font-size:15px; margin-left:6px; opacity:0.7;" data-filter="${f}">×</b>
+                  <button type="button" class="tag-delete" aria-label="금지어 삭제" data-filter="${escapeOptionsHtml(f)}">×</button>
                 </span>`;
     }).join('');
   });
@@ -165,8 +165,10 @@ function renderEditionKeywords() {
             label.style.cssText = 'font-size:13px; color:#20c997;';
             label.textContent = keyword;
 
-            const removeButton = document.createElement('b');
-            removeButton.style.cssText = 'color:#20c997; cursor:pointer; font-size:15px; margin-left:6px; opacity:0.8;';
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'tag-delete';
+            removeButton.setAttribute('aria-label', '판본 키워드 삭제');
             removeButton.dataset.editionKeyword = keyword;
             removeButton.textContent = '×';
 
@@ -484,6 +486,120 @@ function hideFolderRulePreview() {
     }, 180);
 }
 
+let bookCategoryFilter = 'all';
+let categoryFilterDropdown = null;
+let sortDropdown = null;
+
+function initializeBookCategoryControls() {
+    const bulkCategorySelect = document.getElementById('bulkCategorySelect');
+    bulkCategorySelect.innerHTML = getBookCategoryOptionsHtml(BookCategoryUI.getRegistrationCategory());
+    const unsubscribe = BookCategoryUI.subscribeRegistrationCategory(categoryId => {
+        bulkCategorySelect.value = categoryId;
+    });
+    window.addEventListener('pagehide', unsubscribe, { once: true });
+    bulkCategorySelect.addEventListener('change', () => {
+        void BookCategoryUI.setRegistrationCategory(bulkCategorySelect.value).catch(error => {
+            bulkCategorySelect.value = BookCategoryUI.getRegistrationCategory();
+            showInfoToast('등록 분류를 저장하지 못했습니다.', true);
+            console.error('등록 분류 저장 실패:', error);
+        });
+    });
+    document.getElementById('batchCategorySelect').innerHTML = getBookCategoryOptionsHtml('unchanged', true);
+    categoryFilterDropdown = BookCategoryUI.createDropdown({
+        options: BookCategoryUI.categoryOptions({ includeAll: true }),
+        value: 'all',
+        label: '분류 필터',
+        icon: 'sliders-solid-full.svg',
+        showText: false,
+        onChange: async value => {
+            try {
+                await storageLocalSet({ bookCategoryFilter: value });
+                bookCategoryFilter = value;
+                document.getElementById('categoryFilterControl').dataset.filtered = String(value !== 'all');
+                await renderList(getCurrentBookFilter(), true);
+            } catch (error) {
+                showInfoToast('분류 필터를 변경하지 못했습니다.', true);
+                throw error;
+            }
+        }
+    });
+    document.getElementById('categoryFilterControl').appendChild(categoryFilterDropdown.element);
+    sortDropdown = BookCategoryUI.createDropdown({
+        options: [
+            { value: 'id_desc', label: '최신 등록순' },
+            { value: 'id_asc', label: '오래된 등록순' },
+            { value: 'title_asc', label: '제목 가나다순' },
+            { value: 'title_desc', label: '제목 역순' }
+        ],
+        value: 'id_desc',
+        label: '정렬',
+        icon: value => value.endsWith('_asc') ? 'arrow-up-short-wide-solid-full.svg' : 'arrow-up-wide-short-solid-full.svg',
+        showText: false,
+        onChange: async value => {
+            try {
+                await storageLocalSet({ sortOption: value });
+                await renderList(getCurrentBookFilter(), true);
+            } catch (error) {
+                showInfoToast('정렬 방식을 변경하지 못했습니다.', true);
+                throw error;
+            }
+        }
+    });
+    document.getElementById('sortControl').appendChild(sortDropdown.element);
+}
+
+function getBookCategoryOptionsHtml(selectedCategory, includeUnchanged = false) {
+    const options = includeUnchanged ? [{ id: 'unchanged', label: '분류 변경 안 함' }, ...BOOK_CATEGORIES] : BOOK_CATEGORIES;
+    const selected = selectedCategory === 'unchanged' ? 'unchanged' : normalizeBookCategory(selectedCategory);
+    return options.map(category => `<option value="${category.id}"${category.id === selected ? ' selected' : ''}>${category.label}</option>`).join('');
+}
+
+function escapeOptionsHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+}
+
+function normalizeBookSearchText(value) {
+    return String(value || '').replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
+}
+
+function getFilteredBookList(list, filter = '', categoryFilter = 'all', missingVolsMap = {}) {
+    const categoryId = categoryFilter === 'all' ? 'all' : normalizeBookCategory(categoryFilter);
+    const categoryBooks = list.filter(book => book && book.title
+        && (categoryId === 'all' || normalizeBookCategory(book.categoryId) === categoryId));
+    const search = String(filter || '').toLowerCase();
+    const normalizedFilter = normalizeBookSearchText(search);
+    const isDuplicateSearch = search === '#중복';
+    const isMissingSearch = search === '#누락';
+    const folderRulePrefix = '#폴더규칙';
+    const isFolderRuleSearch = search === folderRulePrefix || search.startsWith(folderRulePrefix + ':');
+    const folderRuleKeyword = isFolderRuleSearch ? search.slice(folderRulePrefix.length).replace(/^[:\s]*/, '').trim() : '';
+    const normalizedFolderRuleKeyword = normalizeBookSearchText(folderRuleKeyword);
+    const duplicateCounts = new Map();
+    if (isDuplicateSearch) {
+        categoryBooks.forEach(book => {
+            const key = getCategorizedBookMatchKey(getTitleMatchParts(book.title).matchKey, book.categoryId);
+            duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
+        });
+    }
+    return categoryBooks.filter(book => {
+        if (isDuplicateSearch) {
+            const key = getCategorizedBookMatchKey(getTitleMatchParts(book.title).matchKey, book.categoryId);
+            return duplicateCounts.get(key) > 1;
+        }
+        if (isMissingSearch) return getBookMissingVols(book, missingVolsMap).length > 0;
+        if (isFolderRuleSearch) {
+            const folderRule = String(book.folderRule || '').trim();
+            if (!folderRule) return false;
+            return !folderRuleKeyword || folderRule.toLowerCase().includes(folderRuleKeyword)
+                || (normalizedFolderRuleKeyword && normalizeBookSearchText(folderRule).includes(normalizedFolderRuleKeyword));
+        }
+        return book.title.toLowerCase().includes(search)
+            || (!!normalizedFilter && normalizeBookSearchText(book.title).includes(normalizedFilter));
+    });
+}
+
 let renderListGeneration = 0;
 
 async function renderList(filter = "", resetPage = false) {
@@ -514,48 +630,7 @@ async function renderList(filter = "", resetPage = false) {
     const isMissingSearch = filter === "#누락";
     const isFolderRuleSearch = filter === folderRulePrefix || filter.startsWith(folderRulePrefix + ":");
     const folderRuleKeyword = isFolderRuleSearch ? filter.slice(folderRulePrefix.length).replace(/^[:\s]*/, '').trim() : '';
-    let duplicateIds = new Set();
-    
-    if (isDuplicateSearch) {
-        const titleMap = new Map();
-        list.forEach(b => {
-            if (!b || !b.title) return;
-            const normalized = getTitleMatchParts(b.title).matchKey;
-            if (normalized.length === 0) return;
-            if (titleMap.has(normalized)) {
-                titleMap.get(normalized).push(b.id);
-            } else {
-                titleMap.set(normalized, [b.id]);
-            }
-        });
-        
-        titleMap.forEach(ids => {
-            if (ids.length > 1) ids.forEach(id => duplicateIds.add(id));
-        });
-    }
-
-    // 필터링 적용
-    const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-    const normalizedFolderRuleKeyword = isFolderRuleSearch ? folderRuleKeyword.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') : '';
-    const filteredList = list.filter(b => {
-        if (!b || !b.title) return false;
-        if (isDuplicateSearch) return duplicateIds.has(b.id);
-        if (isMissingSearch) return getBookMissingVols(b, data.missingVolsMap).length > 0;
-        if (isFolderRuleSearch) {
-            const folderRule = (b.folderRule || '').trim();
-            if (!folderRule) return false;
-            if (!folderRuleKeyword) return true;
-            if (folderRule.toLowerCase().includes(folderRuleKeyword.toLowerCase())) return true;
-            const normalizedFolderRule = folderRule.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-            return normalizedFolderRule.includes(normalizedFolderRuleKeyword);
-        }
-        if (b.title.toLowerCase().includes(filter.toLowerCase())) return true;
-        if (normalizedFilter) {
-            const normalizedTitle = b.title.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-            return normalizedTitle.includes(normalizedFilter);
-        }
-        return false;
-    });
+    const filteredList = getFilteredBookList(list, filter, bookCategoryFilter, data.missingVolsMap);
     
     // 전체 페이지 계산 및 현재 페이지 보정
     totalPages = Math.ceil(filteredList.length / itemsPerPage) || 1;
@@ -572,7 +647,7 @@ async function renderList(filter = "", resetPage = false) {
             const keywordText = folderRuleKeyword ? `"${folderRuleKeyword}"(이)` : '등록된';
             countDisplay.innerHTML = `상위 폴더 규칙 ${keywordText}인 목록: 총 <span style="color:#20c997;">${formattedCount}</span>건`;
         } else if (filter.trim() === "") {
-            countDisplay.innerHTML = `전체 목록: 총 <span style="color:#0d6efd;">${formattedCount}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
+            countDisplay.innerHTML = `${bookCategoryFilter === 'all' ? '전체' : getBookCategoryLabel(bookCategoryFilter)} 목록: 총 <span style="color:#0d6efd;">${formattedCount}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         } else {
             countDisplay.innerHTML = `검색 결과: 총 <span style="color:#e83e8c;">${formattedCount}</span>건 (현재 <b style="color:var(--text);">${currentPage} / ${totalPages}</b> 페이지)`;
         }
@@ -592,8 +667,8 @@ async function renderList(filter = "", resetPage = false) {
     
     if (isDuplicateSearch) {
         filteredList.sort((a, b) => {
-            const normA = getTitleMatchParts(a.title || '').matchKey;
-            const normB = getTitleMatchParts(b.title || '').matchKey;
+            const normA = getCategorizedBookMatchKey(getTitleMatchParts(a.title || '').matchKey, a.categoryId);
+            const normB = getCategorizedBookMatchKey(getTitleMatchParts(b.title || '').matchKey, b.categoryId);
             if (normA < normB) return -1;
             if (normA > normB) return 1;
             return sortFn(a, b);
@@ -614,54 +689,60 @@ async function renderList(filter = "", resetPage = false) {
     pageItems.forEach(book => {
         const displayMissingVols = getBookMissingVols(book, data.missingVolsMap);
         if (isDuplicateSearch) {
-            const normTitle = getTitleMatchParts(book.title || '').matchKey;
+            const normTitle = getCategorizedBookMatchKey(getTitleMatchParts(book.title || '').matchKey, book.categoryId);
             if (normTitle !== prevNorm) {
                 prevNorm = normTitle;
                 const groupTr = document.createElement('tr');
                 groupTr.className = 'group-header-tr';
-                groupTr.innerHTML = `<td colspan="7" style="text-align: left; padding: 6px 12px; font-weight: bold; font-size: 12px; background-color: rgba(127, 127, 127, 0.1); color: var(--text); border-bottom: 2px solid #fd7e14; border-top: 2px solid var(--border);">📦 동일 항목 그룹: <span style="color:#fd7e14;">${normTitle}</span></td>`;
+                groupTr.innerHTML = `<td colspan="8" style="text-align: left; padding: 6px 12px; font-weight: bold; font-size: 12px; background-color: rgba(127, 127, 127, 0.1); color: var(--text); border-bottom: 2px solid #fd7e14; border-top: 2px solid var(--border);">📦 동일 항목 그룹: <span style="color:#fd7e14;">${getBookCategoryLabel(book.categoryId)} · ${escapeOptionsHtml(book.title)}</span></td>`;
                 fragment.appendChild(groupTr);
             }
         }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>
-            <select class="edit-type" data-id="${book.id}" data-type="${book.type}" style="padding: 4px;">
+          <td class="book-type-cell">
+            <select aria-label="도서 타입" class="edit-type" data-id="${book.id}" data-type="${book.type}" style="padding: 4px;">
               <option value="exclude" ${book.type==='exclude'?'selected':''}>제외</option>
               <option value="incomplete" ${book.type==='incomplete'?'selected':''}>미완</option>
               <option value="complete" ${book.type==='complete'?'selected':''}>완결</option>
             </select>
           </td>
-          <td>
+          <td class="book-category-cell">
+            <select aria-label="도서 분류" class="edit-category" data-id="${book.id}">${getBookCategoryOptionsHtml(book.categoryId)}</select>
+          </td>
+          <td class="book-title-cell">
             <div class="title-correction-editor">
-              <input type="text" class="edit-title" value="${book.title}" data-id="${book.id}">
+              <input type="text" class="edit-title" value="${escapeOptionsHtml(book.title)}" data-id="${book.id}">
               <button type="button" class="btn-title-correction-bulk" data-id="${book.id}">제목정정</button>
             </div>
           </td>
-          <td>
+          <td class="book-folder-cell">
             <div class="folder-rule-editor">
-              <input type="text" class="edit-folder-rule" value="${book.folderRule || ''}" data-id="${book.id}" placeholder="상위 폴더 규칙">
+              <input type="text" class="edit-folder-rule" value="${escapeOptionsHtml(book.folderRule)}" data-id="${book.id}" placeholder="상위 폴더 규칙">
               <button type="button" class="btn-folder-rule-bulk" data-id="${book.id}">일괄 수정</button>
             </div>
           </td>
-          <td><input type="text" class="edit-res" value="${book.resolution||''}" data-id="${book.id}" placeholder="해상도" style="width:100%"></td>
+          <td class="book-resolution-cell"><input type="text" class="edit-res" value="${escapeOptionsHtml(book.resolution)}" data-id="${book.id}" placeholder="해상도" style="width:100%"></td>
           
-          <td style="position:relative; vertical-align:middle; padding:0;">
+          <td class="book-volume-cell" style="position:relative; vertical-align:middle; padding:0;">
             <div style="display:flex; align-items:center; justify-content:center; gap:4px; width:100%; height:100%;">
-              <input type="text" class="edit-vol" value="${book.lastVol||''}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:52px; margin:0; padding:4px;">
+              <input type="text" class="edit-vol" value="${escapeOptionsHtml(book.lastVol)}" data-id="${book.id}" placeholder="권수" style="width:100%; min-width:52px; margin:0; padding:4px;">
               ${displayMissingVols.length > 0
                   ? `<span class="missing-badge" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">${displayMissingVols.length}누락</span>`
                   : `<span class="missing-badge empty" style="flex-shrink:0; padding:2px 4px;" data-id="${book.id}">+누락</span>`}
             </div>
           </td>
           
-          <td style="color:var(--text-muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${formatDisplayDate(book.date)}</td>
-          <td>
-              <button class="btn-save" data-id="${book.id}">수정</button>
-              <button class="btn-del" data-id="${book.id}">삭제</button>
+          <td class="book-date-cell" style="color:var(--text-muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${formatDisplayDate(book.date)}</td>
+          <td class="book-actions-cell">
+              <button type="button" class="btn-save" data-id="${book.id}" aria-label="저장"><span class="option-action-icon" style="--action-icon: url('images/floppy-disk-solid-full.svg')" aria-hidden="true"></span></button>
+              <button type="button" class="btn-del" data-id="${book.id}" aria-label="삭제"><span class="option-action-icon" style="--action-icon: url('images/trash-solid-full.svg')" aria-hidden="true"></span></button>
           </td>
         `;
+        tr.querySelectorAll('.btn-save, .btn-del').forEach(button => {
+            BookCategoryUI.attachTooltip(button, button.getAttribute('aria-label'));
+        });
         fragment.appendChild(tr);
     });
     
@@ -874,9 +955,14 @@ async function deleteSingleBookWithUndo(book, successMsg) {
 if (undoButton) {
     undoButton.onclick = async () => {
         if (!pendingBookUndo) return;
+        const finishBusy = ButtonUI.start(undoButton);
+        if (!finishBusy) return;
+        if (undoHideTimer) {
+            clearTimeout(undoHideTimer);
+            undoHideTimer = null;
+        }
 
         const undoState = pendingBookUndo;
-        undoButton.style.pointerEvents = 'none';
 
         try {
             await ensureBookStoreReady();
@@ -931,19 +1017,32 @@ if (undoButton) {
             showInfoToast('❌ 실행 취소 중 오류가 발생했습니다.', true);
             console.error('도서 작업 실행 취소 실패:', error);
         } finally {
-            undoButton.style.pointerEvents = 'auto';
+            finishBusy();
         }
     };
 }
 
 document.getElementById('batchUpdateBtn').onclick = async () => {
     const targetType = document.getElementById('batchTypeSelect').value;
-    const filter = document.getElementById('searchInput').value.toLowerCase();
-    const normalizedFilter = filter.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').trim().replace(/\s+/g, '');
-    
-    let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
-    if(!confirm(`현재 검색된 모든 항목을 [${typeNameKOR}] 타입으로 변경하시겠습니까?`)) return;
+    const targetCategory = document.getElementById('batchCategorySelect').value;
+    const changes = {};
+    const descriptions = [];
+    if (['exclude', 'incomplete', 'complete'].includes(targetType)) {
+        changes.type = targetType;
+        descriptions.push(`타입: ${{ exclude: '제외', incomplete: '미완', complete: '완결' }[targetType]}`);
+    }
+    if (targetCategory !== 'unchanged') {
+        changes.categoryId = normalizeBookCategory(targetCategory);
+        descriptions.push(`분류: ${getBookCategoryLabel(changes.categoryId)}`);
+    }
+    if (descriptions.length === 0) {
+        showInfoToast('변경할 타입 또는 분류를 선택해주세요.');
+        return;
+    }
 
+    const button = document.getElementById('batchUpdateBtn');
+    const finishBusy = ButtonUI.start(button);
+    if (!finishBusy) return;
     try {
         await ensureBookStoreReady();
         const [bookSnapshot, data] = await Promise.all([
@@ -951,70 +1050,21 @@ document.getElementById('batchUpdateBtn').onclick = async () => {
             storageLocalGet({ missingVolsMap: {} })
         ]);
         const { bookList: list, revision } = bookSnapshot;
-        const today = new Date().toISOString(); 
-        const isDuplicateSearch = filter === '#중복';
-        const isMissingSearch = filter === '#누락';
-        const folderRulePrefix = "#폴더규칙";
-        const isFolderRuleSearch = filter === folderRulePrefix || filter.startsWith(folderRulePrefix + ":");
-        const folderRuleKeyword = isFolderRuleSearch ? filter.slice(folderRulePrefix.length).replace(/^[:\s]*/, '').trim() : '';
-        const normalizedFolderRuleKeyword = isFolderRuleSearch ? folderRuleKeyword.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '') : '';
-        const duplicateTitleCounts = new Map();
-
-        if (isDuplicateSearch) {
-            list.forEach(book => {
-                if (!book || !book.title) return;
-                const matchKey = getTitleMatchParts(book.title).matchKey;
-                duplicateTitleCounts.set(matchKey, (duplicateTitleCounts.get(matchKey) || 0) + 1);
-            });
+        const targets = getFilteredBookList(list, getCurrentBookFilter(), bookCategoryFilter, data.missingVolsMap);
+        if (targets.length === 0) {
+            showInfoToast('현재 검색 조건에 맞는 도서가 없습니다.');
+            return;
         }
-
-        const updatedList = list.map(book => {
-            if (book && book.title) {
-                if (isDuplicateSearch) {
-                    const matchKey = getTitleMatchParts(book.title).matchKey;
-                    if ((duplicateTitleCounts.get(matchKey) || 0) > 1) {
-                        return { ...book, type: targetType, date: today };
-                    }
-                    return book;
-                }
-                if (isMissingSearch) {
-                    if (getBookMissingVols(book, data.missingVolsMap).length > 0) {
-                        return { ...book, type: targetType, date: today };
-                    }
-                    return book;
-                }
-                if (isFolderRuleSearch) {
-                    const folderRule = (book.folderRule || '').trim();
-                    if (!folderRule) return book;
-                    if (!folderRuleKeyword) return { ...book, type: targetType, date: today };
-                    if (folderRule.toLowerCase().includes(folderRuleKeyword.toLowerCase())) {
-                        return { ...book, type: targetType, date: today };
-                    }
-                    const normalizedFolderRule = folderRule.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').toLowerCase().trim().replace(/\s+/g, '');
-                    if (normalizedFolderRule.includes(normalizedFolderRuleKeyword)) {
-                        return { ...book, type: targetType, date: today };
-                    }
-                    return book;
-                }
-
-                const lowerTitle = book.title.toLowerCase();
-                const matchOriginal = lowerTitle.includes(filter);
-                let matchNormalized = false;
-                if (!matchOriginal && normalizedFilter) {
-                    const normalizedTitle = lowerTitle.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥]/g, '').trim().replace(/\s+/g, '');
-                    matchNormalized = normalizedTitle.includes(normalizedFilter);
-                }
-                if (matchOriginal || matchNormalized) {
-                    return { ...book, type: targetType, date: today };
-                }
-            }
-            return book;
-        });
-
-        await saveWithUndo(updatedList, '일괄 수정이 완료되었습니다.', {}, list, revision);
+        if (!confirm(`현재 검색된 전체 ${targets.length.toLocaleString('ko-KR')}건을 변경하시겠습니까?\n${descriptions.join(' / ')}`)) return;
+        const targetIds = new Set(targets.map(book => book.id));
+        const date = new Date().toISOString();
+        const updatedList = list.map(book => targetIds.has(book.id) ? { ...book, ...changes, date } : book);
+        await saveWithUndo(updatedList, `${targets.length.toLocaleString('ko-KR')}건의 ${descriptions.join(' / ')} 변경이 완료되었습니다.`, {}, list, revision);
     } catch (error) {
-        showInfoToast('❌ 일괄 수정 중 오류가 발생했습니다.', true);
-        console.error('도서 목록 일괄 수정 실패:', error);
+        showInfoToast('도서 목록을 일괄 변경하지 못했습니다.', true);
+        console.error('도서 목록 일괄 변경 실패:', error);
+    } finally {
+        finishBusy();
     }
 };
 
@@ -1022,6 +1072,8 @@ document.getElementById('batchUpdateBtn').onclick = async () => {
 // [수정됨] 백업 (내보내기) 로직: 도서 목록 + 사이트 설정 + 금지어 설정 모두 포함
 // ============================================================================
 document.getElementById('exportBtn').onclick = async () => {
+    const finishBusy = ButtonUI.start(document.getElementById('exportBtn'));
+    if (!finishBusy) return;
     try {
         await ensureBookStoreReady();
         const [bookList, data] = await Promise.all([
@@ -1053,6 +1105,8 @@ document.getElementById('exportBtn').onclick = async () => {
     } catch (error) {
         showInfoToast('❌ 백업 파일을 만드는 중 오류가 발생했습니다.', true);
         console.error('도서 목록 내보내기 실패:', error);
+    } finally {
+        finishBusy();
     }
 };
 
@@ -1067,7 +1121,7 @@ function renderRestoredSettingPanels(settings) {
 // ============================================================================
 // [수정됨] 복구 (불러오기) 로직: 신규 포맷 및 구버전 포맷(하위 호환) 완벽 지원
 // ============================================================================
-document.getElementById('fileInput').onchange = (e) => {
+document.getElementById('fileInput').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -1076,68 +1130,68 @@ document.getElementById('fileInput').onchange = (e) => {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-        try {
-            const importedData = JSON.parse(event.target.result);
-            
-            // 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
-            if (importedData && typeof importedData === 'object' && !Array.isArray(importedData)) {
-                const restoredSettings = {};
+    const finishBusy = ButtonUI.start(document.getElementById('importBtn'));
+    if (!finishBusy) return;
+    try {
+        const importedData = JSON.parse(await file.text());
 
-                // 사이트 설정이 존재하면 복구
-                if (Array.isArray(importedData.allowedSites)) {
-                    restoredSettings.allowedSites = importedData.allowedSites;
-                }
+        // 1. 신규 포맷 검사 (객체 형태: 도서 목록 + 사이트 설정 + 금지어)
+        if (importedData && typeof importedData === 'object' && !Array.isArray(importedData)) {
+            const restoredSettings = {};
 
-                // 필터(금지어) 설정이 존재하면 복구
-                if (Array.isArray(importedData.filterWords)) {
-                    restoredSettings.filterWords = importedData.filterWords;
-                }
-
-                if (Array.isArray(importedData.editionKeywords)) {
-                    restoredSettings.editionKeywords = importedData.editionKeywords;
-                }
-
-                if (importedData.missingVolsMap && typeof importedData.missingVolsMap === 'object' && !Array.isArray(importedData.missingVolsMap)) {
-                    restoredSettings.missingVolsMap = importedData.missingVolsMap;
-                }
-
-                const hasSettings = Object.keys(restoredSettings).length > 0;
-
-                // 도서 목록이 존재하면 복구 (기존 saveWithUndo 재활용하여 취소 기능 유지)
-                if (Array.isArray(importedData.bookList)) {
-                    await saveWithUndo(
-                        importedData.bookList,
-                        '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.',
-                        restoredSettings
-                    );
-                    renderRestoredSettingPanels(restoredSettings);
-                } else if (hasSettings) {
-                    await storageLocalSet(restoredSettings);
-                    renderRestoredSettingPanels(restoredSettings);
-                    if (Object.prototype.hasOwnProperty.call(restoredSettings, 'missingVolsMap')) {
-                        await renderCurrentBookList();
-                    }
-                    showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
-                } else {
-                    showInfoToast('❌ 유효한 백업 데이터가 없습니다.', true);
-                }
-            } 
-            // 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
-            else if (Array.isArray(importedData)) {
-                await saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
-            } 
-            else {
-                showInfoToast('❌ 올바른 백업 파일 형식이 아닙니다.', true);
+            // 사이트 설정이 존재하면 복구
+            if (Array.isArray(importedData.allowedSites)) {
+                restoredSettings.allowedSites = importedData.allowedSites;
             }
-        } catch (error) {
-            showInfoToast('❌ 백업 파일을 불러오는 중 오류가 발생했습니다.', true);
-            console.error('도서 목록 가져오기 실패:', error);
+
+            // 필터(금지어) 설정이 존재하면 복구
+            if (Array.isArray(importedData.filterWords)) {
+                restoredSettings.filterWords = importedData.filterWords;
+            }
+
+            if (Array.isArray(importedData.editionKeywords)) {
+                restoredSettings.editionKeywords = importedData.editionKeywords;
+            }
+
+            if (importedData.missingVolsMap && typeof importedData.missingVolsMap === 'object' && !Array.isArray(importedData.missingVolsMap)) {
+                restoredSettings.missingVolsMap = importedData.missingVolsMap;
+            }
+
+            const hasSettings = Object.keys(restoredSettings).length > 0;
+
+            // 도서 목록이 존재하면 복구 (기존 saveWithUndo 재활용하여 취소 기능 유지)
+            if (Array.isArray(importedData.bookList)) {
+                await saveWithUndo(
+                    importedData.bookList,
+                    '✅ 도서 목록 및 추가 설정 복구가 완료되었습니다.',
+                    restoredSettings
+                );
+                renderRestoredSettingPanels(restoredSettings);
+            } else if (hasSettings) {
+                await storageLocalSet(restoredSettings);
+                renderRestoredSettingPanels(restoredSettings);
+                if (Object.prototype.hasOwnProperty.call(restoredSettings, 'missingVolsMap')) {
+                    await renderCurrentBookList();
+                }
+                showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
+            } else {
+                showInfoToast('❌ 유효한 백업 데이터가 없습니다.', true);
+            }
         }
+        // 2. 구버전 포맷 검사 (배열 형태: 과거에 도서 목록만 백업했던 파일)
+        else if (Array.isArray(importedData)) {
+            await saveWithUndo(importedData, '✅ 도서 목록 복구가 완료되었습니다. (구버전 백업 파일 호환 적용)');
+        }
+        else {
+            showInfoToast('❌ 올바른 백업 파일 형식이 아닙니다.', true);
+        }
+    } catch (error) {
+        showInfoToast('❌ 백업 파일을 불러오는 중 오류가 발생했습니다.', true);
+        console.error('도서 목록 가져오기 실패:', error);
+    } finally {
         e.target.value = '';
-    };
-    reader.readAsText(file);
+        finishBusy();
+    }
 };
 
 // ============================================================================
@@ -1199,7 +1253,7 @@ async function renderSnapshots() {
                         }
                         showInfoToast('✅ 추가 설정(사이트/금지어) 복구가 완료되었습니다.');
                     }
-                }, '스냅샷 복원');
+                }, '스냅샷 복원', btn);
             };
         });
     } catch (err) {
@@ -1212,18 +1266,9 @@ const bulkPreview = document.getElementById('bulkPreview');
 const bulkPanel = document.getElementById('bulkPanel');
 const bulkPanelToggle = document.getElementById('bulkPanelToggle');
 
-function setBulkPanelCollapsed(collapsed) {
-    if (!bulkPanel || !bulkPanelToggle) return;
-
-    const isCollapsed = collapsed === true;
-    const label = bulkPanelToggle.querySelector('.bulk-panel-toggle-label');
-    const icon = bulkPanelToggle.querySelector('.bulk-panel-toggle-icon');
-
-    bulkPanel.classList.toggle('is-collapsed', isCollapsed);
-    bulkPanelToggle.setAttribute('aria-expanded', String(!isCollapsed));
+function updateBulkPanelToggle(expanded) {
+    const isCollapsed = !expanded;
     bulkPanelToggle.setAttribute('aria-label', `새로운 도서 일괄 등록 ${isCollapsed ? '펼치기' : '접기'}`);
-    if (label) label.textContent = isCollapsed ? '펼치기' : '접기';
-    if (icon) icon.textContent = isCollapsed ? '▼' : '▲';
 }
 
 bulkInput.addEventListener('input', async () => {
@@ -1261,122 +1306,125 @@ bulkInput.addEventListener('input', async () => {
 });
 
 document.getElementById('saveBtn').onclick = async () => {
-    await customFiltersReady;
-    const lines = document.getElementById('bulkInput').value.split('\n').filter(t => t.trim());
-    const selectedTypeSelect = document.getElementById('bulkTypeSelect');
-    const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';
-
-    // 데이터가 많을 경우 브라우저 멈춤을 방지하기 위해 로딩 상태 표시
     const btn = document.getElementById('saveBtn');
-    const originalBtnText = btn.innerText;
-    btn.innerText = "⏳ 처리 중... (잠시만 기다려주세요)";
-    btn.style.pointerEvents = 'none';
+    const finishBusy = ButtonUI.start(btn);
+    if (!finishBusy) return;
+    try {
+        await customFiltersReady;
+        const lines = document.getElementById('bulkInput').value.split('\n').filter(t => t.trim());
+        const selectedTypeSelect = document.getElementById('bulkTypeSelect');
+        const targetType = selectedTypeSelect ? selectedTypeSelect.value : 'exclude';
+        const targetCategory = normalizeBookCategory(document.getElementById('bulkCategorySelect')?.value);
+        await storageLocalSet({ lastBulkType: targetType });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await ensureBookStoreReady();
+        const bookSnapshot = await bookStoreGetAllWithRevision();
+        let currentList = bookSnapshot.bookList;
+        const previousList = [...currentList];
+        let skippedCount = 0;
 
-    chrome.storage.local.set({ lastBulkType: targetType });
+        // 매번 findIndex로 찾지 않도록 기존 목록을 Map 형태로 준비합니다.
+        const titleMap = new Map();
+        currentList.forEach((book, idx) => {
+            if (book && book.title) {
+                const normalized = getCategorizedBookMatchKey(getTitleMatchParts(book.title).matchKey, book.categoryId);
+                const indexes = titleMap.get(normalized) || [];
+                indexes.push(idx);
+                titleMap.set(normalized, indexes);
+            }
+        });
 
-    // UI 텍스트가 바뀔 틈을 주기 위해 setTimeout으로 비동기 실행
-    setTimeout(async () => {
-        try {
-            await ensureBookStoreReady();
-            const bookSnapshot = await bookStoreGetAllWithRevision();
-            let currentList = bookSnapshot.bookList;
-            const previousList = [...currentList];
-            let skippedCount = 0;
+        // 새 항목은 별도 배열에 모아 한 번에 합칩니다.
+        const newBooks = [];
+        const newBookIndexes = new Map();
 
-            // 매번 findIndex로 찾지 않도록 기존 목록을 Map 형태로 준비합니다.
-            const titleMap = new Map();
-            currentList.forEach((book, idx) => {
-                if (book && book.title) {
-                    const normalized = getTitleMatchParts(book.title).matchKey;
-                    titleMap.set(normalized, idx); // 제목을 키(Key)로, 인덱스를 값(Value)으로 저장
+        lines.forEach(line => {
+            const resMatch = line.match(/\d{3,4}\s*px/gi);
+
+            const parsedVol = String(getBookVolume(line, 'bulk') || '');
+
+            let cleanTitle = cleanSiteTitle(line)
+                .replace(/\d+\s*권/g, '')
+                .replace(/완결/g, '')
+                .replace(/개$/g, '')
+                .replace(/(\d+)?완/g, '')
+                .replace(/\s?완$/g, '')
+                .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (!cleanTitle) {
+                skippedCount++;
+                return;
+            }
+
+            const normalizedNewTitle = getCategorizedBookMatchKey(getTitleMatchParts(cleanTitle).matchKey, targetCategory);
+
+            const bookData = {
+                categoryId: targetCategory,
+                type: targetType,
+                title: cleanTitle,
+                folderRule: "",
+                resolution: resMatch ? Array.from(new Set(resMatch)).join(',') : "",
+                lastVol: parsedVol,
+                date: new Date().toISOString()
+            };
+
+            if (titleMap.has(normalizedNewTitle)) {
+                const indexes = titleMap.get(normalizedNewTitle);
+                if (indexes.length > 1) {
+                    throw new Error(`[${getBookCategoryLabel(targetCategory)}] ${cleanTitle}: 같은 분류에 중복 항목이 있습니다. 목록에서 정리한 뒤 다시 등록해주세요.`);
                 }
-            });
+                const existingIdx = indexes[0];
+                currentList[existingIdx] = { ...currentList[existingIdx], ...bookData };
+            } else if (newBookIndexes.has(normalizedNewTitle)) {
+                const newBookIndex = newBookIndexes.get(normalizedNewTitle);
+                newBooks[newBookIndex] = { ...newBooks[newBookIndex], ...bookData };
+            } else {
+                newBookIndexes.set(normalizedNewTitle, newBooks.length);
+                newBooks.push(bookData);
+            }
+        });
 
-            // 새 항목은 별도 배열에 모아 한 번에 합칩니다.
-            const newBooks = [];
-            const newBookIndexes = new Map();
+        // 기존 unshift처럼 최신 항목이 위로 오게 하려면, 새 책들을 뒤집은(reverse) 후 기존 목록 앞에 붙이면 됩니다.
+        currentList = [...newBooks.reverse(), ...currentList];
 
-            lines.forEach(line => {
-                const resMatch = line.match(/\d{3,4}\s*px/gi);
+        let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
+        let alertMsg = `[${getBookCategoryLabel(targetCategory)} · ${typeNameKOR}] 일괄 저장이 완료되었습니다.`;
+        if (skippedCount > 0) alertMsg += `\n(단, 제목을 식별할 수 없는 ${skippedCount}개의 항목은 제외됨)`;
 
-                const parsedVol = String(getBookVolume(line, 'bulk') || '');
+        await saveWithUndo(currentList, alertMsg, {}, previousList, bookSnapshot.revision);
 
-                let cleanTitle = cleanSiteTitle(line)
-                    .replace(/\d+\s*권/g, '')
-                    .replace(/완결/g, '')
-                    .replace(/개$/g, '')
-                    .replace(/(\d+)?완/g, '')
-                    .replace(/\s?완$/g, '')
-                    .replace(/[^a-zA-Z0-9가-힣ㄱ-ㅎㅏ-ㅣ\sぁ-んァ-ヶー一-龥()]/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-
-                if (!cleanTitle) {
-                    skippedCount++;
-                    return;
-                }
-
-                const normalizedNewTitle = getTitleMatchParts(cleanTitle).matchKey;
-
-                const bookData = {
-                    type: targetType,
-                    title: cleanTitle,
-                    folderRule: "",
-                    resolution: resMatch ? Array.from(new Set(resMatch)).join(',') : "",
-                    lastVol: parsedVol,
-                    date: new Date().toISOString()
-                };
-
-                if (titleMap.has(normalizedNewTitle)) {
-                    const existingIdx = titleMap.get(normalizedNewTitle);
-                    currentList[existingIdx] = { ...currentList[existingIdx], ...bookData };
-                } else if (newBookIndexes.has(normalizedNewTitle)) {
-                    const newBookIndex = newBookIndexes.get(normalizedNewTitle);
-                    newBooks[newBookIndex] = { ...newBooks[newBookIndex], ...bookData };
-                } else {
-                    newBookIndexes.set(normalizedNewTitle, newBooks.length);
-                    newBooks.push(bookData);
-                }
-            });
-
-            // 기존 unshift처럼 최신 항목이 위로 오게 하려면, 새 책들을 뒤집은(reverse) 후 기존 목록 앞에 붙이면 됩니다.
-            currentList = [...newBooks.reverse(), ...currentList];
-
-            let typeNameKOR = targetType === 'exclude' ? '제외' : (targetType === 'complete' ? '완결' : '미완');
-            let alertMsg = `✅ [${typeNameKOR}] 타입으로 일괄 저장이 완료되었습니다.`;
-            if (skippedCount > 0) alertMsg += `\n(단, 제목을 식별할 수 없는 ${skippedCount}개의 항목은 제외됨)`;
-
-            await saveWithUndo(currentList, alertMsg, {}, previousList, bookSnapshot.revision);
-
-            document.getElementById('bulkInput').value = '';
-            const bulkPreview = document.getElementById('bulkPreview');
-            if (bulkPreview) bulkPreview.style.display = 'none';
-        } catch (error) {
-            showInfoToast('❌ 도서 목록을 저장하는 중 오류가 발생했습니다.', true);
-            console.error('도서 목록 일괄 저장 실패:', error);
-        } finally {
-            // 버튼 상태 원상복구
-            btn.innerText = originalBtnText;
-            btn.style.pointerEvents = 'auto';
-        }
-    }, 50); // 렌더링에 50ms 양보
+        document.getElementById('bulkInput').value = '';
+        const bulkPreview = document.getElementById('bulkPreview');
+        if (bulkPreview) bulkPreview.style.display = 'none';
+    } catch (error) {
+        showInfoToast(escapeOptionsHtml(error.message || '도서 목록을 저장하는 중 오류가 발생했습니다.'), true);
+        console.error('도서 목록 일괄 저장 실패:', error);
+    } finally {
+        finishBusy();
+    }
 };
 
 document.body.onclick = async (e) => {
-    const id = parseFloat(e.target.dataset.id);
-    const site = e.target.dataset.site;
-    const filterWord = e.target.dataset.filter;
-    const editionKeyword = e.target.dataset.editionKeyword;
+    const button = e.target.closest('button.btn-save, button.btn-del, button.btn-title-correction-bulk, button.btn-folder-rule-bulk, button.tag-delete');
+    if (!button) return;
+    const finishBusy = ButtonUI.start(button);
+    if (!finishBusy) return;
+    const id = parseFloat(button.dataset.id);
+    const site = button.dataset.site;
+    const filterWord = button.dataset.filter;
+    const editionKeyword = button.dataset.editionKeyword;
 
     try {
-        if (id && e.target.classList.contains('btn-del')) {
+        if (id && button.classList.contains('btn-del')) {
             await ensureBookStoreReady();
             const book = await bookStoreGet(id);
             if (book) await deleteSingleBookWithUndo(book, null);
-        } else if (id && e.target.classList.contains('btn-save')) {
+        } else if (id && button.classList.contains('btn-save')) {
             await ensureBookStoreReady();
             const previousBook = await bookStoreGet(id);
-            const row = e.target.closest('tr');
+            const row = button.closest('tr');
             if (previousBook && row) {
                 const newTitle = row.querySelector('.edit-title').value.trim();
                 if (!newTitle) {
@@ -1387,6 +1435,7 @@ document.body.onclick = async (e) => {
                 const updatedBook = {
                     ...previousBook,
                     type: row.querySelector('.edit-type').value,
+                    categoryId: normalizeBookCategory(row.querySelector('.edit-category').value),
                     title: newTitle,
                     resolution: row.querySelector('.edit-res').value.trim(),
                     lastVol: row.querySelector('.edit-vol').value.trim(),
@@ -1395,7 +1444,7 @@ document.body.onclick = async (e) => {
                 };
                 await saveSingleBookWithUndo(updatedBook, previousBook, '✅ 수정이 완료되었습니다.');
             }
-        } else if (id && e.target.classList.contains('btn-title-correction-bulk')) {
+        } else if (id && button.classList.contains('btn-title-correction-bulk')) {
             await ensureBookStoreReady();
             const [bookSnapshot, data] = await Promise.all([
                 bookStoreGetAllWithRevision(),
@@ -1405,7 +1454,7 @@ document.body.onclick = async (e) => {
             const baseIndex = list.findIndex(b => b.id === id);
             if (baseIndex < 0) return;
 
-            const row = e.target.closest('tr');
+            const row = button.closest('tr');
             if (!row) return;
 
             const nextTitle = (row.querySelector('.edit-title')?.value || '').trim();
@@ -1419,25 +1468,30 @@ document.body.onclick = async (e) => {
                 return;
             }
 
-            const targetCount = list.filter(book => String(book.title || '').trim() === baseTitle).length;
+            const baseCategory = normalizeBookCategory(list[baseIndex].categoryId);
+            const isSameCategoryTitle = book => String(book.title || '').trim() === baseTitle
+                && normalizeBookCategory(book.categoryId) === baseCategory;
+            const targetCount = list.filter(isSameCategoryTitle).length;
             if (targetCount <= 0) return;
-            if (!confirm(`"${baseTitle}" 제목으로 등록된 ${targetCount}건을 "${nextTitle}"(으)로 정정할까요?`)) return;
+            if (!confirm(`[${getBookCategoryLabel(baseCategory)}] "${baseTitle}" 제목으로 등록된 ${targetCount}건을 "${nextTitle}"(으)로 정정할까요?`)) return;
 
             const now = new Date().toISOString();
             const updatedList = list.map(book => {
-                if (String(book.title || '').trim() !== baseTitle) return book;
+                if (!isSameCategoryTitle(book)) return book;
                 return { ...book, title: nextTitle, date: now };
             });
             const nextCorrections = { ...(data.titleCorrections || {}) };
             Object.keys(nextCorrections).forEach(key => {
-                if (getStoredCorrectionTitle(nextCorrections[key]) === baseTitle) {
+                if (getStoredCorrectionTitle(nextCorrections[key]) === baseTitle
+                    && nextCorrections[key]?.categoryId === baseCategory) {
                     nextCorrections[key] = typeof nextCorrections[key] === 'object'
                         ? { ...nextCorrections[key], correctedTitle: nextTitle, editionKey: getTitleMatchParts(nextTitle).editionKey }
                         : nextTitle;
                 }
             });
-            const globalCorrectionKey = `*::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
+            const globalCorrectionKey = `*::category=${baseCategory}::${normalizeTitleCorrectionKeyPart(baseTitle)}`;
             nextCorrections[globalCorrectionKey] = {
+                categoryId: baseCategory,
                 correctedTitle: nextTitle,
                 bookId: list[baseIndex].id,
                 editionKey: getTitleMatchParts(nextTitle).editionKey
@@ -1450,14 +1504,14 @@ document.body.onclick = async (e) => {
                 list,
                 revision
             );
-        } else if (id && e.target.classList.contains('btn-folder-rule-bulk')) {
+        } else if (id && button.classList.contains('btn-folder-rule-bulk')) {
             await ensureBookStoreReady();
             const bookSnapshot = await bookStoreGetAllWithRevision();
             const list = bookSnapshot.bookList;
             const baseIndex = list.findIndex(b => b.id === id);
             if (baseIndex < 0) return;
 
-            const row = e.target.closest('tr');
+            const row = button.closest('tr');
             if (!row) return;
 
             const nextRule = (row.querySelector('.edit-folder-rule')?.value || '').trim();
@@ -1489,30 +1543,27 @@ document.body.onclick = async (e) => {
                 bookSnapshot.revision
             );
         } else if (site) {
-            chrome.storage.local.get({ allowedSites: [] }, data => {
-                const sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
-                const newSites = sites.filter(item => {
-                    const siteUrl = typeof item === 'string' ? item : item.url;
-                    return siteUrl !== site;
-                });
-                chrome.storage.local.set({ allowedSites: newSites }, renderSites);
-            });
+            const data = await storageLocalGet({ allowedSites: [] });
+            const sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
+            const newSites = sites.filter(item => (typeof item === 'string' ? item : item.url) !== site);
+            await storageLocalSet({ allowedSites: newSites });
+            renderSites();
         } else if (filterWord) {
-            chrome.storage.local.get({ filterWords: [] }, data => {
-                const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
-                const newFilters = filters.filter(item => item !== filterWord);
-                chrome.storage.local.set({ filterWords: newFilters }, renderFilters);
-            });
+            const data = await storageLocalGet({ filterWords: [] });
+            const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
+            await storageLocalSet({ filterWords: filters.filter(item => item !== filterWord) });
+            renderFilters();
         } else if (editionKeyword !== undefined) {
-            chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, data => {
-                const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
-                const newKeywords = keywords.filter(keyword => keyword !== editionKeyword);
-                chrome.storage.local.set({ editionKeywords: newKeywords }, renderEditionKeywords);
-            });
+            const data = await storageLocalGet({ editionKeywords: getDefaultEditionKeywords() });
+            const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+            await storageLocalSet({ editionKeywords: keywords.filter(keyword => keyword !== editionKeyword) });
+            renderEditionKeywords();
         }
     } catch (error) {
         showInfoToast('❌ 도서 목록 작업 중 오류가 발생했습니다.', true);
         console.error('도서 목록 작업 실패:', error);
+    } finally {
+        finishBusy();
     }
 };
 
@@ -1592,7 +1643,89 @@ async function loadReleaseHistory() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => { 
+function initializeOptionDisclosures() {
+    const entries = new Map();
+
+    const applyStoredState = (entry, value) => {
+        const expanded = typeof value === 'boolean'
+            ? (entry.collapsedValue ? !value : value)
+            : entry.defaultExpanded;
+        if (entry.controller.getExpanded() !== expanded) {
+            void entry.controller.setExpanded(expanded, { animate: false });
+        }
+    };
+
+    const refreshStoredState = entry => {
+        const revision = entry.revision;
+        void storageLocalGet({ [entry.key]: null }).then(data => {
+            if (entry.revision === revision && entry.pendingWrites === 0) {
+                applyStoredState(entry, data[entry.key]);
+            }
+        }).catch(error => console.error('접기·펼치기 상태 확인 실패:', error));
+    };
+
+    const register = (panel, trigger, options, key, collapsedValue = false) => {
+        const controller = LibraryMotion.bindDisclosure(panel, trigger, options);
+        const entry = {
+            key, controller, collapsedValue,
+            defaultExpanded: options.expanded,
+            revision: 0,
+            pendingWrites: 0,
+            writes: Promise.resolve()
+        };
+        entries.set(key, entry);
+        trigger.addEventListener('click', () => {
+            entry.revision++;
+            entry.pendingWrites++;
+            const expanded = controller.getExpanded();
+            const value = collapsedValue ? !expanded : expanded;
+            entry.writes = entry.writes.then(() => storageLocalSet({ [key]: value }))
+                .catch(error => {
+                    showInfoToast('접기·펼치기 상태를 저장하지 못했습니다.', true);
+                    console.error('접기·펼치기 상태 저장 실패:', error);
+                })
+                .finally(() => {
+                    entry.pendingWrites--;
+                    if (entry.pendingWrites === 0) refreshStoredState(entry);
+                });
+        });
+    };
+
+    document.querySelectorAll('details[id]').forEach(panel => {
+        const summary = panel.querySelector(':scope > summary');
+        if (!summary) return;
+        register(panel, summary, {
+            expanded: panel.open,
+            render: expanded => { panel.open = expanded; }
+        }, `optionsPanelExpanded:${panel.id}`);
+    });
+    if (bulkPanel && bulkPanelToggle) {
+        register(bulkPanel, bulkPanelToggle, {
+            expanded: !bulkPanel.classList.contains('is-collapsed'),
+            render: expanded => bulkPanel.classList.toggle('is-collapsed', !expanded),
+            onChange: updateBulkPanelToggle
+        }, 'bulkPanelCollapsed', true);
+    }
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+        for (const [key, entry] of entries) {
+            if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+            entry.revision++;
+            if (entry.pendingWrites === 0) applyStoredState(entry, changes[key].newValue);
+        }
+    });
+    const defaults = Object.fromEntries([...entries.keys()].map(key => [key, null]));
+    void storageLocalGet(defaults).then(data => {
+        for (const [key, entry] of entries) {
+            if (entry.revision === 0) applyStoredState(entry, data[key]);
+        }
+    }).catch(error => console.error('접기·펼치기 상태 불러오기 실패:', error));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeOptionDisclosures();
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1629,22 +1762,12 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({ darkMode: isDark });
     });
 
-    if (bulkPanel && bulkPanelToggle) {
-        bulkPanelToggle.addEventListener('click', () => {
-            const collapsed = !bulkPanel.classList.contains('is-collapsed');
-            setBulkPanelCollapsed(collapsed);
-            void runOptionsAsyncTask(
-                () => storageLocalSet({ bulkPanelCollapsed: collapsed }),
-                '일괄 등록 영역 상태 저장'
-            );
-        });
-    }
-
-    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc', lastBulkType: 'exclude', bulkPanelCollapsed: false }, (data) => {
-        setBulkPanelCollapsed(data.bulkPanelCollapsed);
-
-        const sortSelect = document.getElementById('sortSelect');
-        if (sortSelect) sortSelect.value = data.sortOption;
+    initializeBookCategoryControls();
+    chrome.storage.local.get({ lastBackup: null, sortOption: 'id_desc', lastBulkType: 'exclude', bookCategoryFilter: 'all' }, (data) => {
+        sortDropdown.setValue(data.sortOption);
+        bookCategoryFilter = data.bookCategoryFilter === 'all' ? 'all' : normalizeBookCategory(data.bookCategoryFilter);
+        categoryFilterDropdown.setValue(bookCategoryFilter);
+        document.getElementById('categoryFilterControl').dataset.filtered = String(bookCategoryFilter !== 'all');
         
         const bulkTypeSelect = document.getElementById('bulkTypeSelect');
         if (bulkTypeSelect) {
@@ -1709,78 +1832,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const addSiteBtn = document.getElementById('addSiteBtn');
     if (addSiteBtn) {
-      addSiteBtn.onclick = () => {
-        const siteInput = document.getElementById('siteInput');
-        if (!siteInput) return;
-        const val = siteInput.value.trim().replace(/^https?:\/\//, '').split('/')[0];
-        if (val) {
-          chrome.storage.local.get({ allowedSites: [] }, (data) => { 
-            const currentSites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
-            const exists = currentSites.some(s => (typeof s === 'string' ? s : s.url) === val);
-            if (!exists) {
-              chrome.storage.local.set({ allowedSites: [...currentSites, { url: val, detailSelector: "" }] }, () => { 
-                siteInput.value = ''; 
-                renderSites(); 
-              });
-            } else {
-              showInfoToast('❌ 이미 등록된 사이트입니다.', true);
+        addSiteBtn.onclick = () => runOptionsAsyncTask(async () => {
+            const siteInput = document.getElementById('siteInput');
+            const value = siteInput?.value.trim().replace(/^https?:\/\//, '').split('/')[0];
+            if (!value) return;
+            const data = await storageLocalGet({ allowedSites: [] });
+            const sites = Array.isArray(data.allowedSites) ? data.allowedSites : [];
+            if (sites.some(site => (typeof site === 'string' ? site : site.url) === value)) {
+                showInfoToast('❌ 이미 등록된 사이트입니다.', true);
+                return;
             }
-          });
-        }
-      };
+            await storageLocalSet({ allowedSites: [...sites, { url: value, detailSelector: '' }] });
+            siteInput.value = '';
+            renderSites();
+        }, '사이트 추가', addSiteBtn);
     }
 
     const addFilterBtn = document.getElementById('addFilterBtn');
     if (addFilterBtn) {
-        addFilterBtn.onclick = () => {
+        addFilterBtn.onclick = () => runOptionsAsyncTask(async () => {
             const filterInput = document.getElementById('filterInput');
-            if (!filterInput) return;
-            const val = filterInput.value.trim();
-            if (val) {
-                chrome.storage.local.get({ filterWords: [] }, (data) => {
-                    const currentFilters = Array.isArray(data.filterWords) ? data.filterWords : [];
-                    if (!currentFilters.includes(val)) {
-                        chrome.storage.local.set({ filterWords: [...currentFilters, val] }, () => {
-                            filterInput.value = '';
-                            renderFilters();
-                        });
-                    } else {
-                        showInfoToast('❌ 이미 등록된 금지어입니다.', true);
-                    }
-                });
+            const value = filterInput?.value.trim();
+            if (!value) return;
+            const data = await storageLocalGet({ filterWords: [] });
+            const filters = Array.isArray(data.filterWords) ? data.filterWords : [];
+            if (filters.includes(value)) {
+                showInfoToast('❌ 이미 등록된 금지어입니다.', true);
+                return;
             }
-        };
+            await storageLocalSet({ filterWords: [...filters, value] });
+            filterInput.value = '';
+            renderFilters();
+        }, '금지어 추가', addFilterBtn);
     }
 
     const addEditionKeywordBtn = document.getElementById('addEditionKeywordBtn');
     const editionKeywordInput = document.getElementById('editionKeywordInput');
-    const addEditionKeyword = () => {
-        if (!editionKeywordInput) return;
-        const value = editionKeywordInput.value.trim();
+    const addEditionKeyword = () => runOptionsAsyncTask(async () => {
+        const value = editionKeywordInput?.value.trim();
         const normalizedValue = normalizeTitleText(value);
         if (!normalizedValue) return;
-
-        chrome.storage.local.get({ editionKeywords: getDefaultEditionKeywords() }, (data) => {
-            const currentKeywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
-            const alreadyExists = currentKeywords.some(keyword => normalizeTitleText(keyword) === normalizedValue);
-            if (alreadyExists) {
-                showInfoToast('❌ 이미 등록된 판본 키워드입니다.', true);
-                return;
-            }
-
-            chrome.storage.local.set({ editionKeywords: [...currentKeywords, value] }, () => {
-                editionKeywordInput.value = '';
-                renderEditionKeywords();
-            });
-        });
-    };
+        const data = await storageLocalGet({ editionKeywords: getDefaultEditionKeywords() });
+        const keywords = Array.isArray(data.editionKeywords) ? data.editionKeywords : getDefaultEditionKeywords();
+        if (keywords.some(keyword => normalizeTitleText(keyword) === normalizedValue)) {
+            showInfoToast('❌ 이미 등록된 판본 키워드입니다.', true);
+            return;
+        }
+        await storageLocalSet({ editionKeywords: [...keywords, value] });
+        editionKeywordInput.value = '';
+        renderEditionKeywords();
+    }, '판본 키워드 추가', addEditionKeywordBtn);
 
     if (addEditionKeywordBtn) addEditionKeywordBtn.onclick = addEditionKeyword;
     if (editionKeywordInput) {
         editionKeywordInput.addEventListener('keydown', event => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                addEditionKeyword();
+                void addEditionKeyword();
             }
         });
     }
@@ -1791,30 +1899,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchToolsMenu = document.getElementById('searchToolsMenu');
     const searchToolsLabel = searchToolsBtn ? searchToolsBtn.querySelector('.search-tools-label') : null;
     let searchDebounceTimer;
+    let searchToolsMenuOpen = false;
+    let searchToolsMenuRevision = 0;
 
     const updateSearchToolsLabel = value => {
         if (!searchToolsLabel) return;
         if (value === '#중복') searchToolsLabel.textContent = '중복 찾기';
         else if (value === '#누락') searchToolsLabel.textContent = '누락 찾기';
-        else if (value === '#폴더규칙' || value.startsWith('#폴더규칙:')) searchToolsLabel.textContent = '폴더 규칙 찾기';
+        else if (value === '#폴더규칙' || value.startsWith('#폴더규칙:')) searchToolsLabel.textContent = '폴더 규칙';
         else searchToolsLabel.textContent = '목록 찾기';
     };
 
     const closeSearchToolsMenu = () => {
-        if (searchToolsMenu) searchToolsMenu.classList.remove('open');
-        if (searchToolsBtn) searchToolsBtn.setAttribute('aria-expanded', 'false');
+        if (!searchToolsMenuOpen) return;
+        searchToolsMenuOpen = false;
+        const revision = ++searchToolsMenuRevision;
+        searchToolsBtn.setAttribute('aria-expanded', 'false');
+        searchToolsMenu.inert = true;
+        void LibraryMotion.conceal(searchToolsMenu).then(() => {
+            if (revision === searchToolsMenuRevision) searchToolsMenu.classList.remove('open');
+        });
     };
 
     if (searchToolsBtn && searchToolsMenu) {
+        BookCategoryUI.attachTooltip(searchToolsBtn, () => `목록 찾기: ${searchToolsLabel?.textContent || '목록 찾기'}`);
         searchToolsBtn.onclick = event => {
             event.stopPropagation();
-            const willOpen = !searchToolsMenu.classList.contains('open');
-            searchToolsMenu.classList.toggle('open', willOpen);
-            searchToolsBtn.setAttribute('aria-expanded', String(willOpen));
-            if (willOpen) {
-                const firstMenuItem = searchToolsMenu.querySelector('[data-special-filter]');
-                if (firstMenuItem) firstMenuItem.focus();
+            if (searchToolsMenuOpen) {
+                closeSearchToolsMenu();
+                return;
             }
+            searchToolsMenuOpen = true;
+            searchToolsMenuRevision++;
+            LibraryMotion.cancel(searchToolsMenu);
+            searchToolsMenu.inert = false;
+            searchToolsMenu.classList.add('open');
+            searchToolsBtn.setAttribute('aria-expanded', 'true');
+            void LibraryMotion.reveal(searchToolsMenu);
+            const firstMenuItem = searchToolsMenu.querySelector('[data-special-filter]');
+            if (firstMenuItem) firstMenuItem.focus({ preventScroll: true });
         };
 
         searchToolsMenu.onclick = event => {
@@ -1833,9 +1956,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        document.addEventListener('click', closeSearchToolsMenu);
+        document.addEventListener('click', event => {
+            if (!searchToolsBtn.contains(event.target) && !searchToolsMenu.contains(event.target)) {
+                closeSearchToolsMenu();
+            }
+        }, true);
         document.addEventListener('keydown', event => {
-            if (event.key === 'Escape') {
+            if (event.key === 'Escape' && searchToolsMenuOpen) {
                 closeSearchToolsMenu();
                 searchToolsBtn.focus();
             }
@@ -1866,17 +1993,6 @@ document.addEventListener('DOMContentLoaded', () => {
             clearSearchBtn.style.display = 'none';
             updateSearchToolsLabel('');
             void runOptionsAsyncTask(() => renderList('', true), '도서 목록 검색 초기화');
-        };
-    }
-
-    const sortSelect = document.getElementById('sortSelect');
-    if (sortSelect) {
-        sortSelect.onchange = (e) => {
-            chrome.storage.local.set({ sortOption: e.target.value }, () => {
-                const filter = searchInput ? searchInput.value : '';
-                // 💡 정렬 변경 시 1페이지로 리셋 (true 전달)
-                void runOptionsAsyncTask(() => renderList(filter, true), '도서 목록 정렬');
-            });
         };
     }
 
@@ -2407,6 +2523,20 @@ async function flushExternalBookListRender() {
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.bookCategoryFilter) {
+        const value = changes.bookCategoryFilter.newValue;
+        bookCategoryFilter = value === 'all' || value === undefined ? 'all' : normalizeBookCategory(value);
+        if (categoryFilterDropdown) categoryFilterDropdown.setValue(bookCategoryFilter);
+        const control = document.getElementById('categoryFilterControl');
+        if (control) control.dataset.filtered = String(bookCategoryFilter !== 'all');
+        currentPage = 1;
+        scheduleExternalBookListRender();
+    }
+    if (areaName === 'local' && changes.sortOption && sortDropdown) {
+        sortDropdown.setValue(changes.sortOption.newValue || 'id_desc');
+        currentPage = 1;
+        scheduleExternalBookListRender();
+    }
     if (areaName === 'local' && (changes.enableShortcuts || changes.autoUpdateDownloadBook || changes.searchEverythingOnDownload)) {
         const settings = {};
         for (const key of ['enableShortcuts', 'autoUpdateDownloadBook', 'searchEverythingOnDownload']) {

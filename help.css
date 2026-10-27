@@ -86,6 +86,7 @@ ol, ul { padding-left: 22px; }
 .sidebar { position: sticky; top: 104px; align-self: start; max-height: calc(100vh - 124px); overflow-y: auto; padding: 4px; font-size: 13px; }
 .sidebar a { display: block; padding: 8px 10px; margin: 2px 0; border-radius: 6px; text-decoration: none; color: var(--muted); }
 .sidebar a:hover, .sidebar a[aria-current="location"] { background: var(--accent-soft); color: var(--accent); }
+.sidebar a[aria-current="location"] { font-weight: 700; box-shadow: inset 3px 0 0 var(--accent); }
 .nav-group { margin: 26px 10px 7px; font-size: 11px; font-weight: 750; color: var(--muted); }
 .eyebrow { color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: 1.4px; margin-bottom: 12px; }
 .sidebar > .eyebrow { padding-left: 10px; }

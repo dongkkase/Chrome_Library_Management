@@ -1,4 +1,4 @@
-importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'google-drive.js', 'google-sync.js');
+importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'buzzheavier-download.js', 'google-drive.js', 'google-sync.js');
 
 const rightClickedContexts = new Map();
 const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
@@ -56,6 +56,9 @@ function normalizeRightClickedContext(value) {
 
     return {
         title,
+        correctedTitle: String(value.correctedTitle || '').trim() || null,
+        correctedBookId: value.correctedBookId ?? null,
+        categoryId: typeof value.categoryId === 'string' ? value.categoryId : null,
         hasTranslationEdition: !!value.hasTranslationEdition,
         pageUrl: String(value.pageUrl || ''),
         linkUrl: String(value.linkUrl || ''),
@@ -153,11 +156,17 @@ async function resolveContextMenuClickContext(info, tab) {
     const normalizedCapturedTitle = capturedTitle.replace(/\s+/g, '');
     const canUseChatingWikiSelection = !!normalizedSelectionTitle
         && normalizedCapturedTitle.includes(normalizedSelectionTitle);
+    const title = isChatingWikiEverythingSearch
+        ? (canUseChatingWikiSelection ? selectionTitle : capturedTitle)
+        : selectionTitle || capturedTitle || linkTitle;
+    const matchesCapturedTitle = !!capturedContext
+        && title.replace(/\s+/g, ' ').trim() === capturedTitle.replace(/\s+/g, ' ').trim();
 
     return {
-        title: isChatingWikiEverythingSearch
-            ? (canUseChatingWikiSelection ? selectionTitle : capturedTitle)
-            : selectionTitle || capturedTitle || linkTitle,
+        title,
+        correctedTitle: matchesCapturedTitle ? capturedContext.correctedTitle || null : null,
+        correctedBookId: matchesCapturedTitle ? capturedContext.correctedBookId ?? null : null,
+        categoryId: matchesCapturedTitle ? capturedContext.categoryId ?? null : null,
         hasTranslationEdition: !!(capturedContext && capturedContext.hasTranslationEdition)
     };
 }
@@ -358,9 +367,16 @@ async function handleQuickAction(message, sender) {
         return { ok: true };
     }
 
+    const categorySettings = message.categoryId === undefined && message.bookId == null
+        ? await chrome.storage.local.get({ lastRegistrationCategory: 'uncategorized' })
+        : null;
+    const categoryId = message.categoryId !== undefined
+        ? normalizeBookCategory(message.categoryId)
+        : categorySettings ? normalizeBookCategory(categorySettings.lastRegistrationCategory) : undefined;
+
     if (message.type === "delete") {
         return enqueueBookMutation(() => {
-            return deleteBookByMatchKey(sanitizedTitle, tabId, 'quick-action', message.bookId);
+            return deleteBookByMatchKey(sanitizedTitle, tabId, 'quick-action', message.bookId, categoryId);
         });
     }
 
@@ -368,6 +384,7 @@ async function handleQuickAction(message, sender) {
         cleanTitle: sanitizedTitle,
         matchKey: getTitleMatchParts(sanitizedTitle).matchKey,
         bookId: message.bookId,
+        categoryId,
         resolution: message.resolution,
         lastVol: message.lastVol,
         type: message.type,
@@ -377,10 +394,140 @@ async function handleQuickAction(message, sender) {
     return enqueueBookMutation(() => processSaveQueue([task]));
 }
 
+function waitForBuzzheavierTabReady(tabId, timeoutMs = 20000) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let timeoutId;
+        const finish = error => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            chrome.tabs.onUpdated.removeListener(onUpdated);
+            chrome.tabs.onRemoved.removeListener(onRemoved);
+            if (error) reject(error);
+            else resolve();
+        };
+        const onUpdated = (updatedTabId, changeInfo) => {
+            if (updatedTabId === tabId && changeInfo.status === 'complete') finish();
+        };
+        const onRemoved = removedTabId => {
+            if (removedTabId === tabId) finish(new Error('다운로드 준비 탭이 닫혔습니다.'));
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+        chrome.tabs.onRemoved.addListener(onRemoved);
+        timeoutId = setTimeout(() => finish(new Error('Buzzheavier 페이지를 불러오는 시간이 초과되었습니다.')), timeoutMs);
+        Promise.resolve().then(() => chrome.tabs.get(tabId)).then(tab => {
+            if (tab.status === 'complete') finish();
+        }).catch(finish);
+    });
+}
+
+function startBuzzheavierDownload(url, folder) {
+    return new Promise((resolve, reject) => {
+        chrome.downloads.download({ url, conflictAction: 'uniquify' }, downloadId => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+                reject(new Error(error.message || '다운로드를 시작하지 못했습니다.'));
+                return;
+            }
+            if (!Number.isInteger(downloadId) || downloadId < 0) {
+                reject(new Error('다운로드 ID를 확인할 수 없습니다.'));
+                return;
+            }
+            if (folder) downloadTitlesMap[downloadId] = folder;
+            resolve(downloadId);
+        });
+    });
+}
+
+async function handleBuzzheavierDownload(message, sender) {
+    let ownedTabId = null;
+    let keepVerificationTab = false;
+    try {
+        const canonicalUrl = BuzzheavierDownload.normalizePageUrl(message.url);
+        const tab = await chrome.tabs.create({ url: canonicalUrl, active: false });
+        if (!Number.isInteger(tab?.id) || tab.id < 0) throw new Error('다운로드 준비 탭을 열지 못했습니다.');
+        ownedTabId = tab.id;
+        await waitForBuzzheavierTabReady(ownedTabId);
+        const probeResults = await chrome.scripting.executeScript({
+            target: { tabId: ownedTabId, frameIds: [0] },
+            func: () => window.location.href
+        });
+        const probe = probeResults?.find(result => result.frameId === 0);
+        if (!probe || BuzzheavierDownload.normalizePageUrl(probe.result) !== canonicalUrl) {
+            throw new Error('다운로드 준비 페이지가 다른 주소로 이동했습니다.');
+        }
+        const target = { tabId: ownedTabId };
+        if (typeof probe.documentId === 'string' && probe.documentId) target.documentIds = [probe.documentId];
+        else target.frameIds = [0];
+        const results = await chrome.scripting.executeScript({
+            target,
+            func: BuzzheavierDownload.resolveInPage,
+            args: [canonicalUrl]
+        });
+        const result = results?.find(entry => entry.frameId === 0)?.result;
+        if (!result || result.ok !== true) {
+            const error = new Error(result?.error || 'Buzzheavier 다운로드 주소를 확인하지 못했습니다.');
+            error.code = result?.code || 'resolve-failed';
+            throw error;
+        }
+        const downloadUrl = BuzzheavierDownload.validateDownloadUrl(result.url);
+        const downloadId = await startBuzzheavierDownload(downloadUrl, message.downloadFolder || message.title);
+        sendTabMessage(sender?.tab?.id, {
+            action: 'SHOW_INFO_TOAST',
+            msg: 'Buzzheavier 다운로드가 시작되었습니다.'
+        });
+        return { ok: true, downloadId };
+    } catch (error) {
+        if (error?.code === 'verification-required' && ownedTabId !== null) {
+            try {
+                await chrome.tabs.update(ownedTabId, { active: true });
+                keepVerificationTab = true;
+            } catch (_) {}
+        }
+        sendTabMessage(sender?.tab?.id, {
+            action: 'SHOW_INFO_TOAST',
+            msg: keepVerificationTab
+                ? 'Buzzheavier에서 브라우저 확인이 필요합니다. 열린 탭에서 확인한 뒤 다운로드 버튼을 다시 눌러주세요.'
+                : `Buzzheavier 다운로드를 시작하지 못했습니다. ${getBookStoreErrorMessage(error)}`,
+            isError: true
+        });
+        return { ok: false, code: error?.code || 'download-failed', error: getBookStoreErrorMessage(error) };
+    } finally {
+        if (ownedTabId !== null && !keepVerificationTab) {
+            try {
+                await chrome.tabs.remove(ownedTabId);
+            } catch (_) {}
+        }
+    }
+}
+
+async function ensureQuickUiStyles(sender) {
+    const tabId = sender?.tab?.id;
+    if (!Number.isInteger(tabId) || tabId < 0) {
+        throw new Error('스타일을 적용할 탭을 확인할 수 없습니다.');
+    }
+    const target = { tabId };
+    if (typeof sender.documentId === 'string' && sender.documentId.trim()) {
+        target.documentIds = [sender.documentId];
+    } else {
+        target.frameIds = [Number.isInteger(sender.frameId) && sender.frameId >= 0 ? sender.frameId : 0];
+    }
+    await chrome.scripting.insertCSS({
+        target,
+        files: ['book-ui.css', 'category-ui.css'],
+        origin: 'USER'
+    });
+    return { ok: true };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "RIGHT_CLICK_TITLE") {
     rememberRightClickedContext(sender.tab && sender.tab.id, sender.frameId, {
         title: message.title,
+        correctedTitle: message.correctedTitle,
+        correctedBookId: message.correctedBookId,
+        categoryId: message.categoryId,
         hasTranslationEdition: message.hasTranslationEdition,
         pageUrl: message.pageUrl || (sender.tab && sender.tab.url),
         linkUrl: message.linkUrl,
@@ -394,6 +541,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       return true;
   }
+
+    else if (message.action === 'ENSURE_QUICK_UI_STYLES') {
+        ensureQuickUiStyles(sender).then(sendResponse).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
 
     else if (message.action === "GET_BOOK_LIST") {
         bookStoreGetAllWithRevision().then(result => {
@@ -427,7 +581,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 msg: `❌ 도서 수정에 실패했습니다: ${errorMessage}`,
                 isError: true
             });
-            sendResponse({ ok: false, error: errorMessage });
+            sendResponse({ ok: false, error: errorMessage, code: error.code, candidates: error.candidates });
         });
         return true;
     }
@@ -441,7 +595,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     else if (message.action === 'AUTO_UPDATE_DOWNLOAD_BOOK') {
         enqueueBookMutation(() => handleDownloadBookUpdate(message, sender)).then(sendResponse).catch(error => {
-            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error), code: error.code, candidates: error.candidates });
         });
         return true;
     }
@@ -545,11 +699,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }).catch(error => {
           const errorMessage = getBookStoreErrorMessage(error);
           console.error('빠른 작업 처리 실패:', error);
-          sendResponse({ ok: false, error: errorMessage });
+          sendResponse({ ok: false, error: errorMessage, code: error.code, candidates: error.candidates });
       });
       return true;
   }
   
+    else if (message.action === 'DOWNLOAD_BUZZHEAVIER') {
+        handleBuzzheavierDownload(message, sender).then(sendResponse).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
+
   else if (message.action === "DOWNLOAD_GIGAFILE") {
     (async () => {
       try {
@@ -1143,7 +1304,19 @@ function createIndependentMenus() {
     
     chrome.contextMenus.create({ id: "separator", type: "separator", contexts: ["all"] });
     chrome.contextMenus.create({ id: "registerDetailSelector", title: "🎯 이 요소를 상세페이지 제목으로 등록 (버튼 표시)", contexts: ["all"] });
+    updateContextMenuCategories().catch(console.error);
   });
+}
+
+async function updateContextMenuCategories(categoryId) {
+    if (categoryId === undefined) {
+        const settings = await chrome.storage.local.get({ lastRegistrationCategory: 'uncategorized' });
+        categoryId = settings.lastRegistrationCategory;
+    }
+    const label = getBookCategoryLabel(categoryId);
+    for (const [id, title] of [['addExclude', '1. 제외 추가'], ['addIncomplete', '2. 미완 추가'], ['addComplete', '3. 완결 추가'], ['deleteBook', '4. 삭제 처리']]) {
+        chrome.contextMenus.update(id, { title: `${title} · ${label}` }, ignoreLastError);
+    }
 }
 
 function initSidePanelBehavior() {
@@ -1324,6 +1497,9 @@ function enqueueBookMutation(operation) {
 
 // 스토리지 변경 감지 리스너 추가 (옵션 설정 실시간 반영 및 레이스 컨디션 해결)
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.lastRegistrationCategory) {
+        updateContextMenuCategories(changes.lastRegistrationCategory.newValue).catch(console.error);
+    }
     if (areaName === 'local' && changes.editionKeywords) {
         const nextEditionKeywords = changes.editionKeywords.newValue;
         void enqueueBookMutation(async () => {
@@ -1429,7 +1605,7 @@ async function handleDownloadBookUpdate(message, sender) {
     if (!isShortcutDownloadSender(sender)) return { ok: true, skipped: true };
     await customFiltersReady;
     return bookStoreWithSyncLock(async () => {
-        const settings = await chrome.storage.local.get({ enableShortcuts: false, autoUpdateDownloadBook: false, missingVolsMap: {} });
+        const settings = await chrome.storage.local.get({ enableShortcuts: false, autoUpdateDownloadBook: false, missingVolsMap: {}, lastRegistrationCategory: 'uncategorized' });
         if (settings.enableShortcuts !== true || settings.autoUpdateDownloadBook !== true) return { ok: true, skipped: true };
         const title = String(message.title || '').trim();
         if (!title || !message.sourceTitle) return { ok: true, skipped: true };
@@ -1437,6 +1613,9 @@ async function handleDownloadBookUpdate(message, sender) {
         const savedBook = await bookStoreApplyDownloadUpdate({
             id: message.bookId,
             title,
+            categoryId: message.categoryId !== undefined
+                ? normalizeBookCategory(message.categoryId)
+                : message.bookId == null ? normalizeBookCategory(settings.lastRegistrationCategory) : undefined,
             rejectLowCoverageId: true
         }, metadata, settings.missingVolsMap);
         if (!savedBook) return { ok: true, skipped: true };
@@ -1446,7 +1625,7 @@ async function handleDownloadBookUpdate(message, sender) {
     });
 }
 
-async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
+async function deleteBookByMatchKey(title, tabId, reason, bookId = null, categoryId) {
     try {
         await customFiltersReady;
         const targetMatchKey = getTitleMatchParts(title || '').matchKey;
@@ -1454,6 +1633,7 @@ async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
             id: bookId,
             matchKey: targetMatchKey,
             title,
+            categoryId,
             rejectLowCoverageId: true
         });
 
@@ -1482,7 +1662,7 @@ async function deleteBookByMatchKey(title, tabId, reason, bookId = null) {
             msg: `❌ 삭제 처리에 실패했습니다: ${errorMessage}`,
             isError: true
         });
-        return { ok: false, error: errorMessage };
+        return { ok: false, error: errorMessage, code: error.code, candidates: error.candidates };
     }
 }
 
@@ -1512,7 +1692,7 @@ async function handleContentUpdateBook(message) {
     if (message.title !== undefined) changes.title = message.title;
     if (message.date !== undefined) changes.date = message.date;
 
-    const savedBook = await bookStorePutByTarget({ id: bookId, matchKey: lookupMatchKey }, existingBook => {
+    const savedBook = await bookStorePutByTarget({ id: bookId, matchKey: lookupMatchKey, categoryId: message.categoryId }, existingBook => {
         if (!existingBook) {
             throw new Error('수정할 도서 데이터를 찾을 수 없습니다.');
         }
@@ -1611,9 +1791,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       return;
   }
 
+    const settings = await chrome.storage.local.get({ lastRegistrationCategory: 'uncategorized' });
+    const categoryId = normalizeBookCategory(settings.lastRegistrationCategory);
+    const correctedTitle = clickedContext.categoryId === categoryId
+        ? normalizeExactBookTitle(clickedContext.correctedTitle)
+        : '';
+    const bookId = correctedTitle ? clickedContext.correctedBookId : null;
+    if (correctedTitle) cleanTitle = correctedTitle;
+
     if (menuId === "deleteBook") {
         await enqueueBookMutation(() => {
-            return deleteBookByMatchKey(cleanTitle, tab ? tab.id : null, 'context-menu');
+            return deleteBookByMatchKey(cleanTitle, tab ? tab.id : null, 'context-menu', bookId, categoryId);
         });
         return;
     }
@@ -1634,6 +1822,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     await enqueueBookMutation(() => processSaveQueue([{
         cleanTitle,
         matchKey: getTitleMatchParts(cleanTitle).matchKey,
+        bookId,
+        categoryId,
         resolution,
         lastVol,
         type,
@@ -1688,6 +1878,7 @@ async function processSaveQueue(tasks) {
                     id: task.bookId,
                     matchKey: targetMatchKey,
                     title: normalizedTaskTitle,
+                    categoryId: task.categoryId,
                     rejectLowCoverageId: true
                 },
                 updateBook: existingBook => {
@@ -1701,6 +1892,7 @@ async function processSaveQueue(tasks) {
                     }
                     : {
                         title: normalizedTaskTitle,
+                        categoryId: normalizeBookCategory(task.categoryId),
                         type: task.type,
                         resolution: task.resolution,
                         lastVol: task.lastVol,
@@ -1740,7 +1932,7 @@ async function processSaveQueue(tasks) {
             msg: `❌ 저장 처리에 실패했습니다: ${errorMessage}`,
             isError: true
         });
-        return { ok: false, error: errorMessage };
+        return { ok: false, error: errorMessage, code: error.code, candidates: error.candidates };
     }
 }
 

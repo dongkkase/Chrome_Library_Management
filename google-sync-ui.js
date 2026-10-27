@@ -22,6 +22,7 @@
     let refreshInFlight = false;
     let requestEpoch = 0;
     let requestError = '';
+    let activeActionButton = null;
 
     function formatTime(value) {
         if (!value) return '';
@@ -117,7 +118,9 @@
         setOptionalText(elements.LastTime, `이 기기 최근 동기화 완료: ${lastTimeText}`);
         setOptionalText(elements.Error, requestError || (status && status.error) || '');
         elements.ConnectBtn.hidden = !!status && (!available || (enabled && status.state !== 'error'));
-        elements.ConnectBtn.textContent = enabled ? 'Google 계정 다시 연결' : 'Google 계정 연결';
+        if (activeActionButton !== elements.ConnectBtn) {
+            elements.ConnectBtn.textContent = enabled ? 'Google 계정 다시 연결' : 'Google 계정 연결';
+        }
         elements.ConnectBtn.disabled = !available || busy;
         elements.NowBtn.hidden = !available || !enabled;
         elements.NowBtn.disabled = busy || !!conflict;
@@ -184,8 +187,11 @@
         }
     }
 
-    async function runAction(action, extra = {}) {
+    async function runAction(action, extra = {}, button = null) {
         if (requestInFlight) return;
+        const finish = ButtonUI.start(button);
+        if (!finish) return;
+        activeActionButton = button;
         requestEpoch++;
         requestInFlight = true;
         requestError = '';
@@ -202,6 +208,8 @@
         } finally {
             requestInFlight = false;
             pendingPreferences = null;
+            finish();
+            activeActionButton = null;
             renderStatus();
         }
     }
@@ -217,14 +225,15 @@
             : `Google 도서 목록 ${conflict.remoteCount}권으로 이 기기 목록 ${conflict.localCount}권을 전체 교체합니다. 현재 목록은 로컬 복원 지점에 먼저 저장합니다.`;
         const prompt = `${conflictReason(conflict)}\n\n${conflictImpact(conflict, resolution)}\n\n${actionDescription}\n적용 전 두 목록을 다시 확인하며, 내용이 바뀌었으면 다시 선택해야 합니다. 계속하시겠습니까?`;
         if (!window.confirm(prompt)) return;
-        void runAction('GOOGLE_SYNC_RESOLVE', { resolution, conflictToken: conflict.token });
+        void runAction('GOOGLE_SYNC_RESOLVE', { resolution, conflictToken: conflict.token },
+            resolution === 'local' ? elements.UseLocalBtn : elements.UseRemoteBtn);
     }
 
-    elements.ConnectBtn.addEventListener('click', () => void runAction('GOOGLE_SYNC_CONNECT'));
-    elements.NowBtn.addEventListener('click', () => void runAction('GOOGLE_SYNC_NOW'));
+    elements.ConnectBtn.addEventListener('click', () => void runAction('GOOGLE_SYNC_CONNECT', {}, elements.ConnectBtn));
+    elements.NowBtn.addEventListener('click', () => void runAction('GOOGLE_SYNC_NOW', {}, elements.NowBtn));
     elements.DisconnectBtn.addEventListener('click', () => {
         if (!window.confirm('이 기기의 Google 동기화를 중지하시겠습니까? 이 기기와 Google에 저장된 도서 목록은 유지됩니다.')) return;
-        void runAction('GOOGLE_SYNC_DISCONNECT');
+        void runAction('GOOGLE_SYNC_DISCONNECT', {}, elements.DisconnectBtn);
     });
     elements.UseLocalBtn.addEventListener('click', () => resolveConflict('local'));
     elements.UseRemoteBtn.addEventListener('click', () => resolveConflict('remote'));

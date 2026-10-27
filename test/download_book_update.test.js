@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const sources = Object.fromEntries(['download-book-update.js', 'background.js', 'db.js', 'content.js', 'options.js', 'common.js']
     .map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
 const api = vm.runInNewContext(`${sources['common.js']}\n${sources['download-book-update.js']}\nDownloadBookUpdate;`);
+const categories = vm.runInNewContext(`${sources['common.js']}\n({normalizeBookCategory, getBookCategoryLabel});`);
 const plain = value => JSON.parse(JSON.stringify(value));
 const book = extra => ({ id: 1, title: '예시 도서', type: 'incomplete', lastVol: '6', resolution: '1500px', folderRule: '만화', ...extra });
 const update = (existing, title, missing = existing?.missingVols || []) => api.updateBook(existing, '예시 도서', api.parseTitle(title), missing);
@@ -232,7 +233,7 @@ test('단축키 옵션을 끄면 두 하위 설정값은 보존하며 조작만 
     assert.equal(elements.autoUpdateDownloadBookCheckbox.checked, true);
 });
 
-function createDownloadButtonHarness(existingBook = book(), sourceTitle = '예시 도서 9권', targetType = 'GIGAFILE') {
+function createDownloadButtonHarness(existingBook = book(), sourceTitle = '예시 도서 9권', targetType = 'GIGAFILE', options = {}) {
     let shortcut = false;
     let button;
     let updateCallback;
@@ -240,12 +241,18 @@ function createDownloadButtonHarness(existingBook = book(), sourceTitle = '예�
     const errors = [];
     const context = {
         document: { createElement: () => ({ dataset: {}, style: {} }) },
+        window: { prompt: () => options.choice === undefined ? '1' : options.choice },
+        normalizeBookCategory: categories.normalizeBookCategory,
+        getBookCategoryLabel: categories.getBookCategoryLabel,
+        BookCategoryUI: { getRegistrationCategory: () => options.registrationCategory || 'uncategorized' },
         BookShortcuts: { isDownloadTrigger: () => shortcut },
         showInfoToast: (message, isError) => { if (isError) errors.push(message); },
         getResolvedSiteTitle: () => ({ title: '예시 도서', bookId: existingBook?.id ?? null }),
         getResolvedTitleMatchParts: () => ({ editionKey: '', matchKey: '예시도서' }),
         getTitleMatchParts: () => ({ editionKey: '', matchKey: '예시도서' }),
-        findMatchingBook: () => ({ book: existingBook }),
+        findMatchingBook: () => options.candidates
+            ? { book: null, ambiguous: true, candidates: options.candidates }
+            : { book: existingBook },
         sendRuntimeMessage: message => messages.push(message),
         requestRuntimeResponse: (message, callback) => {
             messages.push(message);
@@ -257,13 +264,14 @@ function createDownloadButtonHarness(existingBook = book(), sourceTitle = '예�
     const createButton = vm.runInNewContext(`
         ${extract('content.js', 'sanitizeDownloadFolderSegment')}
         ${extract('content.js', 'buildDownloadFolder')}
+        ${extract('content.js', 'selectBookCategoryCandidate')}
         ${extract('content.js', 'createButton')}
         createButton;
     `, context);
     createButton({ insertAdjacentElement: (_position, element) => { button = element; } },
         'https://download.example/9', '', targetType, '예시 도서', false, sourceTitle);
     return {
-        messages, errors,
+        messages, errors, getButton: () => button,
         click(isShortcut = true) {
             shortcut = isShortcut;
             try { button.onclick({ preventDefault() {} }); }
@@ -291,7 +299,7 @@ test('일반 클릭은 바로 다운로드하고 단축키는 갱신 응답 이�
 });
 
 test('미등록 신권의 첫 다운로드부터 미완 폴더명과 새 도서 ID를 적용한다', () => {
-    for (const targetType of ['GIGAFILE', 'GOFILE', 'TRANSFERIT']) {
+    for (const targetType of ['GIGAFILE', 'GOFILE', 'TRANSFERIT', 'BUZZHEAVIER']) {
         const harness = createDownloadButtonHarness(null, '예시 도서 9권', targetType);
         harness.click();
         const savedBook = { ...update(null, '예시 도서 9권'), id: 42 };
@@ -334,4 +342,197 @@ test('자동 갱신 OFF나 실패 시에는 기존 상태로 다운로드와 검
         assert.equal(harness.messages.at(-1).action, 'SEARCH_EVERYTHING_ON_DOWNLOAD');
         assert.equal(harness.errors.length, response?.ok === false ? 1 : 0);
     }
+});
+
+test('동명작 다운로드는 명시적으로 선택한 분류의 저장 제목과 ID로만 갱신한다', () => {
+    const selected = book({ id: 8, title: '예시 도서의 긴 정정 제목', categoryId: 'pdf' });
+    const harness = createDownloadButtonHarness(null, '예시 도서 9권', 'GIGAFILE', {
+        candidates: [book({ categoryId: 'comic' }), selected], choice: '2', registrationCategory: 'comic'
+    });
+    harness.click();
+    const updateMessage = harness.messages.find(message => message.action === 'AUTO_UPDATE_DOWNLOAD_BOOK');
+    assert.equal(updateMessage.bookId, 8);
+    assert.equal(updateMessage.categoryId, 'pdf');
+    assert.equal(updateMessage.title, selected.title);
+    assert.equal(updateMessage.sourceTitle, '예시 도서 9권');
+});
+
+test('동명작 다운로드 대상 선택을 취소하면 저장·다운로드를 수행하지 않고 버튼을 복구한다', () => {
+    const harness = createDownloadButtonHarness(null, '예시 도서 9권', 'GIGAFILE', {
+        candidates: [book({ categoryId: 'comic' }), book({ id: 2, categoryId: 'epub' })], choice: null
+    });
+    harness.click();
+    assert.equal(harness.messages.length, 0);
+    assert.equal(harness.getButton().style.pointerEvents, 'auto');
+});
+
+test('Buzzheavier 공유 주소는 정확한 호스트와 12자리 ID만 받아 HTTPS 주소로 정리한다', () => {
+    const normalize = vm.runInNewContext(`${extract('content.js', 'normalizeBuzzheavierShareUrl')}\nnormalizeBuzzheavierShareUrl;`, { URL });
+    for (const url of [
+        'https://buzzheavier.com/pk6ep0d4zf24',
+        'http://buzzheavier.com/pk6ep0d4zf24/',
+        'https://www.buzzheavier.com:443/pk6ep0d4zf24/?source=test#download',
+        'http://www.buzzheavier.com:80/pk6ep0d4zf24'
+    ]) assert.equal(normalize(url), 'https://buzzheavier.com/pk6ep0d4zf24', url);
+    assert.equal(normalize('https://BUZZHEAVIER.COM/AbCdEf123456'), 'https://buzzheavier.com/AbCdEf123456');
+    for (const url of [
+        'https://notbuzzheavier.com/pk6ep0d4zf24',
+        'https://buzzheavier.com.example.org/pk6ep0d4zf24',
+        'https://files.buzzheavier.com/pk6ep0d4zf24',
+        'https://buzzheavier.com@evil.example/pk6ep0d4zf24',
+        'https://user@buzzheavier.com/pk6ep0d4zf24',
+        'https://buzzheavier.com:8443/pk6ep0d4zf24',
+        'https://buzzheavier.com:80/pk6ep0d4zf24',
+        'http://buzzheavier.com:443/pk6ep0d4zf24',
+        'ftp://buzzheavier.com/pk6ep0d4zf24',
+        'https://buzzheavier.com/',
+        'https://buzzheavier.com/about',
+        'https://buzzheavier.com/pk6ep0d4zf2',
+        'https://buzzheavier.com/pk6ep0d4zf245',
+        'https://buzzheavier.com/pk6ep0d4zf24/download',
+        'https://buzzheavier.com/pk6ep0d4zf24%2F',
+        'invalid URL'
+    ]) assert.equal(normalize(url), '', url);
+});
+
+function createDirectDownloadRoutingHarness(url, mode, allowedDLs = ['buzzheavier']) {
+    const buttons = [];
+    const messages = [];
+    const toasts = [];
+    let downloadResponse;
+    const input = { value: url, getAttribute: () => url };
+    const container = {
+        textContent: mode === 'special-text' ? `예시 도서 9권 ${url}` : '예시 도서 9권',
+        parentElement: null,
+        querySelectorAll: () => mode === 'input' ? [input] : []
+    };
+    const source = {
+        href: mode === 'anchor' ? url : '',
+        textContent: mode === 'label' ? url : mode === 'anchor' ? '파일 링크' : '탭열기',
+        children: [],
+        classList: { contains: () => false },
+        parentElement: container,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        closest: () => container,
+        insertAdjacentElement: (_position, button) => buttons.push(button)
+    };
+    const context = {
+        URL,
+        window: { location: { hostname: 'library.example' } },
+        document: {
+            title: '예시 도서 9권',
+            createElement: () => ({ dataset: {}, style: {} }),
+            querySelector: () => null,
+            querySelectorAll: selector => selector === 'a'
+                ? (['anchor', 'label'].includes(mode) ? [source] : [])
+                : (['input', 'special-text'].includes(mode) ? [source] : [])
+        },
+        PRE_DEFINED_SITES: [],
+        globalDetailSelector: '',
+        isSupportSingleCharEnabled: false,
+        getTitleTextContent: element => element.textContent,
+        hasTranslationEditionMarker: () => false,
+        getResolvedSiteTitle: () => ({ title: '예시 도서', bookId: 1 }),
+        getResolvedTitleMatchParts: () => ({ editionKey: '', matchKey: '예시도서' }),
+        getTitleMatchParts: () => ({ editionKey: '', matchKey: '예시도서' }),
+        findMatchingBook: () => ({ book: book() }),
+        BookShortcuts: { isDownloadTrigger: () => false },
+        sendRuntimeMessage: message => messages.push(message),
+        requestRuntimeResponse(message, callback) {
+            messages.push(message);
+            downloadResponse = callback;
+        },
+        showInfoToast: message => toasts.push(message),
+        setTimeout() {}
+    };
+    const inject = vm.runInNewContext([
+        extract('content.js', 'normalizeBuzzheavierShareUrl'),
+        extract('content.js', 'sanitizeDownloadFolderSegment'),
+        extract('content.js', 'buildDownloadFolder'),
+        extract('content.js', 'injectDirectDownloadButtons'),
+        'injectDirectDownloadButtons;'
+    ].join('\n'), context);
+    inject(allowedDLs);
+    return {
+        buttons, messages, toasts,
+        click: () => buttons[0].onclick({ preventDefault() {} }),
+        respond: response => downloadResponse(response)
+    };
+}
+
+test('Buzzheavier 링크·표시 텍스트·발급 입력란에서 같은 다운로드 요청을 만든다', () => {
+    for (const mode of ['anchor', 'label', 'input', 'special-text']) {
+        const harness = createDirectDownloadRoutingHarness('https://www.buzzheavier.com:443/pk6ep0d4zf24/?source=gofile.io#download', mode,
+            ['giga', 'gofile', 'transfer', 'buzzheavier']);
+        assert.equal(harness.buttons.length, 1, mode);
+        assert.equal(harness.buttons[0].dataset.downloadUrl, 'https://buzzheavier.com/pk6ep0d4zf24', mode);
+        harness.click();
+        assert.equal(harness.messages.length, 1, mode);
+        assert.equal(harness.messages[0].action, 'DOWNLOAD_BUZZHEAVIER', mode);
+        assert.equal(harness.messages[0].url, 'https://buzzheavier.com/pk6ep0d4zf24', mode);
+        assert.equal(harness.messages[0].downloadFolder, '만화/(미완)예시 도서', mode);
+        assert.ok(harness.toasts[0].includes('Buzzheavier'), mode);
+    }
+});
+
+test('Buzzheavier 응답을 받으면 성공·오류·확인 요청 뒤 바로 버튼을 다시 사용할 수 있다', () => {
+    for (const response of [{ ok: true }, { ok: false, code: 'verification-required' }, null]) {
+        const harness = createDirectDownloadRoutingHarness('https://buzzheavier.com/pk6ep0d4zf24', 'anchor');
+        harness.click();
+        assert.equal(harness.buttons[0].style.pointerEvents, 'none');
+        harness.respond(response);
+        assert.equal(harness.buttons[0].style.pointerEvents, 'auto');
+        assert.match(harness.buttons[0].innerHTML, /바로다운로드/);
+    }
+});
+
+test('Buzzheavier 비허용·유사 도메인·잘못된 경로에는 다운로드 버튼을 만들지 않는다', () => {
+    for (const mode of ['anchor', 'label', 'input', 'special-text']) {
+        assert.equal(createDirectDownloadRoutingHarness('https://buzzheavier.com/pk6ep0d4zf24', mode, ['gofile']).buttons.length, 0, mode);
+        for (const url of [
+            'https://buzzheavier.com.evil.example/pk6ep0d4zf24',
+            'https://evil.buzzheavier.com/pk6ep0d4zf24',
+            'https://buzzheavier.com/about',
+            'https://buzzheavier.com/pk6ep0d4zf24/download',
+            'https://buzzheavier.com/pk6ep0d4zf245'
+        ]) assert.equal(createDirectDownloadRoutingHarness(url, mode).buttons.length, 0, `${mode}: ${url}`);
+    }
+});
+
+test('Buzzheavier를 함께 허용해도 기존 호스트의 링크·발급 입력란 라우팅을 유지한다', () => {
+    for (const mode of ['anchor', 'input']) {
+        for (const [url, action] of [
+            ['https://10.gigafile.nu/1234-example', 'DOWNLOAD_GIGAFILE'],
+            ['https://gofile.io/d/example', 'DOWNLOAD_GOFILE'],
+            ['https://transfer.it/s/example', 'DOWNLOAD_TRANSFERIT'],
+            ['https://hellkdis.net/s/example', 'OPEN_HELLKDIS_WITH_PW']
+        ]) {
+            const harness = createDirectDownloadRoutingHarness(url, mode, ['giga', 'gofile', 'transfer', 'hk', 'buzzheavier']);
+            assert.equal(harness.buttons.length, 1, `${mode}: ${url}`);
+            harness.click();
+            assert.equal(harness.messages[0].action, action, `${mode}: ${url}`);
+        }
+    }
+});
+
+test('기존 다운로드 지원 사이트와 동적 링크·사용자 추가 사이트에 Buzzheavier를 허용한다', () => {
+    const source = sources['content.js'];
+    const start = source.indexOf('const PRE_DEFINED_SITES = [');
+    const end = source.indexOf('\n];', start) + 3;
+    assert.ok(start >= 0 && end > start);
+    const calls = [];
+    const heading = { textContent: 'https://buzzheavier.com/pk6ep0d4zf24', innerHTML: '' };
+    const material = { dataset: {}, querySelector: () => heading };
+    const sites = vm.runInNewContext(`${source.slice(start, end)}\nPRE_DEFINED_SITES;`, {
+        document: { querySelectorAll: () => [{ closest: () => material }] },
+        injectDirectDownloadButtons: allowed => calls.push(allowed)
+    });
+    for (const site of sites.filter(site => site.allowedDLs.length)) assert.ok(site.allowedDLs.includes('buzzheavier'), site.url);
+    sites.find(site => site.url === 'chating.wiki').customJS();
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].includes('buzzheavier'));
+    const defaults = source.match(/else if \(matchedUserSite\) \{[\s\S]*?globalAllowedDLs = (\[[^\]]+\]);/);
+    assert.ok(defaults);
+    assert.ok(vm.runInNewContext(defaults[1]).includes('buzzheavier'));
 });

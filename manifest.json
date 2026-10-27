@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "1.도서 목록 매칭 매니저",
-    "version": "1.36.4",
+    "version": "1.37.0",
     "icons": {
         "16": "icon.png",
         "32": "icon.png",
@@ -29,7 +29,11 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "author.json"
+                "author.json",
+                "images/caret-down-solid-full.svg",
+                "images/sliders-solid-full.svg",
+                "images/arrow-up-wide-short-solid-full.svg",
+                "images/arrow-up-short-wide-solid-full.svg"
             ],
             "matches": [
                 "<all_urls>"
@@ -59,12 +63,17 @@
             ],
             "js": [
                 "common.js",
+                "vendor/motion.js",
+                "vendor/anime.umd.min.js",
+                "library-motion.js",
+                "category-ui.js",
                 "book-ui.js",
                 "book-shortcuts.js",
                 "content.js"
             ],
             "css": [
-                "book-ui.css"
+                "book-ui.css",
+                "category-ui.css"
             ],
             "run_at": "document_end"
         }

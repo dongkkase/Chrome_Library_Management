@@ -1,4 +1,28 @@
 // common.js (공통 정규식 관리 파일)
+const BOOK_CATEGORIES = Object.freeze([
+    { id: 'uncategorized', label: '미분류' },
+    { id: 'comic', label: '만화' },
+    { id: 'epub', label: '도서(EPUB)' },
+    { id: 'pdf', label: '도서(PDF)' },
+    { id: 'txt', label: '도서(TXT)' },
+    { id: 'scan', label: '도서(SCAN)' },
+    { id: 'audiobook', label: '오디오북' },
+    { id: 'video', label: '영상' },
+    { id: 'other', label: '기타' }
+].map(category => Object.freeze(category)));
+
+function normalizeBookCategory(categoryId) {
+    return BOOK_CATEGORIES.some(category => category.id === categoryId) ? categoryId : 'uncategorized';
+}
+
+function getBookCategoryLabel(categoryId) {
+    return BOOK_CATEGORIES.find(category => category.id === normalizeBookCategory(categoryId)).label;
+}
+
+function getCategorizedBookMatchKey(matchKey, categoryId) {
+    return `${normalizeBookCategory(categoryId)}::${String(matchKey || '')}`;
+}
+
 function compareExtensionVersions(leftVersion, rightVersion) {
     const normalizeVersion = (version) => String(version || '')
         .replace(/^v/i, '')

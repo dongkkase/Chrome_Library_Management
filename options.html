@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>도서 목록 매칭 매니저</title>
         <link rel="icon" href="icon.png">
+        <link rel="stylesheet" href="category-ui.css">
         <link rel="stylesheet" href="options.css">
     </head>
     <body class="side-panel-mode">
@@ -88,9 +89,12 @@
                 <div class="panel-box bulk-panel" id="bulkPanel">
                     <div class="bulk-panel-header">
                         <h4 style="font-size: 14px;">📝 새로운 도서 일괄 등록</h4>
-                        <button type="button" id="bulkPanelToggle" class="bulk-panel-toggle" aria-expanded="true" aria-controls="bulkTypeSelect bulkInput bulkPreview bulkHint saveBtn">
-                            <span class="bulk-panel-toggle-label">접기</span>
-                            <span class="bulk-panel-toggle-icon" aria-hidden="true">▲</span>
+                        <button type="button" id="bulkPanelToggle" class="bulk-panel-toggle options-disclosure-trigger options-disclosure-toggle" aria-expanded="true" aria-controls="bulkTypeSelect bulkCategorySelect bulkInput bulkPreview bulkHint saveBtn">
+                            <span class="options-disclosure-expand">펼치기</span>
+                            <span class="options-disclosure-collapse">접기</span>
+                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="m4 6 4 4 4-4"></path>
+                            </svg>
                         </button>
                     </div>
                     <select aria-label="일괄 등록 타입" id="bulkTypeSelect" style="width: 100%; margin-bottom: 8px; border-color: var(--border); font-weight: bold; color: var(--input-text); font-size: 13px;">
@@ -98,6 +102,7 @@
                         <option value="incomplete">⏳ '미완' 타입으로 일괄 저장</option>
                         <option value="complete">✅ '완결' 타입으로 일괄 저장</option>
                     </select>
+                    <select aria-label="일괄 등록 분류" id="bulkCategorySelect"></select>
                     <textarea aria-label="일괄 등록할 도서 목록" id="bulkInput" rows="3" placeholder="제목 권수 해상도 (여러 줄 입력 가능)&#10;예: 원피스 13권 1500px" style="font-size: 13px;"></textarea>
 
                     <div id="bulkPreview" style="margin-top:8px; font-size:12px; color:var(--text-muted); background:var(--panel); padding:8px 12px; border-radius:4px; border:1px solid var(--border); display:none;"></div>
@@ -111,7 +116,7 @@
                         <strong style="color: var(--text);">검색:</strong>
                         <div style="display: flex; width: 100%; gap: 5px; align-items: center;">
                             <div class="search-tools-dropdown">
-                                <button id="searchToolsBtn" type="button" aria-haspopup="true" aria-expanded="false"><span class="search-tools-label">목록 찾기</span><span class="dropdown-arrow">▼</span></button>
+                                <button id="searchToolsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="searchToolsMenu"><span class="search-tools-label">목록 찾기</span><span class="dropdown-arrow" aria-hidden="true"></span></button>
                                 <div id="searchToolsMenu" class="search-tools-menu" role="menu">
                                     <button type="button" data-special-filter="#중복" data-filter-label="중복 찾기" role="menuitem">
                                         <span>🔍</span><span><b>중복 찾기</b><small>제목이 겹치는 항목</small></span>
@@ -124,27 +129,25 @@
                                     </button>
                                 </div>
                             </div>
+                            <span id="categoryFilterControl" class="list-icon-control"></span>
                             <div style="position: relative; width: 100%;">
                                 <input type="text" aria-label="저장된 도서 검색" id="searchInput" placeholder="저장된 제목 검색..." style="width: 100%; border-color: #0d6efd; padding-right: 24px; box-sizing: border-box;">
                                 <span id="clearSearchBtn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px; font-weight: bold; display: none; line-height: 1;" title="검색어 지우기">&times;</span>
                             </div>
-                            <select aria-label="도서 목록 정렬" id="sortSelect" style="width: 40%; min-width: 110px; box-sizing: border-box;">
-                                <option value="id_desc">최신 등록순</option>
-                                <option value="id_asc">오래된 등록순</option>
-                                <option value="title_asc">제목 가나다순</option>
-                                <option value="title_desc">제목 역순</option>
-                            </select>
+                            <span id="sortControl" class="list-icon-control"></span>
                         </div>
                     </div>
                     <div class="batch-change">
-                        <strong style="color: var(--text);">검색된 결과 타입 일괄 변경:</strong>
+                        <strong style="color: var(--text);">검색된 결과 타입 및 분류 일괄 변경:</strong>
                         <div>
-                            <select aria-label="검색 결과에 적용할 타입" id="batchTypeSelect" style="width: auto; margin-left: 5px; display: inline-block;">
+                            <select aria-label="검색 결과에 적용할 타입" id="batchTypeSelect">
+                                <option value="unchanged">타입 변경 안 함</option>
                                 <option value="exclude">제외</option>
                                 <option value="incomplete">미완</option>
                                 <option value="complete">완결</option>
                             </select>
-                            <button id="batchUpdateBtn" style="margin-left: 5px; background: #6c757d; padding: 4px 12px;">일괄 적용</button>
+                            <select aria-label="검색 결과에 적용할 분류" id="batchCategorySelect"></select>
+                            <button id="batchUpdateBtn">일괄 적용</button>
                         </div>
                     </div>
                 </div>
@@ -154,13 +157,14 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 75px;">타입</th>
-                            <th>도서 제목</th>
-                            <th style="width: 140px;">상위 폴더 규칙</th>
-                            <th style="width: 80px;">해상도</th>
-                            <th style="width: 90px;">권수</th>
-                            <th style="width: 80px;">등록일</th>
-                            <th style="width: 110px;">관리</th>
+                            <th class="book-type-cell" style="width: 75px;">타입</th>
+                            <th class="book-category-cell">분류</th>
+                            <th class="book-title-cell">도서 제목</th>
+                            <th class="book-folder-cell" style="width: 140px;">상위 폴더 규칙</th>
+                            <th class="book-resolution-cell" style="width: 72px;">해상도</th>
+                            <th class="book-volume-cell" style="width: 108px;">권수</th>
+                            <th class="book-date-cell" style="width: 80px;">등록일</th>
+                            <th class="book-actions-cell" style="width: 68px;">관리</th>
                         </tr>
                     </thead>
                     <tbody id="listBody"></tbody>
@@ -174,10 +178,16 @@
                     <div><p class="eyebrow">PREFERENCES</p><h3>사이트와 사용 환경</h3></div>
                     <p>작동할 사이트와 제목 인식, 화면 표시를 설정하세요.</p>
                 </div>
-                <details class="panel-box settings-panel" open>
-                    <summary class="settings-panel-summary">
+                <details id="allowedSitesPanel" class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary options-disclosure-trigger">
                         <h4 style="font-size: 14px;">🌐 작동 허용 사이트 및 상세페이지 돔(DOM) 관리</h4>
-                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                        <span class="options-disclosure-toggle" aria-hidden="true">
+                            <span class="options-disclosure-expand">펼치기</span>
+                            <span class="options-disclosure-collapse">접기</span>
+                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m4 6 4 4 4-4"></path>
+                            </svg>
+                        </span>
                     </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">확장프로그램이 작동할 사이트를 관리합니다. 낯선 사이트는 상세페이지에서 <b>[우클릭 ➡️ 요소를 상세페이지 제목으로 등록]</b> 기능을 사용하면 훨씬 정확하게 등록됩니다.</p>
                     <div class="flex-row">
@@ -187,10 +197,16 @@
                     <div id="siteList" style="margin-top: 10px; display: flex; flex-wrap: wrap;"></div>
                 </details>
 
-                <details class="panel-box settings-panel" open>
-                    <summary class="settings-panel-summary">
+                <details id="filterWordsPanel" class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary options-disclosure-trigger">
                         <h4 style="font-size: 14px; color: #dc3545; border-bottom: 1px solid rgba(220,53,69,0.3);">🚫 제목 파싱 금지어 (필터링) 관리</h4>
-                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                        <span class="options-disclosure-toggle" aria-hidden="true">
+                            <span class="options-disclosure-expand">펼치기</span>
+                            <span class="options-disclosure-collapse">접기</span>
+                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m4 6 4 4 4-4"></path>
+                            </svg>
+                        </span>
                     </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
                         웹사이트 제목에서 <b>무조건 삭제하고 싶은 단어(작가명, 스캔팀 등)</b>를 등록하세요. <br>
@@ -203,10 +219,16 @@
                     <div id="filterList" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;"></div>
                 </details>
 
-                <details class="panel-box settings-panel" open>
-                    <summary class="settings-panel-summary">
+                <details id="editionKeywordsPanel" class="panel-box settings-panel" open>
+                    <summary class="settings-panel-summary options-disclosure-trigger">
                         <h4 style="font-size: 14px; color: #20c997; border-bottom: 1px solid rgba(32,201,151,0.3);">판본 식별 괄호 키워드</h4>
-                        <span class="settings-panel-toggle" aria-hidden="true"><span class="settings-panel-expand">펼치기</span><span class="settings-panel-collapse">접기</span><span class="settings-panel-chevron">▼</span></span>
+                        <span class="options-disclosure-toggle" aria-hidden="true">
+                            <span class="options-disclosure-expand">펼치기</span>
+                            <span class="options-disclosure-collapse">접기</span>
+                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m4 6 4 4 4-4"></path>
+                            </svg>
+                        </span>
                     </summary>
                     <p style="font-size: 12px; color: var(--text-muted); margin-top: -10px; margin-bottom: 12px;">
                         등록된 키워드가 괄호 안이나 제목 끝에 있으면 판본명으로 보존하고 별도 작품으로 매칭합니다.<br>
@@ -286,10 +308,16 @@
                                 <div style="">
                                     체크 시 게시물 상세페이지에서 에브리띵 검색 기능을 활성화합니다.<br>
 
-                                    <details style="margin-top: 12px; max-width: 550px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; box-sizing: border-box;">
-                                        <summary style="padding: 12px 14px; font-size: 13px; font-weight: bold; color: var(--text); cursor: pointer; user-select: none; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-                                            <span>[Everything 연동 방법 확인하기]</span>
-                                            <span class="toggle-icon" style="font-size: 10px; transition: transform 0.2s; color: var(--text-muted);">▶</span>
+                                    <details id="everythingGuidePanel" style="margin-top: 12px; max-width: 550px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; box-sizing: border-box;">
+                                        <summary class="everything-guide-summary options-disclosure-trigger">
+                                            <span class="options-disclosure-title">[Everything 연동 방법 확인하기]</span>
+                                            <span class="options-disclosure-toggle" aria-hidden="true">
+                                                <span class="options-disclosure-expand">펼치기</span>
+                                                <span class="options-disclosure-collapse">접기</span>
+                                                <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="m4 6 4 4 4-4"></path>
+                                                </svg>
+                                            </span>
                                         </summary>
                                         <div style="padding: 14px; border-top: 1px solid var(--border); background: var(--panel);">
                                             <ol style="margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--text-muted);">
@@ -362,15 +390,15 @@
                     <p>Google 동기화, 파일 백업과 자동 복원 지점으로 목록을 보관하세요.</p>
                 </div>
                 <details id="googleSyncPanel" class="panel-box google-sync-panel" aria-labelledby="googleSyncHeading">
-                    <summary class="google-sync-summary">
+                    <summary class="google-sync-summary options-disclosure-trigger">
                         <h4 id="googleSyncHeading">
                             <span>Google 도서 목록 동기화</span>
                             <span id="googleSyncSummaryBadge" class="google-sync-summary-badge" aria-live="polite" hidden></span>
                         </h4>
-                        <span class="google-sync-toggle" aria-hidden="true">
-                            <span class="google-sync-expand-label">펼치기</span>
-                            <span class="google-sync-collapse-label">접기</span>
-                            <svg class="google-sync-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <span class="options-disclosure-toggle" aria-hidden="true">
+                            <span class="options-disclosure-expand">펼치기</span>
+                            <span class="options-disclosure-collapse">접기</span>
+                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="m4 6 4 4 4-4"></path>
                             </svg>
                         </span>
@@ -490,6 +518,11 @@
         <script src="dexie.min.js"></script>
         <script src="db.js"></script>
         <script src="common.js"></script>
+        <script src="vendor/motion.js"></script>
+        <script src="vendor/anime.umd.min.js"></script>
+        <script src="library-motion.js"></script>
+        <script src="button-ui.js"></script>
+        <script src="category-ui.js"></script>
         <script src="options.js"></script>
         <script src="google-sync-ui.js"></script>
     </body>

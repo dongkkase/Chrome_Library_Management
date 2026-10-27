@@ -75,10 +75,34 @@ const BookMatchUI = (() => {
             result.html = `<span style="color:#007bff; font-weight:normal;">${resText}</span><span style="color:#007bff; opacity:0.5; margin:0 4px;">|</span><span style="color:#007bff; font-weight:normal;">${volText}</span>${missingHtml}${matchScoreHtml(result.score)}`;
             result.style = `font-size:${size}px; background:#f0f7ff; border:1px solid #007bff; padding:2px ${detail ? 5 : 4}px; border-radius:${detail ? 4 : 3}px; margin-left:${margin}px; vertical-align:middle; display:inline-block; line-height:1.2;`;
         }
+        const categoryLabel = typeof getBookCategoryLabel === 'function' ? getBookCategoryLabel(book.categoryId) : '미분류';
+        const categoryColor = book.type === 'exclude' ? '#495057'
+            : book.type === 'incomplete' || hasUpgrade ? '#ffffff' : '#0056b3';
+        result.html = `<span class="bm-book-category" style="color:${categoryColor};">${escapeHtml(categoryLabel)}</span>${result.html}`;
         return result;
     }
 
-    const quickButtonStyle = 'padding: 2px 5px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; color: white; border: none; text-decoration: none; line-height: 1.2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: all 0.2s; flex-shrink: 0;';
+    // 사이트의 태그·버튼 규칙보다 우선하되 모션과 표시 상태는 별도로 제어한다.
+    const protectStyles = declarations => declarations.map(value => `${value} !important;`).join(' ');
+    const quickActionsStyle = protectStyles([
+        'box-sizing: border-box', 'min-width: 0', 'min-height: 0', 'height: auto', 'max-height: none',
+        'padding: 0', 'border: 0', 'border-radius: 0', 'background: transparent', 'box-shadow: none',
+        "font: 500 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+        'letter-spacing: normal', 'word-spacing: normal', 'text-transform: none', 'text-decoration: none',
+        'text-indent: 0', 'text-shadow: none', 'float: none', 'vertical-align: middle',
+        'flex-wrap: wrap', 'align-items: center', 'gap: 4px'
+    ]);
+    const quickButtonStyle = protectStyles([
+        'appearance: none', 'box-sizing: border-box', 'display: inline-flex', 'position: relative',
+        'align-items: center', 'justify-content: center', 'align-self: center', 'flex: 0 0 auto', 'gap: 0',
+        'width: auto', 'min-width: 0', 'max-width: none', 'height: 18px', 'min-height: 18px', 'max-height: 18px',
+        'margin: 0', 'padding: 2px 5px', 'border: 0', 'border-radius: 4px', 'background-image: none',
+        'box-shadow: 0 1px 2px rgba(0,0,0,0.2)', 'color: white',
+        "font: 700 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif",
+        'text-align: center', 'text-transform: none', 'text-decoration: none', 'text-indent: 0', 'text-shadow: none',
+        'letter-spacing: normal', 'word-spacing: normal', 'white-space: nowrap', 'vertical-align: middle',
+        'float: none', 'cursor: pointer', 'user-select: none'
+    ]);
     const quickButtons = [
         { label: '복사', color: '#845ef7', action: 'copy' },
         { label: '제외', color: '#ff6b6b', action: 'exclude' },
@@ -99,6 +123,7 @@ const BookMatchUI = (() => {
         panel.setAttribute('role', 'region');
         panel.setAttribute('aria-label', demo ? '게시물 숨김 체험' : '게시물 숨김');
         const heading = document.createElement('div');
+        heading.id = `${prefix}-qh-heading`;
         heading.className = 'bm-qh-heading';
         const title = document.createElement('span');
         title.textContent = '🙈 게시물 숨김';
@@ -108,8 +133,9 @@ const BookMatchUI = (() => {
         toggle.className = 'bm-qh-toggle-btn';
         toggle.textContent = '−';
         toggle.setAttribute('aria-label', '게시물 숨김 접기');
+        toggle.title = '게시물 숨김 접기';
         toggle.setAttribute('aria-expanded', 'true');
-        toggle.setAttribute('aria-controls', `${prefix}-qh-content`);
+        toggle.setAttribute('aria-controls', `${prefix}-qh-heading ${prefix}-qh-content`);
         heading.appendChild(title);
         const content = document.createElement('div');
         content.id = `${prefix}-qh-content`;
@@ -129,22 +155,38 @@ const BookMatchUI = (() => {
             const input = document.createElement('input');
             input.type = 'checkbox';
             input.id = `${prefix}-qh-${type}`;
+            input.setAttribute('role', 'switch');
+            input.setAttribute('aria-label', `${labelText} 게시물 숨김`);
             input.checked = !!settings[key];
             input.dataset.hideSetting = key;
-            input.addEventListener('change', () => onChange(key, input.checked));
             const slider = document.createElement('span');
             slider.className = 'bm-slider';
+            slider.setAttribute('aria-hidden', 'true');
+            const thumb = document.createElement('span');
+            thumb.className = 'bm-switch-thumb';
+            const text = document.createElement('span');
+            text.className = 'bm-switch-text';
+            text.textContent = labelText;
+            slider.append(thumb, text);
+            input.addEventListener('change', () => {
+                if (typeof LibraryMotion !== 'undefined') LibraryMotion.toggleSwitch(thumb, input.checked);
+                onChange(key, input.checked);
+            });
             switchElement.append(input, slider);
-            label.append(switchElement, document.createTextNode(` ${labelText}`));
+            label.appendChild(switchElement);
             content.appendChild(label);
         }
         toggle.addEventListener('click', () => {
+            const previousBounds = panel.getBoundingClientRect();
             const collapsed = panel.classList.toggle('is-collapsed');
+            heading.setAttribute('aria-hidden', String(collapsed));
             body.inert = collapsed;
             body.setAttribute('aria-hidden', String(collapsed));
             toggle.textContent = collapsed ? '+' : '−';
             toggle.setAttribute('aria-expanded', String(!collapsed));
             toggle.setAttribute('aria-label', collapsed ? '게시물 숨김 펼치기' : '게시물 숨김 접기');
+            toggle.title = collapsed ? '게시물 숨김 펼치기' : '게시물 숨김 접기';
+            if (typeof LibraryMotion !== 'undefined') LibraryMotion.resize(panel, previousBounds);
         });
         bodyInner.appendChild(content);
         if (demo) {
@@ -179,5 +221,5 @@ const BookMatchUI = (() => {
             </div>`;
     }
 
-    return { getPresentation, getUpgrades, shouldHidePost, displayMatchScore, matchScoreHtml, createHidePanel, quickButtonStyle, quickButtons, missingPopoverStyle, missingPopoverHtml };
+    return { getPresentation, getUpgrades, shouldHidePost, displayMatchScore, matchScoreHtml, createHidePanel, quickActionsStyle, quickButtonStyle, quickButtons, missingPopoverStyle, missingPopoverHtml };
 })();

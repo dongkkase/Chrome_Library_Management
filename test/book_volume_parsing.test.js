@@ -129,21 +129,27 @@ function section(file, startText, endText) {
 
 test('일괄 등록 미리보기와 저장은 제보된 제목과 권수를 동일하게 사용한다', async () => {
     let preview;
-    let pendingSave;
     let stored;
     const elements = {
         bulkInput: { value: '', addEventListener: (_name, callback) => { preview = callback; } },
         bulkPreview: { style: {}, innerHTML: '' },
         bulkTypeSelect: { value: 'incomplete' },
-        saveBtn: { style: {}, innerText: '저장' }
+        saveBtn: { disabled: false }
     };
     const context = vm.createContext({ console: quietConsole });
     vm.runInContext(sources['common.js'], context);
     Object.assign(context, {
         bulkInput: elements.bulkInput, bulkPreview: elements.bulkPreview,
         document: { getElementById: id => elements[id] },
-        chrome: { storage: { local: { set() {} } } },
-        setTimeout: callback => { pendingSave = callback(); },
+        ButtonUI: {
+            start(button) {
+                if (button.disabled) return null;
+                button.disabled = true;
+                return () => { button.disabled = false; };
+            }
+        },
+        storageLocalSet: async () => {},
+        setTimeout: callback => callback(),
         ensureBookStoreReady: async () => {},
         bookStoreGetAllWithRevision: async () => ({ bookList: [], revision: 1 }),
         saveWithUndo: async books => { stored = books; },
@@ -158,7 +164,7 @@ test('일괄 등록 미리보기와 저장은 제보된 제목과 권수를 동�
     }
     elements.bulkInput.value = cases.map(([raw]) => raw).join('\n');
     await elements.saveBtn.onclick();
-    await pendingSave;
+    assert.equal(elements.saveBtn.disabled, false);
     assert.equal(stored.length, cases.length);
     for (const [, title, volume] of cases) {
         assert.equal(stored.find(book => book.title === title)?.lastVol, String(volume), title);
@@ -172,7 +178,10 @@ test('우클릭 등록은 제보된 제목과 권수를 저장 큐에 전달한�
     const context = vm.createContext({ console: quietConsole });
     vm.runInContext(sources['common.js'], context);
     Object.assign(context, {
-        chrome: { contextMenus: { onClicked: { addListener: callback => { listener = callback; } } } },
+        chrome: {
+            contextMenus: { onClicked: { addListener: callback => { listener = callback; } } },
+            storage: { local: { get: async defaults => ({ ...defaults, lastRegistrationCategory: 'comic' }) } }
+        },
         resolveContextMenuClickContext: async () => ({ title: rawTitle }),
         enqueueBookMutation: callback => callback(),
         processSaveQueue: async tasks => { queued = tasks; }
@@ -184,5 +193,6 @@ test('우클릭 등록은 제보된 제목과 권수를 저장 큐에 전달한�
         await listener({ menuItemId: 'addIncomplete' }, { id: 1 });
         assert.equal(queued[0].cleanTitle, title);
         assert.equal(queued[0].lastVol, String(volume));
+        assert.equal(queued[0].categoryId, 'comic');
     }
 });

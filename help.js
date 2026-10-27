@@ -2,15 +2,15 @@
 
 (() => {
     const samples = [
-        { id: 'starlight', title: '별빛 도서관', category: '만화', volume: 5, resolution: 2000, owned: { type: 'incomplete', volume: 3, resolution: 1500, missing: [] } },
-        { id: 'cloud', title: '구름 우체국', category: '만화', volume: 8, resolution: 2000, owned: { type: 'complete', volume: 8, resolution: 2000, missing: [] } },
-        { id: 'wind', title: '바람의 기록', category: '소설', volume: 5, resolution: 1500, owned: { type: 'incomplete', volume: 5, resolution: 1500, missing: [2] } },
-        { id: 'afternoon', title: '느린 오후의 지도', category: '만화', volume: 2, resolution: 1500, owned: { type: 'exclude', volume: 2, resolution: 1500, missing: [] } },
-        { id: 'moon', title: '달빛 정원', category: '소설', volume: 1, resolution: 1800, owned: null },
-        { id: 'sea', title: '바다의 작은 서점', category: '만화', volume: 6, resolution: 2400, owned: { type: 'complete', volume: 6, resolution: 1500, missing: [] } },
-        { id: 'similar', title: '느린 오후 지도', category: '만화', volume: 2, resolution: 1500, score: 94, owned: { title: '느린 오후의 지도', type: 'exclude', volume: 2, resolution: 1500, missing: [] } },
-        { id: 'translation', title: '숲속의 여행자', category: '번역', translated: true, volume: 3, resolution: 1800, owned: null },
-        { id: 'station', title: '새벽역의 편지', category: '소설', volume: 4, resolution: 1500, owned: { type: 'incomplete', volume: 4, resolution: 1500, missing: [] } }
+        { id: 'starlight', title: '별빛 도서관', boardLabel: '만화', categoryId: 'comic', volume: 5, resolution: 2000, owned: { categoryId: 'comic', type: 'incomplete', volume: 3, resolution: 1500, missing: [] } },
+        { id: 'cloud', title: '구름 우체국', boardLabel: '만화', categoryId: 'comic', volume: 8, resolution: 2000, owned: { categoryId: 'comic', type: 'complete', volume: 8, resolution: 2000, missing: [] } },
+        { id: 'wind', title: '바람의 기록', boardLabel: '소설', categoryId: 'epub', volume: 5, resolution: 1500, owned: { categoryId: 'epub', type: 'incomplete', volume: 5, resolution: 1500, missing: [2] } },
+        { id: 'afternoon', title: '느린 오후의 지도', boardLabel: '만화', categoryId: 'scan', volume: 2, resolution: 1500, owned: { categoryId: 'scan', type: 'exclude', volume: 2, resolution: 1500, missing: [] } },
+        { id: 'moon', title: '달빛 정원', boardLabel: '소설', categoryId: 'epub', volume: 1, resolution: 1800, owned: null },
+        { id: 'sea', title: '바다의 작은 서점', boardLabel: '만화', categoryId: 'pdf', volume: 6, resolution: 2400, owned: { categoryId: 'pdf', type: 'complete', volume: 6, resolution: 1500, missing: [] } },
+        { id: 'similar', title: '느린 오후 지도', boardLabel: '만화', categoryId: 'scan', volume: 2, resolution: 1500, score: 94, owned: { title: '느린 오후의 지도', categoryId: 'scan', type: 'exclude', volume: 2, resolution: 1500, missing: [] } },
+        { id: 'translation', title: '숲속의 여행자', boardLabel: '번역', categoryId: 'txt', translated: true, volume: 3, resolution: 1800, owned: null },
+        { id: 'station', title: '새벽역의 편지', boardLabel: '소설', categoryId: 'txt', volume: 4, resolution: 1500, owned: { categoryId: 'txt', type: 'incomplete', volume: 4, resolution: 1500, missing: [] } }
     ];
     const typeLabels = { exclude: '제외', incomplete: '미완', complete: '완결' };
     const rows = document.getElementById('exampleRows');
@@ -18,10 +18,50 @@
     const hoverInput = document.getElementById('demoQuickHover');
     const feedback = document.getElementById('demoFeedback');
     const hiddenSettings = { hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false };
-    let books = structuredClone(samples);
+    const registrationDropdowns = new Set();
+    const initialRegistrationCategory = 'comic';
+    let registrationCategory = initialRegistrationCategory;
+    let books = createDemoBooks();
     let selectedId = books[0].id;
     let missingBookId = null;
     let missingOpener = null;
+
+    function createDemoBooks() {
+        return structuredClone(samples).map(book => {
+            if (book.owned) book.owned.matchScore = book.score ?? 100;
+            return {
+                ...book,
+                ownedByCategory: book.owned ? { [book.owned.categoryId]: book.owned } : {}
+            };
+        });
+    }
+
+    function createRegistrationControl() {
+        const dropdown = BookCategoryUI.createDropdown({
+            options: BOOK_CATEGORIES.map(category => ({ value: category.id, label: category.label })),
+            value: registrationCategory,
+            label: '체험 등록 분류',
+            text: (_value, label) => `분류: ${label}`,
+            className: 'bm-registration-category demo-registration-category',
+            onChange(value) {
+                registrationCategory = normalizeBookCategory(value);
+                registrationDropdowns.forEach(control => control.setValue(registrationCategory));
+                feedback.textContent = `체험: 다음 등록부터 ‘${getBookCategoryLabel(registrationCategory)}’ 분류를 사용합니다. 기존 예시 소장 정보와 실제 설정은 변경되지 않습니다.`;
+            }
+        });
+        dropdown.button.disabled = !enabledInput.checked;
+        registrationDropdowns.add(dropdown);
+        return dropdown.element;
+    }
+
+    function clearDemoRegion(target) {
+        for (const dropdown of registrationDropdowns) {
+            if (!target.contains(dropdown.element)) continue;
+            dropdown.destroy();
+            registrationDropdowns.delete(dropdown);
+        }
+        target.replaceChildren();
+    }
 
     function element(tag, text, className) {
         const node = document.createElement(tag);
@@ -33,6 +73,7 @@
     function storedBook(book) {
         return book.owned ? {
             title: book.owned.title || book.title,
+            categoryId: normalizeBookCategory(book.owned.categoryId),
             type: book.owned.type,
             resolution: `${book.owned.resolution}px`,
             lastVol: String(book.owned.volume),
@@ -81,13 +122,15 @@
         const actions = element('span', undefined, `bm-quick-actions${detail ? '' : ' list-actions'}`);
         actions.setAttribute('role', 'group');
         actions.setAttribute('aria-label', `${book.title} 퀵 액션`);
-        actions.style.cssText = `display:inline-flex; gap:4px; margin-left:0; margin-top:${detail ? 5 : 4}px; vertical-align:middle; flex-wrap:wrap;`;
+        actions.style.cssText = BookMatchUI.quickActionsStyle + `display:inline-flex; margin-left:0; margin-top:${detail ? 5 : 4}px;`;
+        actions.appendChild(createRegistrationControl());
         for (const definition of BookMatchUI.quickButtons) {
             if (!book.owned && ['delete', 'missing_vol', 'correct_title'].includes(definition.action)) continue;
             const button = element('button', definition.label);
             button.type = 'button';
+            button.className = 'bm-quick-button';
             button.dataset.demoAction = definition.action;
-            button.style.cssText = BookMatchUI.quickButtonStyle + `background-color:${definition.color};`;
+            button.style.cssText = BookMatchUI.quickButtonStyle + `background-color:${definition.color} !important;`;
             button.addEventListener('click', event => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -99,7 +142,8 @@
     }
 
     function renderBoard() {
-        rows.replaceChildren();
+        clearDemoRegion(rows);
+        registrationDropdowns.forEach(dropdown => { dropdown.button.disabled = !enabledInput.checked; });
         document.querySelectorAll('#demo-quick-hide-panel input').forEach(input => { input.disabled = !enabledInput.checked; });
         hoverInput.disabled = !enabledInput.checked;
         let hiddenCount = 0;
@@ -109,7 +153,7 @@
                 continue;
             }
             const row = element('tr');
-            row.appendChild(element('td', book.category));
+            row.appendChild(element('td', book.boardLabel));
             const titleCell = element('td');
             const title = element('a', getPostTitle(book), 'post-title');
             title.href = '#detail';
@@ -152,18 +196,21 @@
         badgeTarget.replaceChildren();
         applyPresentation(title, badgeTarget, book, true);
         const actions = document.getElementById('detailActions');
-        actions.replaceChildren();
+        clearDemoRegion(actions);
         if (enabledInput.checked) actions.appendChild(createActions(book, true));
         renderDefinitionList('publishedData', [
-            ['제목', book.title], ['권수', `${book.volume}권`], ['해상도', `${book.resolution}px`]
+            ['제목', book.title], ['게시판 구분', book.boardLabel], ['자료 분류 예시', getBookCategoryLabel(book.categoryId)],
+            ['권수', `${book.volume}권`], ['해상도', `${book.resolution}px`]
         ]);
         renderDefinitionList('ownedData', book.owned ? [
-            ['제목', book.owned.title || book.title], ['분류', typeLabels[book.owned.type]], ['권수', `${book.owned.volume}권`],
-            ['해상도', `${book.owned.resolution}px`], ['누락', book.owned.missing.length ? `${book.owned.missing.join(', ')}권` : '없음']
-        ] : [['분류', '미등록'], ['소장 정보', '아직 등록하지 않은 작품입니다.']]);
+            ['제목', book.owned.title || book.title], ['분류', getBookCategoryLabel(book.owned.categoryId)],
+            ['타입', typeLabels[book.owned.type]], ['권수', `${book.owned.volume}권`],
+            ['해상도', `${book.owned.resolution}px`], ['누락', book.owned.missing.length ? `${book.owned.missing.join(', ')}권` : '없음'],
+            ['등록된 예시 분류', Object.keys(book.ownedByCategory).map(getBookCategoryLabel).join(', ')]
+        ] : [['등록 상태', '미등록'], ['소장 정보', '아직 등록하지 않은 작품입니다.']]);
         const comparison = getComparison(book);
         let explanation;
-        if (!book.owned) explanation = '소장 목록에 없는 작품입니다. 제목을 확인한 뒤 원하는 타입으로 등록할 수 있습니다.';
+        if (!book.owned) explanation = '소장 목록에 없는 작품입니다. 퀵 버튼 왼쪽에서 등록 분류를 선택한 뒤 제외·미완·완결 중 원하는 타입으로 등록하세요. 게시판 구분과 등록 분류는 별개입니다.';
         else if (book.owned.type === 'exclude') explanation = (book.score ?? 100) <= 95
             ? '유사 매칭 94% 예시입니다. 제외로 등록되어 있어도 매칭률이 95% 이하이면 제외 숨김으로 가려지지 않습니다. 등록된 책 제목을 먼저 확인하세요.'
             : '제외로 등록한 작품은 제목에 취소선과 투명도가 적용됩니다. 우측 하단에서 제외 숨김을 켜면 게시판 목록에서 사라집니다.';
@@ -243,15 +290,30 @@
             const title = window.prompt('예시에서 정정할 제목을 입력하세요.', book.owned.title || book.title);
             if (title === null || !title.trim()) return;
             book.owned.title = title.trim();
+            book.owned.matchScore = 100;
             book.score = 100;
             feedback.textContent = `체험: 예시 소장 제목을 ‘${book.owned.title}’로 정정했습니다.`;
         } else if (action === 'delete') {
-            book.owned = null;
-            feedback.textContent = `체험: ‘${book.title}’을 예시 소장 목록에서 삭제했습니다. 게시물은 미등록으로 분류됩니다.`;
+            const categoryId = book.owned.categoryId;
+            delete book.ownedByCategory[categoryId];
+            book.owned = Object.values(book.ownedByCategory)[0] || null;
+            book.score = book.owned?.matchScore ?? 100;
+            feedback.textContent = `체험: ‘${book.title}’의 ‘${getBookCategoryLabel(categoryId)}’ 예시 소장 정보를 삭제했습니다.${book.owned ? ' 남아 있는 다른 분류의 소장 정보를 표시합니다.' : ' 게시물은 미등록으로 표시됩니다.'}`;
         } else if (Object.hasOwn(typeLabels, action)) {
-            if (!book.owned) book.score = 100;
-            book.owned = { ...book.owned, type: action, volume: book.volume, resolution: book.resolution, missing: book.owned ? [...book.owned.missing] : [] };
-            feedback.textContent = `체험: ‘${book.title}’을 ‘${typeLabels[action]}’ 상태로 등록했습니다. 예시 소장 정보는 ${book.volume}권 / ${book.resolution}px입니다.`;
+            const existing = book.ownedByCategory[registrationCategory];
+            book.owned = {
+                ...existing,
+                categoryId: registrationCategory,
+                matchScore: existing?.matchScore ?? 100,
+                type: action,
+                volume: book.volume,
+                resolution: book.resolution,
+                missing: existing ? [...existing.missing] : []
+            };
+            book.ownedByCategory[registrationCategory] = book.owned;
+            book.score = book.owned.matchScore;
+            feedback.textContent = `체험: ‘${book.title}’을 분류 ‘${getBookCategoryLabel(registrationCategory)}’, 타입 ‘${typeLabels[action]}’으로 등록했습니다. 예시 소장 정보는 ${book.volume}권 / ${book.resolution}px입니다.`;
+            if (!existing && Object.keys(book.ownedByCategory).length > 1) feedback.textContent += ' 다른 분류의 기존 예시 항목도 유지됩니다.';
         }
         renderBoard();
         renderDetail();
@@ -279,11 +341,21 @@
         renderBoard();
         renderDetail();
     }, 'demo', true);
-    document.body.appendChild(hidePanel);
+    const dock = element('div', undefined, 'bm-quick-dock');
+    dock.id = 'demo-quick-dock';
+    const categoryPanel = element('div', undefined, 'bm-category-panel');
+    categoryPanel.id = 'demo-category-panel';
+    categoryPanel.setAttribute('role', 'region');
+    categoryPanel.setAttribute('aria-label', '도서 등록 분류 체험');
+    categoryPanel.appendChild(createRegistrationControl());
+    dock.append(categoryPanel, hidePanel);
+    document.body.appendChild(dock);
     enabledInput.addEventListener('change', () => { closeMissing(); renderBoard(); renderDetail(); });
     hoverInput.addEventListener('change', () => document.body.classList.toggle('demo-quick-hover', hoverInput.checked));
     document.getElementById('resetDemo').addEventListener('click', () => {
-        books = structuredClone(samples);
+        books = createDemoBooks();
+        registrationCategory = initialRegistrationCategory;
+        registrationDropdowns.forEach(dropdown => dropdown.setValue(registrationCategory));
         selectedId = books[0].id;
         enabledInput.checked = true;
         hoverInput.checked = false;
@@ -293,7 +365,7 @@
         const panelToggle = hidePanel.querySelector('.bm-qh-toggle-btn');
         if (panelToggle.getAttribute('aria-expanded') === 'false') panelToggle.click();
         closeMissing();
-        feedback.textContent = '예시 데이터와 숨김 설정을 초기 상태로 되돌렸습니다.';
+        feedback.textContent = '예시 데이터, 등록 분류와 숨김 설정을 초기 상태로 되돌렸습니다.';
         renderBoard();
         renderDetail();
     });
@@ -321,16 +393,6 @@
         });
     }
 
-    const navigationLinks = document.querySelectorAll('.sidebar a');
-    function updateNavigation() {
-        const activeHash = window.location.hash || '#intro';
-        navigationLinks.forEach(link => {
-            if (link.getAttribute('href') === activeHash) link.setAttribute('aria-current', 'location');
-            else link.removeAttribute('aria-current');
-        });
-    }
-    window.addEventListener('hashchange', updateNavigation);
-    updateNavigation();
     renderBoard();
     renderDetail();
 })();

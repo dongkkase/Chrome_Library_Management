@@ -152,6 +152,9 @@ function prepareBookForStore(book) {
     }
 
     storedBook.cleanTitleStr = getBookStoreMatchKey(storedBook.title);
+    if (storedBook.categoryId !== undefined) {
+        storedBook.categoryId = normalizeBookCategory(storedBook.categoryId);
+    }
     return storedBook;
 }
 
@@ -214,6 +217,7 @@ function areMigrationMirrorBooks(firstBook, secondBook) {
     }
 
     const getComparableFields = book => [
+        book.categoryId || 'uncategorized',
         String(book.type || 'unknown'),
         String(book.resolution || ''),
         String(book.lastVol || ''),
@@ -249,7 +253,7 @@ function mergeBookMigrationSources(legacyBooks, existingBooks) {
             if (!idIndexes.has(idKey)) idIndexes.set(idKey, []);
             idIndexes.get(idKey).push(index);
         }
-        const matchKey = getBookStoreMatchKey(book.title || '');
+        const matchKey = `${book.categoryId || 'uncategorized'}::${getBookStoreMatchKey(book.title || '')}`;
         if (matchKey) {
             if (!matchKeyIndexes.has(matchKey)) matchKeyIndexes.set(matchKey, []);
             matchKeyIndexes.get(matchKey).push(index);
@@ -262,12 +266,12 @@ function mergeBookMigrationSources(legacyBooks, existingBooks) {
         if (!existingBook || !String(existingBook.title || '').trim()) return;
 
         const normalizedId = normalizeBulkBookId(existingBook.id);
-        const matchKey = getBookStoreMatchKey(existingBook.title || '');
+        const matchKey = `${existingBook.categoryId || 'uncategorized'}::${getBookStoreMatchKey(existingBook.title || '')}`;
         const idCandidates = normalizedId === null ? [] : (idIndexes.get(String(normalizedId)) || []);
         let existingIndex = idCandidates.find(index => {
             if (matchedLegacyIndexes.has(index)) return false;
             return !!matchKey
-                && getBookStoreMatchKey(mergedBooks[index] && mergedBooks[index].title) === matchKey;
+                && `${mergedBooks[index].categoryId || 'uncategorized'}::${getBookStoreMatchKey(mergedBooks[index].title)}` === matchKey;
         });
 
         if (existingIndex === undefined && matchKey) {
@@ -501,13 +505,13 @@ async function bookStoreGet(id) {
     return toPublicBook(book);
 }
 
-async function bookStoreFindByMatchKey(matchKey) {
+async function bookStoreFindByMatchKey(matchKey, categoryId) {
     await ensureBookStoreReady();
     const normalizedMatchKey = String(matchKey || '');
     if (!normalizedMatchKey) return null;
 
     const book = await runBookStoreIndexTransaction('r', () => {
-        return db.books.where('cleanTitleStr').equals(normalizedMatchKey).last();
+        return findStoredBookByTarget({ matchKey: normalizedMatchKey, categoryId });
     });
     return toPublicBook(book);
 }
@@ -534,6 +538,8 @@ function isLowCoverageBookTargetMismatch(book, target) {
 }
 
 async function findStoredBookByTarget(target) {
+    const hasCategory = target && target.categoryId !== undefined && target.categoryId !== null;
+    const categoryId = hasCategory ? normalizeBookCategory(target.categoryId) : null;
     const requestedId = target && target.id !== undefined ? target.id : null;
     let book = requestedId === null ? null : await db.books.get(requestedId);
     if (!book && typeof requestedId === 'string' && requestedId.trim() && Number.isFinite(Number(requestedId))) {
@@ -543,12 +549,32 @@ async function findStoredBookByTarget(target) {
         && isLowCoverageBookTargetMismatch(book, target)) {
         book = null;
     }
+    if (book && hasCategory && normalizeBookCategory(book.categoryId) !== categoryId) {
+        book = null;
+    }
 
     const matchKey = target && target.title
         ? getBookStoreMatchKey(target.title)
         : String(target && target.matchKey ? target.matchKey : '');
     if (!book && matchKey) {
-        book = await db.books.where('cleanTitleStr').equals(matchKey).last();
+        const matches = await db.books.where('cleanTitleStr').equals(matchKey).toArray();
+        const candidates = hasCategory
+            ? matches.filter(candidate => normalizeBookCategory(candidate.categoryId) === categoryId)
+            : matches;
+        if (!hasCategory && new Set(candidates.map(candidate => candidate.categoryId || 'uncategorized')).size > 1) {
+            const error = new Error('같은 제목이 여러 분류에 있습니다. 처리할 도서를 선택해주세요.');
+            error.name = 'BookCategoryAmbiguityError';
+            error.code = 'BOOK_CATEGORY_AMBIGUOUS';
+            error.candidates = candidates.map(candidate => ({
+                id: candidate.id,
+                title: candidate.title,
+                categoryId: candidate.categoryId || 'uncategorized',
+                type: candidate.type,
+                lastVol: candidate.lastVol
+            }));
+            throw error;
+        }
+        book = candidates[candidates.length - 1] || null;
     }
     return book || null;
 }
@@ -565,6 +591,9 @@ async function bookStoreApplyDownloadUpdate(target, metadata, missingVolsMap) {
         const nextBook = DownloadBookUpdate.updateBook(existingBook, target.title, metadata,
             getBookMissingVols(existingBook, missingVolsMap));
         if (!nextBook) return null;
+        if (!existingBook && target.categoryId !== undefined) {
+            nextBook.categoryId = normalizeBookCategory(target.categoryId);
+        }
         const storedBook = prepareBookForStore(nextBook);
         const id = await db.books.put(storedBook);
         const revision = await incrementBookStoreRevisionInTransaction();

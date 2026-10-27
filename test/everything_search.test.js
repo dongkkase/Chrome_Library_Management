@@ -331,7 +331,7 @@ test('채팅 위키 인라인 퀵액션은 클릭 순간의 strong 제목을 다
     }, {});
 
     assert.equal(result.title, liveTitle);
-    assert.match(contentSource, /const resolvedTitle = getResolvedQuickActionTitle\(linkData, btn\);/);
+    assert.match(contentSource, /const resolvedTitle = getResolvedQuickActionTitle\(linkData, btn, isRegistration \? registrationCategory : null\);/);
 });
 
 test('채팅 위키는 정제된 클릭 제목이 없을 때 오염된 linkText를 사용하지 않는다', async () => {
@@ -369,6 +369,80 @@ test('채팅 위키의 다른 우클릭 메뉴는 사용자가 선택한 제목�
     }, { id: 31 });
 
     assert.equal(result.title, '직접 선택한 제목');
+});
+
+test('우클릭 정정 문맥은 원문 전체와 일치하는 클릭에만 전달한다', async () => {
+    const captured = {
+        title: '작품 A 9권 1500px', correctedTitle: '정정 작품 A',
+        correctedBookId: 42, categoryId: 'comic'
+    };
+    const resolve = createContextMenuResolver(captured);
+    for (const selectionText of ['', captured.title, '작품 A  9권 1500px']) {
+        const result = await resolve({ menuItemId: 'addComplete', selectionText }, { id: 1 });
+        assert.equal(result.correctedTitle, '정정 작품 A');
+        assert.equal(result.correctedBookId, 42);
+        assert.equal(result.categoryId, 'comic');
+    }
+    for (const selectionText of ['작품 A', '다른 작품']) {
+        const result = await resolve({ menuItemId: 'addComplete', selectionText }, { id: 1 });
+        assert.equal(result.title, selectionText);
+        assert.equal(result.correctedTitle, null);
+        assert.equal(result.correctedBookId, null);
+    }
+});
+
+test('우클릭 등록과 삭제는 현재 분류에 맞는 정정 대상만 사용하고 원문에서 권수를 추출한다', async () => {
+    const captured = {
+        title: '작품 A 9권 1500px', correctedTitle: '정정 작품 A',
+        correctedBookId: 42, categoryId: 'comic'
+    };
+    let listener;
+    let queued;
+    let deleted;
+    let lastRegistrationCategory = 'comic';
+    const context = vm.createContext({ URL, console: { error() {}, log() {} } });
+    vm.runInContext(commonSource, context);
+    Object.assign(context, {
+        requestRightClickedContext: async () => captured,
+        doesRightClickedContextMatch: () => true,
+        rememberRightClickedContext: (_tabId, _frameId, value) => value,
+        getCachedRightClickedContext: () => null,
+        enqueueBookMutation: operation => operation(),
+        processSaveQueue: async tasks => { queued = tasks; },
+        deleteBookByMatchKey: async (...args) => { deleted = args; },
+        chrome: {
+            contextMenus: { onClicked: { addListener: callback => { listener = callback; } } },
+            storage: { local: { get: async defaults => ({ ...defaults, lastRegistrationCategory }) } }
+        }
+    });
+    vm.runInContext([
+        'isChatingWikiUrl', 'resolveContextMenuClickContext',
+        'sanitizeBookTitleForStorage', 'normalizeExactBookTitle'
+    ].map(name => extractFunction(backgroundSource, name)).join('\n'), context);
+    const listenerStart = backgroundSource.indexOf('chrome.contextMenus.onClicked.addListener(');
+    const listenerEnd = backgroundSource.indexOf('function executeEverythingSearch(', listenerStart);
+    vm.runInContext(backgroundSource.slice(listenerStart, listenerEnd), context);
+
+    await listener({ menuItemId: 'addComplete' }, { id: 1 });
+    assert.equal(queued[0].cleanTitle, '정정 작품 A');
+    assert.equal(queued[0].bookId, 42);
+    assert.equal(queued[0].categoryId, 'comic');
+    assert.equal(queued[0].lastVol, '9');
+    assert.equal(queued[0].resolution, '1500px');
+
+    await listener({ menuItemId: 'addComplete', selectionText: '작품 A' }, { id: 1 });
+    assert.equal(queued[0].cleanTitle, '작품 A');
+    assert.equal(queued[0].bookId, null);
+
+    lastRegistrationCategory = 'pdf';
+    await listener({ menuItemId: 'addComplete' }, { id: 1 });
+    assert.equal(queued[0].cleanTitle, '작품 A');
+    assert.equal(queued[0].bookId, null);
+    assert.equal(queued[0].categoryId, 'pdf');
+
+    lastRegistrationCategory = 'comic';
+    await listener({ menuItemId: 'deleteBook' }, { id: 1 });
+    assert.deepEqual(deleted, ['정정 작품 A', 1, 'context-menu', 42, 'comic']);
 });
 
 test('채팅 위키 에브리띵 검색도 제목 일부를 직접 선택한 경우에는 선택값을 유지한다', async () => {
@@ -440,6 +514,9 @@ test('우클릭 제목은 실제 클릭 프레임의 콘텐츠 스크립트에 �
     const response = {
         ok: true,
         title: '[스에히로 마치] 질투는 여우빛 (단권)',
+        correctedTitle: '정정한 제목',
+        correctedBookId: 7,
+        categoryId: 'comic',
         pageUrl: 'https://chating.wiki/게시판',
         linkUrl: 'https://chating.wiki/게시판/글/53782'
     };
@@ -447,6 +524,9 @@ test('우클릭 제목은 실제 클릭 프레임의 콘텐츠 스크립트에 �
     const result = await requestRightClickedContext(31, 2);
 
     assert.equal(result.title, response.title);
+    assert.equal(result.correctedTitle, response.correctedTitle);
+    assert.equal(result.correctedBookId, 7);
+    assert.equal(result.categoryId, 'comic');
     assert.equal(calls.length, 1);
     assert.equal(calls[0].tabId, 31);
     assert.equal(calls[0].message.action, 'GET_RIGHT_CLICK_CONTEXT');

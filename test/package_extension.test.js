@@ -17,10 +17,10 @@ const testExtensionId = Array.from(createHash('sha256').update(publicDer).digest
     .map(value => String.fromCharCode(97 + (value >> 4), 97 + (value & 15))).join('');
 const packageFiles = [
     'db.js', 'dexie.min.js', 'background.js', 'common.js', 'content.js',
-    'google-drive.js', 'google-sync.js', 'google-sync-ui.js', 'download-book-update.js',
+    'google-drive.js', 'google-sync.js', 'google-sync-ui.js', 'download-book-update.js', 'buzzheavier-download.js',
     'book-ui.js', 'book-ui.css', 'book-shortcuts.js', 'icon.png', 'manifest.json',
     'options.html', 'options.css', 'options.js', 'help.html', 'help.css',
-    'help.js', 'author.json'
+    'help.js', 'help-navigation.js', 'author.json', 'category-ui.js', 'category-ui.css', 'library-motion.js', 'button-ui.js'
 ];
 
 function fixture(t, options = {}) {
@@ -29,10 +29,14 @@ function fixture(t, options = {}) {
     const root = path.join(directory, 'source');
     fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
     fs.mkdirSync(path.join(root, 'images'));
+    fs.mkdirSync(path.join(root, 'vendor'));
     const script = path.join(root, 'scripts', 'package-extension.mjs');
     fs.copyFileSync(sourceScript, script);
     for (const file of packageFiles) fs.writeFileSync(path.join(root, file), `fixture: ${file}\n`);
     fs.writeFileSync(path.join(root, 'images', 'fixture.png'), 'fixture image');
+    fs.writeFileSync(path.join(root, 'vendor', 'motion.js'), 'fixture motion');
+    fs.writeFileSync(path.join(root, 'vendor', 'anime.umd.min.js'), 'fixture anime');
+    fs.writeFileSync(path.join(root, 'vendor', 'motion-LICENSE.md'), 'fixture license');
     const manifest = JSON.stringify({
         manifest_version: 3,
         name: 'Package fixture',
@@ -98,8 +102,17 @@ test('직접 설치 패키지는 검증된 PEM 공개 키를 포함하고 웹스
     assert.equal(manifest.oauth2.client_id, clientId);
     const entries = execFileSync('unzip', ['-Z1', input.output], { encoding: 'utf8' }).split('\n');
     assert.ok(entries.includes('images/fixture.png'));
+    assert.ok(entries.includes('category-ui.js'));
+    assert.ok(entries.includes('category-ui.css'));
+    assert.ok(entries.includes('library-motion.js'));
+    assert.ok(entries.includes('button-ui.js'));
+    assert.ok(entries.includes('help-navigation.js'));
+    assert.ok(entries.includes('vendor/motion.js'));
+    assert.ok(entries.includes('vendor/anime.umd.min.js'));
+    assert.ok(entries.includes('vendor/motion-LICENSE.md'));
     assert.ok(entries.includes('book-shortcuts.js'));
     assert.ok(entries.includes('download-book-update.js'));
+    assert.ok(entries.includes('buzzheavier-download.js'));
     assert.ok(!entries.includes('public-key.pem'));
     assert.ok(!entries.includes('scripts/package-extension.mjs'));
     assert.equal(fs.readFileSync(input.keyFile, 'utf8'), publicPem);

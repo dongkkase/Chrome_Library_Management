@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>분류 UI 검증</title>
+        <link rel="stylesheet" href="../category-ui.css">
+        <link rel="stylesheet" href="../book-ui.css">
+        <style>
+            body { font-family: system-ui; margin: 30px; background: #f4f6fa; color: #243249; }
+            #fixture { padding: 20px; background: white; border: 1px solid #ddd; border-radius: 12px; max-width: 480px; overflow: hidden; }
+            pre { white-space: pre-wrap; font-size: 14px; }
+            button#run { margin-top: 18px; padding: 8px 16px; }
+            #edge { position: fixed; right: 8px; bottom: 8px; }
+            .style-fixture { margin-top: 16px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+            .cw-article-attributes { display: flex; flex-wrap: wrap; gap: 6px; }
+            .cw-article-attributes span {
+                display: inline-flex; min-height: 25px; align-items: center; padding: 0 8px;
+                color: #2355a8; background: #e8f0ff; border: 1px solid #b7c7e3;
+                border-radius: 7px; font-size: 10.5px; font-weight: 750;
+            }
+            @media (max-width: 760px) {
+                .cw-article-attributes span { min-height: 28px; padding-inline: 6px; font-size: 11px; }
+            }
+            .cw-article-attributes.stress span,
+            .cw-article-attributes.stress button {
+                min-height: 44px !important; height: 44px !important; padding: 8px 12px !important;
+                border: 3px solid red !important; border-radius: 18px !important;
+                background: yellow !important; color: red !important; font: 900 24px/2 serif !important;
+                box-shadow: 0 0 0 3px magenta !important; letter-spacing: 2px !important;
+            }
+            .cw-article-attributes.stress span::before,
+            .cw-article-attributes.stress span::after,
+            .cw-article-attributes.stress button::before,
+            .cw-article-attributes.stress button::after {
+                content: 'HOST' !important; display: inline-block !important; padding: 4px !important;
+                background: red !important; color: white !important;
+            }
+        </style>
+        <script>
+            const qaStorage = {};
+            const qaListeners = [];
+            window.chrome = {
+                runtime: { getURL: resource => new URL(`../${resource}`, location.href).href },
+                storage: {
+                    local: {
+                        get(defaults, callback) {
+                            const data = { ...defaults, ...qaStorage };
+                            callback?.(data);
+                            return Promise.resolve(data);
+                        },
+                        set(values) {
+                            Object.assign(qaStorage, values);
+                            const changes = Object.fromEntries(Object.entries(values).map(([key, newValue]) => [key, { newValue }]));
+                            qaListeners.forEach(listener => listener(changes, 'local'));
+                            return Promise.resolve();
+                        }
+                    },
+                    onChanged: { addListener: listener => qaListeners.push(listener) }
+                }
+            };
+        </script>
+        <script src="../common.js"></script>
+        <script src="../vendor/motion.js"></script>
+        <script src="../vendor/anime.umd.min.js"></script>
+        <script src="../library-motion.js"></script>
+        <script src="../category-ui.js"></script>
+        <script src="../book-ui.js"></script>
+    </head>
+    <body>
+        <h1>분류 UI 검증</h1>
+        <p>프로젝트 루트를 로컬 서버로 열고 검증 버튼을 누르세요. 실제 도서 데이터는 사용하지 않습니다.</p>
+        <p>사이트의 <code>!important</code> 규칙 검증은 격리 테스트 확장에서 두 UI CSS를 <code>origin: 'USER'</code>로 주입하고 <code>document.documentElement.dataset.qaUserCss = 'true'</code>를 설정한 경우 실행합니다.</p>
+        <div id="fixture"></div>
+        <div id="edge"></div>
+        <div id="styleFixtures"></div>
+        <button id="run" type="button">상호작용 검증 실행</button>
+        <pre id="result" role="status">대기 중</pre>
+        <script>
+            const fixture = document.getElementById('fixture');
+            const output = document.getElementById('result');
+            let selected = 'uncategorized';
+            const main = BookCategoryUI.createDropdown({
+                options: BookCategoryUI.categoryOptions(),
+                value: selected,
+                label: '등록 분류',
+                text: (_value, label) => `분류:${label}`,
+                onChange: async value => {
+                    selected = value;
+                    await BookCategoryUI.setRegistrationCategory(value);
+                }
+            });
+            fixture.append(main.element);
+            const edge = BookCategoryUI.createDropdown({
+                options: BookCategoryUI.categoryOptions({ includeAll: true }),
+                value: 'all',
+                label: '분류 필터',
+                icon: 'sliders-solid-full.svg',
+                showText: false
+            });
+            document.getElementById('edge').append(edge.element);
+            const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+            const key = (target, value) => target.dispatchEvent(new KeyboardEvent('keydown', {
+                key: value, bubbles: true, cancelable: true
+            }));
+
+            function check(condition, message) {
+                if (!condition) throw new Error(message);
+                output.textContent += `\nPASS ${message}`;
+            }
+
+            function createStyleFixture(stress) {
+                const host = document.createElement('div');
+                host.className = `style-fixture cw-article-attributes${stress ? ' stress' : ''}`;
+                const actions = document.createElement('span');
+                actions.className = 'bm-quick-actions';
+                actions.style.cssText = `${BookMatchUI.quickActionsStyle} display:inline-flex;`;
+                const dropdown = BookCategoryUI.createDropdown({
+                    options: BookCategoryUI.categoryOptions(), value: 'comic', label: '보호 분류',
+                    text: (_value, label) => `분류:${label}`, className: 'bm-registration-category'
+                });
+                const action = document.createElement('button');
+                action.type = 'button';
+                action.className = 'bm-quick-button';
+                action.textContent = '미완';
+                action.style.cssText = BookMatchUI.quickButtonStyle;
+                action.style.setProperty('background-color', '#ff922b', 'important');
+                actions.append(dropdown.element, action);
+                const nativeTag = document.createElement('span');
+                nativeTag.textContent = '사이트 태그';
+                host.append(actions, nativeTag);
+                document.getElementById('styleFixtures').append(host);
+                return { host, actions, dropdown, action, nativeTag, stress };
+            }
+
+            const styleFixtures = [createStyleFixture(false), createStyleFixture(true)];
+
+            async function checkStyleFixture(sample, dark) {
+                const { actions, dropdown, action, nativeTag, stress } = sample;
+                const prefix = `${stress ? '중요 규칙·가상요소' : '채팅위키 태그 규칙'} / ${dark ? '다크' : '라이트'}`;
+                document.body.classList.toggle('dark-mode', dark);
+                check([dropdown.button, action].every(button => Math.abs(button.getBoundingClientRect().height - 18) < .1), `${prefix}: 퀵 버튼 높이 18px`);
+                check([actions, dropdown.element, ...dropdown.button.children].every(element => {
+                    const style = getComputedStyle(element);
+                    return style.borderTopWidth === '0px' && style.paddingTop === '0px' && style.paddingLeft === '0px';
+                }), `${prefix}: 중첩 테두리와 패딩 차단`);
+                check([actions, dropdown.element, dropdown.button, ...dropdown.button.children, action].every(element => {
+                    return ['::before', '::after'].every(pseudo => ['none', 'normal'].includes(getComputedStyle(element, pseudo).content));
+                }), `${prefix}: 사이트 가상요소 차단`);
+                check(getComputedStyle(nativeTag).borderTopWidth === (stress ? '3px' : '1px'), `${prefix}: 사이트 원래 태그 유지`);
+                const arrow = dropdown.button.querySelector('.bm-category-arrow');
+                check(arrow.getBoundingClientRect().width === 12 && arrow.getBoundingClientRect().height === 12
+                    && getComputedStyle(arrow).maskImage.includes('caret-down-solid-full.svg'), `${prefix}: SVG 화살표 크기 유지`);
+                dropdown.button.scrollIntoView({ block: 'center' });
+                dropdown.button.click();
+                const menu = document.querySelector('.bm-category-menu');
+                check(menu?.parentElement === document.body && menu.querySelectorAll('[role="option"]').length === 9, `${prefix}: 보호된 컨트롤 메뉴 열기`);
+                key(document.activeElement, 'End');
+                key(document.activeElement, 'Enter');
+                await delay(220);
+                check(dropdown.getValue() === 'other' && document.activeElement === dropdown.button, `${prefix}: 선택과 포커스 복원`);
+                dropdown.button.click();
+                key(document.activeElement, 'Escape');
+                await delay(150);
+                check(!document.querySelector('.bm-category-menu') && document.activeElement === dropdown.button, `${prefix}: Escape 닫기`);
+            }
+
+            document.getElementById('run').onclick = async () => {
+                output.textContent = '검증 중';
+                try {
+                    await BookCategoryUI.ready;
+                    check(typeof Motion.animate === 'function' && typeof anime.animate === 'function', '로컬 애니메이션 라이브러리 로드');
+                    main.button.click();
+                    let menu = document.querySelector('.bm-category-menu');
+                    check(menu?.parentElement === document.body, 'overflow 바깥 body 포털에 메뉴 표시');
+                    check(menu.querySelectorAll('[role="option"]').length === 9, '9개 분류 표시');
+                    key(document.activeElement, 'End');
+                    check(document.activeElement.textContent === '기타', 'End 키로 마지막 분류 이동');
+                    key(document.activeElement, 'Enter');
+                    await delay(220);
+                    check(main.getValue() === 'other' && selected === 'other' && qaStorage.lastRegistrationCategory === 'other', 'Enter 선택과 마지막 분류 저장');
+                    check(main.button.getAttribute('aria-expanded') === 'false' && document.activeElement === main.button, '선택 후 닫힘과 포커스 복원');
+                    key(main.button, 'ArrowDown');
+                    key(document.activeElement, 'Home');
+                    check(document.activeElement.textContent === '미분류', 'Home 키로 첫 분류 이동');
+                    key(document.activeElement, 'Escape');
+                    await delay(150);
+                    check(!document.querySelector('.bm-category-menu') && document.activeElement === main.button, 'Escape 닫기와 포커스 복원');
+                    edge.button.click();
+                    menu = document.querySelector('.bm-category-menu');
+                    const rect = menu.getBoundingClientRect();
+                    check(rect.right <= innerWidth && rect.bottom <= innerHeight && rect.top >= 0 && rect.left >= 0, '화면 우하단 메뉴 경계 보정');
+                    edge.element.remove();
+                    await delay(50);
+                    check(!document.querySelector('.bm-category-menu'), '열린 드롭다운 원본 제거 시 포털 정리');
+                    main.button.blur();
+                    main.button.focus();
+                    await delay(360);
+                    check(document.querySelector('[role="tooltip"]')?.textContent === '등록 분류: 기타', '포커스 말풍선에 현재 분류 표시');
+                    main.element.remove();
+                    await delay(50);
+                    check(!document.querySelector('[role="tooltip"]'), '툴팁 원본 제거 시 정리');
+                    fixture.append(main.element);
+                    document.getElementById('edge').append(edge.element);
+                    const wasDark = document.body.classList.contains('dark-mode');
+                    try {
+                        for (const dark of [false, true]) {
+                            for (const sample of styleFixtures) {
+                                if (sample.stress && document.documentElement.dataset.qaUserCss !== 'true') continue;
+                                await checkStyleFixture(sample, dark);
+                            }
+                        }
+                    } finally {
+                        document.body.classList.toggle('dark-mode', wasDark);
+                    }
+                    if (document.documentElement.dataset.qaUserCss !== 'true') {
+                        output.textContent += '\nSKIP USER CSS 미주입: !important·가상요소 충돌 검증';
+                    }
+                    output.textContent += '\nALL PASSED';
+                } catch (error) {
+                    output.textContent += `\nFAIL ${error.message}`;
+                }
+            };
+        </script>
+    </body>
+</html>

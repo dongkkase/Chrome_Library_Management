@@ -6,6 +6,8 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'google-sync.js'), 'utf8');
+const commonSource = fs.readFileSync(path.join(__dirname, '..', 'common.js'), 'utf8');
+const categoryHelpers = commonSource.slice(0, commonSource.indexOf('function compareExtensionVersions'));
 const lockSource = fs.readFileSync(path.join(__dirname, '..', 'db.js'), 'utf8')
     .match(/function bookStoreWithSyncLock\(operation\) \{[\s\S]*?\n\}/)[0];
 const storeId = 'kjfmielegfhljmjjmhjmidlfdponknpm';
@@ -230,7 +232,7 @@ function harness(options = {}) {
             }
         }
     });
-    state.sync = vm.runInContext(`${lockSource}\n${source}\nGoogleBookSync;`, context);
+    state.sync = vm.runInContext(`${categoryHelpers}\n${lockSource}\n${source}\nGoogleBookSync;`, context);
     state.withSyncLock = vm.runInContext('bookStoreWithSyncLock;', context);
     state.chrome = chrome;
     state.message = (message, sender = { id: chrome.runtime.id, url: chrome.runtime.getURL('options.html') }) => {
@@ -248,6 +250,55 @@ test('미연결 상태에서는 초기화 및 자동 동기화가 인증이나 D
     assert.equal(state.writes.length, 0);
     assert.equal(state.alarms.size, 0);
     assert.equal((await state.sync.status()).enabled, false);
+});
+
+test('분류가 포함된 업로드는 구버전이 덮어쓸 수 없는 v2 형식으로 저장한다', async () => {
+    const books = [
+        { ...book(1, '동명 작품', [2]), categoryId: 'comic', type: 'incomplete' },
+        { ...book(2, '동명 작품'), categoryId: 'epub', type: 'complete' }
+    ];
+    const state = harness({ books });
+    await state.sync.run({ connect: true });
+    assert.equal(state.writes.length, 1);
+    assert.equal(state.writes[0].payload.version, 2);
+    assert.deepEqual(state.writes[0].payload.books, books.map(canonical));
+    assert.equal(state.books.length, 2);
+});
+
+test('v2 원격 도서의 분류와 개별 누락 권수는 다운로드 후에도 분리된다', async () => {
+    const books = [
+        { ...book(1, '동명 작품', [2]), categoryId: 'comic' },
+        { ...book(2, '동명 작품', [4]), categoryId: 'pdf' }
+    ];
+    const remote = remoteFile(books);
+    remote.payload.version = 2;
+    const state = harness({ remote });
+    await state.sync.run({ connect: true });
+    assert.deepEqual(state.books, books.map(canonical));
+    assert.deepEqual(state.storage.missingVolsMap, { 1: [2], 2: [4] });
+    assert.equal(state.writes.length, 0);
+});
+
+test('v1 미분류 데이터는 해시 검증 중 기본 분류 필드를 추가하지 않는다', async () => {
+    const books = [book(1, '기존 목록')];
+    const remote = remoteFile(books);
+    const state = harness({ remote });
+    await state.sync.run({ connect: true });
+    assert.deepEqual(state.books, books.map(canonical));
+    assert.equal(Object.hasOwn(state.books[0], 'categoryId'), false);
+    assert.equal(state.storage.googleSyncState.baseHash, remote.payload.hash);
+    await state.sync.run();
+    assert.equal(state.writes.length, 0);
+});
+
+test('분류만 바꾼 원격 데이터도 해시가 다르면 로컬에 적용하지 않는다', async () => {
+    const remote = remoteFile([{ ...book(), categoryId: 'comic' }]);
+    remote.payload.version = 2;
+    remote.payload.books[0].categoryId = 'video';
+    const state = harness({ books: [book(2, '로컬 보존')], remote });
+    await assert.rejects(state.sync.run({ connect: true }), /검증/);
+    assert.equal(state.books[0].title, '로컬 보존');
+    assert.equal(state.applies.length, 0);
 });
 
 test('고정 ID가 없는 직접 설치본과 지원하지 않는 설치본은 Google 연결을 차단한다', async t => {
@@ -548,12 +599,13 @@ test('원격 반영 전에 누락 권수가 바뀌면 사용자 수정 내용을
 test('원격 파일의 형식·내용·해시가 잘못되면 로컬 DB를 유지한다', async t => {
     const cases = {
         format: file => { file.payload.format = 'unknown'; },
-        version: file => { file.payload.version = 2; },
+        version: file => { file.payload.version = 3; },
         hash: file => { file.payload.hash = 'incorrect'; },
         books: file => { file.payload.books = {}; },
         duplicateIds: file => { file.payload.books.push(clone(file.payload.books[0])); },
         title: file => { file.payload.books[0].title = ' '; },
-        missingVolumes: file => { file.payload.books[0].missingVols = [-1]; }
+        missingVolumes: file => { file.payload.books[0].missingVols = [-1]; },
+        category: file => { file.payload.books[0].categoryId = 'unknown'; }
     };
     for (const [name, mutate] of Object.entries(cases)) {
         await t.test(name, async () => {

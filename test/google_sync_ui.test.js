@@ -12,6 +12,7 @@ function createHarness(initialStatus) {
     const windowListeners = new Map();
     const calls = [];
     const confirmations = [];
+    const busyCalls = [];
     const state = { status: initialStatus, confirm: true, nextResponse: null };
 
     function getElement(id) {
@@ -43,6 +44,25 @@ function createHarness(initialStatus) {
     }
 
     vm.runInNewContext(source, {
+        ButtonUI: {
+            start(button) {
+                if (!button) return () => {};
+                if (button.disabled || button.busy) return null;
+                const text = button.textContent;
+                button.disabled = true;
+                button.busy = true;
+                button.textContent = '[spinner]';
+                const call = { button, finished: false };
+                busyCalls.push(call);
+                return () => {
+                    if (call.finished) return;
+                    call.finished = true;
+                    button.disabled = false;
+                    button.busy = false;
+                    button.textContent = text;
+                };
+            }
+        },
         document: {
             getElementById: getElement,
             querySelector: () => getElement('backupTab'),
@@ -73,7 +93,7 @@ function createHarness(initialStatus) {
         }
     });
 
-    return { state, calls, confirmations, element: getElement, focus: () => windowListeners.get('focus')() };
+    return { state, calls, busyCalls, confirmations, element: getElement, focus: () => windowListeners.get('focus')() };
 }
 
 function enabledStatus(extra = {}) {
@@ -138,6 +158,8 @@ test('동기화 요청 중에는 중복 실행과 연결 해제를 막는다', a
 
     assert.equal(harness.element('googleSyncNowBtn').disabled, true);
     assert.equal(harness.element('googleSyncDisconnectBtn').disabled, true);
+    assert.equal(harness.element('googleSyncNowBtn').busy, true);
+    assert.equal(harness.busyCalls.length, 1);
     for (const name of ['AutoSync', 'IntervalMinutes', 'SyncOnStartup', 'SyncOnChange']) {
         assert.equal(harness.element(`googleSync${name}`).disabled, true);
     }
@@ -147,6 +169,80 @@ test('동기화 요청 중에는 중복 실행과 연결 해제를 막는다', a
     finish({ ok: true, status: enabledStatus() });
     await settle();
     assert.equal(harness.element('googleSyncNowBtn').disabled, false);
+    assert.equal(harness.element('googleSyncNowBtn').busy, false);
+    assert.equal(harness.busyCalls[0].finished, true);
+});
+
+test('계정 연결 중 상태 렌더링이 spinner를 제거하지 않고 완료 후 레이블을 갱신한다', async () => {
+    const harness = createHarness({ available: true, configured: true, enabled: false });
+    await settle();
+    let finish;
+    harness.state.nextResponse = new Promise(resolve => { finish = resolve; });
+    const button = harness.element('googleSyncConnectBtn');
+    button.click();
+    assert.equal(button.busy, true);
+    assert.equal(button.textContent, '[spinner]');
+    harness.focus();
+    assert.equal(button.textContent, '[spinner]');
+    finish({ ok: true, status: enabledStatus() });
+    await settle();
+    assert.equal(button.busy, false);
+    assert.equal(button.textContent, 'Google 계정 다시 연결');
+    assert.equal(button.hidden, true);
+    assert.equal(harness.busyCalls[0].finished, true);
+});
+
+test('동기화 요청 실패 시 spinner를 정리하고 버튼을 다시 사용할 수 있다', async () => {
+    const harness = createHarness(enabledStatus());
+    await settle();
+    let reject;
+    harness.state.nextResponse = new Promise((resolve, fail) => { reject = fail; });
+    const button = harness.element('googleSyncNowBtn');
+    button.click();
+    assert.equal(button.busy, true);
+    reject(new Error('연결 끊김'));
+    await settle();
+    assert.equal(button.busy, false);
+    assert.equal(button.disabled, false);
+    assert.equal(harness.busyCalls[0].finished, true);
+    assert.equal(harness.element('googleSyncError').textContent, '연결 끊김');
+});
+
+test('spinner 정리 후 최종 충돌 상태의 disabled 속성을 다시 적용한다', async () => {
+    const harness = createHarness(enabledStatus());
+    await settle();
+    let finish;
+    harness.state.nextResponse = new Promise(resolve => { finish = resolve; });
+    const button = harness.element('googleSyncNowBtn');
+    button.click();
+    finish({ ok: true, status: enabledStatus({
+        state: 'conflict', conflict: { token: 'new-conflict', localCount: 1, remoteCount: 2 }
+    }) });
+    await settle();
+    assert.equal(button.busy, false);
+    assert.equal(button.disabled, true);
+    assert.equal(harness.element('googleSyncUseLocalBtn').disabled, false);
+});
+
+test('충돌 확인을 취소하면 spinner를 시작하지 않고 승인한 버튼에만 표시한다', async () => {
+    const harness = createHarness(enabledStatus({
+        state: 'conflict', conflict: { token: 'choice', localCount: 1, remoteCount: 2 }
+    }));
+    await settle();
+    harness.state.confirm = false;
+    harness.element('googleSyncUseLocalBtn').click();
+    assert.equal(harness.busyCalls.length, 0);
+    harness.state.confirm = true;
+    let finish;
+    harness.state.nextResponse = new Promise(resolve => { finish = resolve; });
+    harness.element('googleSyncUseRemoteBtn').click();
+    assert.equal(harness.busyCalls.length, 1);
+    assert.equal(harness.busyCalls[0].button, harness.element('googleSyncUseRemoteBtn'));
+    assert.equal(harness.element('googleSyncUseRemoteBtn').busy, true);
+    assert.equal(harness.element('googleSyncUseLocalBtn').busy, undefined);
+    finish({ ok: true, status: enabledStatus() });
+    await settle();
+    assert.equal(harness.busyCalls[0].finished, true);
 });
 
 test('목록 충돌은 확인한 선택과 충돌 토큰을 함께 전송한다', async () => {

@@ -11,6 +11,7 @@ const sources = Object.fromEntries(
         fs.readFileSync(path.join(projectRoot, fileName), 'utf8')
     ])
 );
+const categoryHelpers = sources['common.js'].slice(0, sources['common.js'].indexOf('function compareExtensionVersions'));
 
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -106,7 +107,7 @@ test('검색 인덱스 트랜잭션은 operation 전후에 signature를 재검�
         transactionCount: 0,
         assertions: []
     };
-    const runBookStoreIndexTransaction = vm.runInNewContext(`
+    const runBookStoreIndexTransaction = vm.runInNewContext(`${categoryHelpers}
         ${extractFunction(sources['db.js'], 'createBookStoreIndexChangedError')}
         ${transactionSource}
         runBookStoreIndexTransaction;
@@ -161,7 +162,7 @@ test('대량 저장은 중복 ID를 재발급하고 기존 누락 권수 데이�
         'normalizeBulkBookId',
         'prepareBooksForBulkStore'
     ].map(name => extractFunction(sources['db.js'], name)).join('\n');
-    const prepareBooksForBulkStore = vm.runInNewContext(`
+    const prepareBooksForBulkStore = vm.runInNewContext(`${categoryHelpers}
         function getTitleMatchParts(title) {
             return { matchKey: String(title || '').replace(/\\s+/g, '') };
         }
@@ -198,7 +199,7 @@ test('마이그레이션은 legacy와 기존 DB의 중복 제목을 유실 없�
         'areMigrationMirrorBooks',
         'mergeBookMigrationSources'
     ].map(name => extractFunction(sources['db.js'], name)).join('\n');
-    const migrationApi = vm.runInNewContext(`
+    const migrationApi = vm.runInNewContext(`${categoryHelpers}
         function getTitleMatchParts(title) {
             return {
                 matchKey: String(title || '')
@@ -317,7 +318,7 @@ test('전체 교체는 revision CAS로 중간 변경을 덮어쓰지 않는다',
         bulkPutCount: 0,
         storedBooks: []
     };
-    const replaceAll = vm.runInNewContext(`
+    const replaceAll = vm.runInNewContext(`${categoryHelpers}
         ${extractFunction(sources['db.js'], 'normalizeBookStoreRevision')}
         ${extractFunction(sources['db.js'], 'createBookStoreConflictError')}
         ${extractFunction(sources['db.js'], 'bookStoreReplaceAll')}
@@ -513,7 +514,7 @@ test('긴 도서 제목은 접두사만 같은 짧은 도서와 상태 처리 �
         _editionState: 'unknown',
         _matchKey: '리버스'
     };
-    const matchingApi = vm.runInNewContext(`
+    const matchingApi = vm.runInNewContext(`${categoryHelpers}
         const levRow0 = new Int32Array(256);
         const levRow1 = new Int32Array(256);
         let cachedBookList = [initialShortBook];
@@ -551,7 +552,7 @@ test('DB 대상 조회는 stale ID의 low-coverage 제목을 거부하고 exact 
         whereIndexes: [],
         exactLookups: []
     };
-    const findStoredBookByTarget = vm.runInNewContext(`
+    const findStoredBookByTarget = vm.runInNewContext(`${categoryHelpers}
         function getTitleMatchParts(title) {
             const compact = String(title || '').replace(/\\s+/g, '');
             return { baseNoSpace: compact, matchKey: compact };
@@ -569,9 +570,10 @@ test('DB 대상 조회는 stale ID의 low-coverage 제목을 거부하고 exact 
                     state.whereIndexes.push(indexName);
                     return {
                         equals: matchKey => ({
-                            last: async () => {
+                            toArray: async () => {
                                 state.exactLookups.push(matchKey);
-                                return state.exactBooksByKey.get(matchKey) || null;
+                                const candidate = state.exactBooksByKey.get(matchKey);
+                                return candidate ? [candidate] : [];
                             }
                         })
                     };
@@ -657,11 +659,11 @@ test('DB 대상 조회는 stale ID의 low-coverage 제목을 거부하고 exact 
     const deleteBookByMatchKey = extractFunction(sources['background.js'], 'deleteBookByMatchKey');
     assert.match(
         processSaveQueue,
-        /target:\s*\{\s*id:\s*task\.bookId,\s*matchKey:\s*targetMatchKey,\s*title:\s*normalizedTaskTitle,\s*rejectLowCoverageId:\s*true\s*\}/
+        /target:\s*\{\s*id:\s*task\.bookId,\s*matchKey:\s*targetMatchKey,\s*title:\s*normalizedTaskTitle,\s*categoryId:\s*task\.categoryId,\s*rejectLowCoverageId:\s*true\s*\}/
     );
     assert.match(
         deleteBookByMatchKey,
-        /bookStoreDeleteByTarget\s*\(\s*\{\s*id:\s*bookId,\s*matchKey:\s*targetMatchKey,\s*title,\s*rejectLowCoverageId:\s*true\s*\}\s*\)/
+        /bookStoreDeleteByTarget\s*\(\s*\{\s*id:\s*bookId,\s*matchKey:\s*targetMatchKey,\s*title,\s*categoryId,\s*rejectLowCoverageId:\s*true\s*\}\s*\)/
     );
 });
 
@@ -684,7 +686,7 @@ test('콘텐츠 재로드는 정본 요청 실패 시 legacy 목록으로 되돌
         runtimeResponse: null,
         legacyReads: 0
     };
-    const loadBookListWithLegacyFallback = vm.runInNewContext(`
+    const loadBookListWithLegacyFallback = vm.runInNewContext(`${categoryHelpers}
         ${extractFunction(sources['content.js'], 'normalizeBookStoreRevision')}
         ${extractFunction(sources['content.js'], 'loadBookListWithLegacyFallback')}
         loadBookListWithLegacyFallback;
@@ -741,7 +743,7 @@ test('탭 복귀나 focus 시 revision이 다르면 marker 대신 정본 목록�
         storageReadCount: 0,
         markerApplyCount: 0
     };
-    const api = vm.runInNewContext(`
+    const api = vm.runInNewContext(`${categoryHelpers}
         let markerTokenCheckInProgress = false;
         let lastBookStoreRevision = 41;
 
@@ -891,7 +893,7 @@ test('10,000건 콘텐츠 캐시의 증분 upsert는 대상 객체만 변경하�
     const currentReferences = [...currentBooks];
     const cachedSnapshots = cachedBooks.map(book => JSON.stringify(book));
 
-    const api = vm.runInNewContext(`
+    const api = vm.runInNewContext(`${categoryHelpers}
         let currentBookList = initialCurrentBooks;
         let cachedBookList = initialCachedBooks;
         let titleProcessingCache = new Map();
@@ -1066,7 +1068,7 @@ function snapshotHarness(snapshots = []) {
             }
         }
     };
-    const api = vm.runInNewContext(`
+    const api = vm.runInNewContext(`${categoryHelpers}
         ${extractFunction(sources['db.js'], 'createBookStoreConflictError')}
         ${extractFunction(sources['db.js'], 'bookStorePruneSnapshots')}
         ${extractFunction(sources['db.js'], 'bookStoreBackupGoogleRemote')}

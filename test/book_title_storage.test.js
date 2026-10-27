@@ -8,6 +8,7 @@ const projectRoot = path.join(__dirname, '..');
 const commonSource = fs.readFileSync(path.join(projectRoot, 'common.js'), 'utf8');
 const dbSource = fs.readFileSync(path.join(projectRoot, 'db.js'), 'utf8');
 const backgroundSource = fs.readFileSync(path.join(projectRoot, 'background.js'), 'utf8');
+const downloadSource = fs.readFileSync(path.join(projectRoot, 'download-book-update.js'), 'utf8');
 
 function extractFunction(source, name) {
     const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(source);
@@ -23,7 +24,7 @@ function extractFunction(source, name) {
 }
 
 function createStorageHarness() {
-    const state = { books: new Map(), changes: [], messages: [], revision: 0, nextId: 1 };
+    const state = { books: new Map(), changes: [], messages: [], revision: 0, nextId: 1, storage: {} };
     const context = vm.createContext({
         ensureBookStoreReady: async () => {},
         runBookStoreIndexTransaction: async (_mode, operation) => operation(),
@@ -32,6 +33,7 @@ function createStorageHarness() {
         sendTabMessage: (tabId, message) => state.messages.push({ tabId, message }),
         getBookStoreErrorMessage: error => error.message,
         console: { log() {}, error() {} },
+        Dexie: { waitFor: operation => operation },
         db: {
             books: {
                 get: async id => state.books.get(id),
@@ -39,8 +41,8 @@ function createStorageHarness() {
                     assert.equal(index, 'cleanTitleStr');
                     return {
                         equals: key => ({
-                            last: async () => Array.from(state.books.values())
-                                .filter(book => book.cleanTitleStr === key).at(-1)
+                            toArray: async () => Array.from(state.books.values())
+                                .filter(book => book.cleanTitleStr === key)
                         })
                     };
                 },
@@ -48,11 +50,14 @@ function createStorageHarness() {
                     const id = book.id ?? state.nextId++;
                     state.books.set(id, { ...book, id });
                     return id;
-                }
+                },
+                delete: async id => state.books.delete(id)
             }
         }
     });
     vm.runInContext(commonSource, context);
+    context.chrome = { storage: { local: { set: async patch => Object.assign(state.storage, patch) } } };
+    vm.runInContext(downloadSource, context);
     vm.runInContext([
         'getBookStoreMatchKey',
         'prepareBookForStore',
@@ -60,7 +65,9 @@ function createStorageHarness() {
         'attachBookStoreRevision',
         'isLowCoverageBookTargetMismatch',
         'findStoredBookByTarget',
-        'bookStorePutManyByTarget'
+        'bookStorePutManyByTarget',
+        'bookStoreDeleteByTarget',
+        'bookStoreApplyDownloadUpdate'
     ].map(name => extractFunction(dbSource, name)).join('\n'), context);
     vm.runInContext(extractFunction(backgroundSource, 'processSaveQueue'), context);
     return { state, api: context };
@@ -146,6 +153,112 @@ test('저장 제목은 중간 마침표와 다른 문장부호를 유지하고 �
     for (const title of ['작품!', '작품?', '작품…', '작품。', 'Dr. Stone']) {
         assert.equal(api.prepareBookForStore({ title }).title, title);
     }
+});
+
+test('같은 제목의 만화와 PDF는 독립 등록하고 선택한 분류의 상태만 갱신한다', async () => {
+    const { state, api } = createStorageHarness();
+    const comic = await api.processSaveQueue([{
+        cleanTitle: '같은 작품', categoryId: 'comic', type: 'incomplete', lastVol: '10'
+    }]);
+    const pdf = await api.processSaveQueue([{
+        cleanTitle: '같은 작품', categoryId: 'pdf', bookId: comic.book.id, type: 'complete', lastVol: '3'
+    }]);
+    assert.equal(comic.ok, true);
+    assert.equal(pdf.ok, true);
+    assert.notEqual(comic.book.id, pdf.book.id);
+    assert.equal(state.books.size, 2);
+
+    const updated = await api.processSaveQueue([{
+        cleanTitle: '같은 작품', categoryId: 'comic', type: 'exclude'
+    }]);
+    assert.equal(updated.book.id, comic.book.id);
+    assert.equal(updated.book.lastVol, '10');
+    assert.equal(state.books.get(pdf.book.id).type, 'complete');
+    assert.equal(state.books.get(pdf.book.id).lastVol, '3');
+});
+
+test('분류 없는 동명 도서 갱신은 후보를 반환하고 아무 항목도 변경하지 않는다', async () => {
+    const { state, api } = createStorageHarness();
+    for (const categoryId of ['comic', 'epub']) {
+        await api.processSaveQueue([{ cleanTitle: '동명 작품', categoryId, type: 'incomplete' }]);
+    }
+    const before = JSON.stringify([...state.books.values()]);
+    const result = await api.processSaveQueue([{ cleanTitle: '동명 작품', type: 'exclude' }]);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'BOOK_CATEGORY_AMBIGUOUS');
+    assert.deepEqual(Array.from(result.candidates, candidate => candidate.categoryId), ['comic', 'epub']);
+    assert.equal(JSON.stringify([...state.books.values()]), before);
+
+    const selected = await api.processSaveQueue([{
+        cleanTitle: '동명 작품', bookId: result.candidates[1].id, type: 'complete'
+    }]);
+    assert.equal(selected.ok, true);
+    assert.equal(selected.book.categoryId, 'epub');
+    assert.equal(state.books.get(result.candidates[0].id).type, 'incomplete');
+});
+
+test('분류가 없는 구형 항목은 미분류 안에서 갱신하고 다른 분류 등록 시 보존한다', async () => {
+    const { state, api } = createStorageHarness();
+    state.books.set(42, {
+        id: 42, title: '기존 작품', cleanTitleStr: api.getBookStoreMatchKey('기존 작품'),
+        type: 'incomplete', missingVols: [2]
+    });
+    const legacy = await api.processSaveQueue([{
+        cleanTitle: '기존 작품', categoryId: 'uncategorized', type: 'complete'
+    }]);
+    assert.equal(legacy.book.id, 42);
+    assert.deepEqual(legacy.book.missingVols, [2]);
+    const other = await api.processSaveQueue([{
+        cleanTitle: '기존 작품', categoryId: 'comic', type: 'exclude'
+    }]);
+    assert.notEqual(other.book.id, 42);
+    assert.equal(state.books.get(42).type, 'complete');
+    assert.equal(state.books.size, 2);
+});
+
+test('분류를 지정한 삭제는 같은 제목의 다른 분류와 누락 정보를 보존한다', async () => {
+    const { state, api } = createStorageHarness();
+    const first = await api.processSaveQueue([{ cleanTitle: '삭제 대상', categoryId: 'comic', type: 'complete' }]);
+    const second = await api.processSaveQueue([{ cleanTitle: '삭제 대상', categoryId: 'video', type: 'incomplete' }]);
+    state.books.get(second.book.id).missingVols = [4];
+    await assert.rejects(api.bookStoreDeleteByTarget({ title: '삭제 대상' }), error => {
+        return error.code === 'BOOK_CATEGORY_AMBIGUOUS';
+    });
+    assert.equal(state.books.size, 2);
+    const deleted = await api.bookStoreDeleteByTarget({ title: '삭제 대상', categoryId: 'comic' });
+    assert.equal(deleted.id, first.book.id);
+    assert.equal(state.books.size, 1);
+    assert.deepEqual(state.books.get(second.book.id).missingVols, [4]);
+});
+
+test('다운로드 자동 갱신은 해당 분류의 권수와 누락만 갱신하고 새 분류는 독립 등록한다', async () => {
+    const { state, api } = createStorageHarness();
+    const comic = await api.processSaveQueue([{
+        cleanTitle: '자동 갱신', categoryId: 'comic', type: 'incomplete', lastVol: '3'
+    }]);
+    const pdf = await api.processSaveQueue([{
+        cleanTitle: '자동 갱신', categoryId: 'pdf', type: 'complete', lastVol: '7'
+    }]);
+    const missingVols = { [comic.book.id]: [2], [pdf.book.id]: [4] };
+    const metadata = { complete: false, volumes: [5], lastVolume: 5, resolution: '' };
+    await assert.rejects(api.bookStoreApplyDownloadUpdate({ title: '자동 갱신' }, metadata, missingVols), error => {
+        return error.code === 'BOOK_CATEGORY_AMBIGUOUS';
+    });
+    const updated = await api.bookStoreApplyDownloadUpdate({ title: '자동 갱신', categoryId: 'comic' }, metadata, missingVols);
+    assert.equal(updated.id, comic.book.id);
+    assert.equal(updated.categoryId, 'comic');
+    assert.equal(updated.lastVol, '5');
+    assert.deepEqual(Array.from(updated.missingVols), [2, 4]);
+    assert.equal(state.books.get(pdf.book.id).lastVol, '7');
+    assert.deepEqual(state.storage.missingVolsMap[pdf.book.id], [4]);
+
+    const created = await api.bookStoreApplyDownloadUpdate({ title: '자동 갱신', categoryId: 'video' }, {
+        complete: false, volumes: [1], lastVolume: 1, resolution: ''
+    }, state.storage.missingVolsMap);
+    assert.notEqual(created.id, comic.book.id);
+    assert.notEqual(created.id, pdf.book.id);
+    assert.equal(created.categoryId, 'video');
+    assert.equal(state.books.size, 3);
 });
 
 test('마침표와 공백만 있는 제목은 빈 제목으로 저장하지 않는다', async () => {

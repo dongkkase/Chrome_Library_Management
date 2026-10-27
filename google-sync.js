@@ -154,6 +154,8 @@ const GoogleBookSync = (() => {
             if (!book || typeof book !== 'object' || Array.isArray(book)
                 || !Number.isSafeInteger(book.id) || book.id <= 0 || ids.has(book.id)
                 || typeof book.title !== 'string' || !book.title.trim()
+                || (book.categoryId !== undefined && (typeof book.categoryId !== 'string'
+                    || normalizeBookCategory(book.categoryId) !== book.categoryId))
                 || !Array.isArray(book.missingVols)
                 || book.missingVols.some(value => !Number.isSafeInteger(value) || value <= 0)) {
                 throw new Error('Google Drive의 도서 데이터가 손상되었거나 지원하지 않는 형식입니다.');
@@ -195,7 +197,7 @@ const GoogleBookSync = (() => {
     async function remoteSnapshot(remote) {
         if (!remote) return { hash: null, books: [], updatedAt: null };
         const payload = remote.payload;
-        if (!payload || payload.format !== 'book-manager-google-sync' || payload.version !== 1
+        if (!payload || payload.format !== 'book-manager-google-sync' || ![1, 2].includes(payload.version)
             || !Number.isFinite(payload.updatedAt) || typeof payload.hash !== 'string') {
             throw new Error('지원하지 않는 Google Drive 동기화 파일입니다. 로컬 데이터는 유지됩니다.');
         }
@@ -361,7 +363,8 @@ const GoogleBookSync = (() => {
             }
             await assertActive(runGeneration, options.automaticTrigger);
             const written = await drive.write({
-                format: 'book-manager-google-sync', version: 1,
+                format: 'book-manager-google-sync',
+                version: local.books.some(book => book.categoryId !== undefined) ? 2 : 1,
                 updatedAt: Date.now(), hash: local.hash, books: local.books
             }, file);
             syncedFileId = written.fileId;

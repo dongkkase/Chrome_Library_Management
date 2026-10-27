@@ -80,6 +80,16 @@ function requestRuntimeResponse(message, callback) {
     }
 }
 
+let quickUIStylesRequested = false;
+
+function ensureQuickUIStyles() {
+    if (quickUIStylesRequested) return;
+    quickUIStylesRequested = true;
+    requestRuntimeResponse({ action: 'ENSURE_QUICK_UI_STYLES' }, response => {
+        if (!response?.ok) quickUIStylesRequested = false;
+    });
+}
+
 function loadBookListWithLegacyFallback(callback, allowLegacy = false) {
     requestRuntimeResponse({ action: 'GET_BOOK_LIST' }, (response) => {
         if (response && response.ok === true && Array.isArray(response.bookList)) {
@@ -141,7 +151,7 @@ const PRE_DEFINED_SITES = [
     thumbSelector: "img", 
     excludeThumbSelector: ".board-thumbnail",
     hideSelector: "tr",
-    allowedDLs: ["giga", "gofile", "transfer"],
+    allowedDLs: ["giga", "gofile", "transfer", "buzzheavier"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
     boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001|D1106)(?:&|#|$)/i,
@@ -224,7 +234,7 @@ const PRE_DEFINED_SITES = [
         body { padding-bottom: 120px !important; }
         .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
         .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 5px !important; width: auto !important; }
-        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
+        .bm-quick-actions.list-actions > button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
 
 
 
@@ -277,7 +287,7 @@ const PRE_DEFINED_SITES = [
         const rowText = link.closest('tr')?.textContent || '';
         return /번역|(^|[^a-z])ai(?=$|[^a-z])/i.test(rowText);
     },
-    allowedDLs: ["giga", "gofile", "transfer"],
+    allowedDLs: ["giga", "gofile", "transfer", "buzzheavier"],
     autoConfirmKeywords: ["포인트", "열람"], 
     boardFilter: /[?&]bo_table=D2002|D2003(?:&|#|$)/i,
     boardFilter2: /[?&]bo_table=(?:D1007|D1104|D1103|D1201|D1102|D1101|D1011|D2001|D1106)(?:&|#|$)/i,
@@ -360,7 +370,7 @@ const PRE_DEFINED_SITES = [
         body { padding-bottom: 120px !important; }
         .bm-badge-br.list-br { display: block !important; height: 0 !important; margin-top: 8px !important; }
         .bm-quick-actions.list-actions { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 5px !important; width: auto !important; }
-        .bm-quick-actions.list-actions button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
+        .bm-quick-actions.list-actions > button { margin: 0 !important; flex-shrink: 0 !important; font-weight: 400 !important; opacity: 0.7; }
 
 
 
@@ -406,7 +416,7 @@ const PRE_DEFINED_SITES = [
     selector: "#data_list",
     thumbSelector: "img", 
     excludeThumbSelector: ".thumbnail",
-    allowedDLs: ["giga", "gofile", "transfer"],
+    allowedDLs: ["giga", "gofile", "transfer", "buzzheavier"],
     autoConfirmKeywords: ["포인트", "열람"], 
     
     getHighResUrlAsync: async (thumb) => {
@@ -444,7 +454,7 @@ const PRE_DEFINED_SITES = [
     detailSelector: ".cw-article-header > h1",
     hideSelector: ".cw-board-item",
     translationDetector: link => /번역/.test((link.closest('.cw-board-item') || link).getAttribute('data-attributes') || ''),
-    allowedDLs: ["giga", "gofile", "transfer"],
+    allowedDLs: ["giga", "gofile", "transfer", "buzzheavier"],
     autoConfirmKeywords: ["자료 이용권을 받을까요?"], 
     boardFilter: new RegExp([
         '[?&]bo_table=(?:sub_manga|manga_jic|joy_new|joy_mh|joy_lv|joy_rofan|books|joy_fan|joy_ai|19novel|joy_bell|joy_fan_request)(?:&|#|$)',
@@ -499,7 +509,7 @@ const PRE_DEFINED_SITES = [
 
         // a 태그가 새로 생성되었다면, 확실한 배열 값을 직접 주입하여 즉시 다운로드 버튼 생성
         if (isModified && typeof injectDirectDownloadButtons === 'function') {
-            injectDirectDownloadButtons(["giga", "gofile", "transfer"]);
+            injectDirectDownloadButtons(["giga", "gofile", "transfer", "buzzheavier"]);
         }
 
     }
@@ -509,7 +519,7 @@ const PRE_DEFINED_SITES = [
     selector: "#gall_ul .bo_tit, .tbl_head01 .bo_tit",
     hideSelector: "li",
     autoConfirmKeywords: ["링크", "발급"], 
-    allowedDLs: ["giga", "gofile", "hk"],
+    allowedDLs: ["giga", "gofile", "hk", "buzzheavier"],
     customCss: `
         .bm-quick-actions.list-actions {
             display: flex !important;
@@ -518,7 +528,7 @@ const PRE_DEFINED_SITES = [
             margin-top: 6px !important;
             width: 100% !important;
         }
-        .bm-quick-actions.list-actions button {
+        .bm-quick-actions.list-actions > button {
             margin: 0 !important;
             flex-shrink: 0 !important;
         }
@@ -672,7 +682,7 @@ function getTitleCorrectionKey(autoTitle) {
 function normalizeStoredTitleCorrection(value) {
     if (typeof value === 'string') {
         const correctedTitle = value.trim();
-        return correctedTitle ? { correctedTitle, bookId: null, editionKey: '' } : null;
+        return correctedTitle ? { correctedTitle, bookId: null, editionKey: '', categoryId: null } : null;
     }
     if (!value || typeof value !== 'object') return null;
 
@@ -681,11 +691,12 @@ function normalizeStoredTitleCorrection(value) {
     return {
         correctedTitle,
         bookId: value.bookId ?? null,
-        editionKey: String(value.editionKey || '').trim()
+        editionKey: String(value.editionKey || '').trim(),
+        categoryId: value.categoryId === undefined ? null : normalizeBookCategory(value.categoryId)
     };
 }
 
-function getResolvedSiteTitle(originalText, hasContextTranslationEdition = false) {
+function getResolvedSiteTitle(originalText, hasContextTranslationEdition = false, categoryId = null) {
     const cleanedAutoTitle = typeof cleanSiteTitle === 'function' ? cleanSiteTitle(originalText) : String(originalText || '').trim();
     const sourceTitleParts = getTitleMatchParts(String(originalText || ''));
     const sourceEditionKeys = new Set(sourceTitleParts.editionKey ? sourceTitleParts.editionKey.split('|') : []);
@@ -700,18 +711,60 @@ function getResolvedSiteTitle(originalText, hasContextTranslationEdition = false
     const globalCorrectionKey = correctionKey ? correctionKey.replace(/^[^:]+::/, '*::') : '';
     const siteCorrection = correctionKey ? normalizeStoredTitleCorrection(titleCorrections[correctionKey]) : null;
     const globalCorrection = globalCorrectionKey ? normalizeStoredTitleCorrection(titleCorrections[globalCorrectionKey]) : null;
-    const correction = siteCorrection || globalCorrection;
+    const category = categoryId === null ? null : normalizeBookCategory(categoryId);
+    const normalizedTitle = normalizeTitleCorrectionKeyPart(autoTitle);
+    const host = window.location.hostname.replace(/^www\./i, '').toLowerCase();
+    const knownBooks = typeof cachedBookList === 'undefined' ? [] : cachedBookList;
+    const scopedCorrections = BOOK_CATEGORIES.flatMap(item => {
+        if (category !== null && item.id !== category) return [];
+        const siteKey = `${host}::category=${item.id}::${normalizedTitle}`;
+        const globalKey = `*::category=${item.id}::${normalizedTitle}`;
+        const stored = normalizeStoredTitleCorrection(titleCorrections[siteKey])
+            || normalizeStoredTitleCorrection(titleCorrections[globalKey]);
+        if (stored?.bookId !== null && stored?.bookId !== undefined) {
+            const referencedBook = knownBooks.find(book => String(book.id) === String(stored.bookId));
+            if (!referencedBook || normalizeBookCategory(referencedBook.categoryId) !== item.id) return [];
+        }
+        return stored ? [{ ...stored, categoryId: item.id, key: titleCorrections[siteKey] ? siteKey : globalKey }] : [];
+    });
+    const legacyCandidate = siteCorrection || globalCorrection;
+    const legacyBook = legacyCandidate?.bookId != null
+        ? knownBooks.find(book => String(book.id) === String(legacyCandidate.bookId)) : null;
+    const legacyCorrection = legacyCandidate && (legacyCandidate.categoryId === null
+        || !legacyBook || normalizeBookCategory(legacyBook.categoryId) === legacyCandidate.categoryId)
+        ? legacyCandidate : null;
+    const candidateCorrections = [...scopedCorrections, ...(legacyCorrection ? [{
+        ...legacyCorrection,
+        categoryId: legacyCorrection.categoryId ?? (legacyBook ? normalizeBookCategory(legacyBook.categoryId) : null)
+    }] : [])];
+    const sourceBase = getTitleMatchParts(autoTitle).baseNoSpace;
+    const correctionCandidates = candidateCorrections.length ? knownBooks.filter(book => {
+        if (category !== null && normalizeBookCategory(book.categoryId) !== category) return false;
+        return book._regBodyNoSpace === sourceBase || candidateCorrections.some(item =>
+            (item.categoryId === null || normalizeBookCategory(book.categoryId) === item.categoryId)
+            && (String(book.id) === String(item.bookId)
+                || book._regBodyNoSpace === getTitleMatchParts(item.correctedTitle).baseNoSpace));
+    }) : [];
+    const hasCategoryAmbiguity = new Set(correctionCandidates.map(book => normalizeBookCategory(book.categoryId))).size > 1;
+    const compatibleLegacy = legacyCorrection && (category === null || legacyCorrection.categoryId === category
+        || (legacyCorrection.categoryId === null && (!legacyCorrection.bookId
+            || knownBooks.some(book => String(book.id) === String(legacyCorrection.bookId)
+                && normalizeBookCategory(book.categoryId) === category))));
+    const correction = hasCategoryAmbiguity ? null
+        : scopedCorrections.length === 1 ? scopedCorrections[0]
+            : compatibleLegacy ? legacyCorrection : null;
 
     return {
         title: correction ? correction.correctedTitle : autoTitle,
         autoTitle,
         correctionKey,
-        appliedCorrectionKey: siteCorrection ? correctionKey : (globalCorrection ? globalCorrectionKey : ''),
+        appliedCorrectionKey: correction ? correction.key || (siteCorrection ? correctionKey : globalCorrectionKey) : '',
         isCorrected: !!correction,
         bookId: correction ? correction.bookId : null,
         editionKey: correction && correction.editionKey ? correction.editionKey : sourceEditionKey,
         sourceEditionKey,
-        sourceEditionState: sourceEditionKey ? 'positive' : sourceTitleParts.editionState
+        sourceEditionState: sourceEditionKey ? 'positive' : sourceTitleParts.editionState,
+        categoryCandidates: hasCategoryAmbiguity ? correctionCandidates : []
     };
 }
 
@@ -732,12 +785,13 @@ function getResolvedTitleMatchParts(resolvedTitle) {
     if (titleParts.editionState === 'unknown' && resolvedTitle && resolvedTitle.sourceEditionState === 'standard') {
         titleParts.editionState = 'standard';
     }
+    if (resolvedTitle && resolvedTitle.categoryCandidates?.length) titleParts.categoryCandidates = resolvedTitle.categoryCandidates;
     return titleParts;
 }
 
-function getResolvedLinkTitle(linkData) {
+function getResolvedLinkTitle(linkData, categoryId = null) {
     if (linkData && linkData.originalText !== undefined) {
-        return getResolvedSiteTitle(linkData.originalText, !!linkData.hasSiteTranslationEdition);
+        return getResolvedSiteTitle(linkData.originalText, !!linkData.hasSiteTranslationEdition, categoryId);
     }
 
     const fallbackTitle = linkData && linkData.pureTitle ? linkData.pureTitle : '';
@@ -754,13 +808,13 @@ function getResolvedLinkTitle(linkData) {
     };
 }
 
-function getResolvedQuickActionTitle(linkData, actionElement) {
+function getResolvedQuickActionTitle(linkData, actionElement, categoryId = null) {
     const liveChatingWikiTitle = getChatingWikiListTitle(actionElement);
     if (liveChatingWikiTitle !== null) {
-        return getResolvedSiteTitle(liveChatingWikiTitle, !!linkData.hasSiteTranslationEdition);
+        return getResolvedSiteTitle(liveChatingWikiTitle, !!linkData.hasSiteTranslationEdition, categoryId);
     }
 
-    return getResolvedLinkTitle(linkData);
+    return getResolvedLinkTitle(linkData, categoryId);
 }
 
 function invalidateTitleCorrectionRenderCache() {
@@ -1067,6 +1121,7 @@ function createEnhancedBook(book) {
 
     return {
         ...book,
+        categoryId: normalizeBookCategory(book.categoryId),
         missingVols: getBookMissingVols(book, currentStorageData.missingVolsMap),
         _regBodyOriginal: processedOriginal,
         _regBodyNoSpace: processedNoSpace,
@@ -1085,7 +1140,10 @@ function replaceBookCache(bookList) {
     cachedBookList = currentBookList.map(createEnhancedBook).filter(Boolean);
 
     cachedBookList.forEach((book) => {
-        exactMatchCache[book._matchKey] = book;
+        const previous = exactMatchCache[book._matchKey];
+        exactMatchCache[book._matchKey] = !(book._matchKey in exactMatchCache)
+            || (previous && normalizeBookCategory(previous.categoryId) === normalizeBookCategory(book.categoryId))
+            ? book : null;
     });
     isDataLoaded = true;
 }
@@ -1147,7 +1205,7 @@ function applyDataSettings(data) {
         if (!isBoardFilter2Matched) globalBoardJS2 = null;
     } else if (matchedUserSite) {
         isTargetSite = true;
-        globalAllowedDLs = ["giga", "gofile"]; 
+        globalAllowedDLs = ["giga", "gofile", "buzzheavier"];
         globalTargetSelector = 'a'; 
         globalHideSelector = matchedUserSite.hideSelector || 'tr, li, .list-item';
         globalCustomCss = matchedUserSite.customCss || '';
@@ -1223,13 +1281,17 @@ function refreshExactMatchCache(matchKeys) {
     });
     cachedBookList.forEach((book) => {
         if (matchKeys.has(book._matchKey)) {
-            exactMatchCache[book._matchKey] = book;
+            const previous = exactMatchCache[book._matchKey];
+            exactMatchCache[book._matchKey] = !(book._matchKey in exactMatchCache)
+                || (previous && normalizeBookCategory(previous.categoryId) === normalizeBookCategory(book.categoryId))
+                ? book : null;
         }
     });
 }
 
 function isBookCompatibleWithTitleParts(book, titleParts) {
     if (!book || !titleParts) return false;
+    if (titleParts.categoryId && normalizeBookCategory(book.categoryId) !== titleParts.categoryId) return false;
 
     const editionState = titleParts.editionState || (titleParts.editionKey ? 'positive' : 'unknown');
     if (editionState === 'positive' && book._editionKey !== titleParts.editionKey) return false;
@@ -1247,7 +1309,8 @@ function getTitlePartsFromSimilarityCacheKey(cacheKey) {
     if (separatorIndex < 0) return null;
 
     const matchKey = cacheKey.slice(0, separatorIndex);
-    const editionState = cacheKey.slice(separatorIndex + editionStateSeparator.length);
+    const stateAndCategory = cacheKey.slice(separatorIndex + editionStateSeparator.length).split('::category=');
+    const editionState = stateAndCategory[0];
     const editionSeparatorIndex = matchKey.indexOf('::');
     const baseNoSpace = editionSeparatorIndex < 0 ? matchKey : matchKey.slice(0, editionSeparatorIndex);
     const editionKey = editionSeparatorIndex < 0 ? '' : matchKey.slice(editionSeparatorIndex + 2);
@@ -1256,6 +1319,7 @@ function getTitlePartsFromSimilarityCacheKey(cacheKey) {
         baseNoSpace,
         editionKey,
         editionState,
+        categoryId: stateAndCategory[1] && stateAndCategory[1] !== '*' ? stateAndCategory[1] : null,
         matchKey
     };
 }
@@ -1297,7 +1361,8 @@ function upsertCachedBook(book, optimistic = false) {
     }
     if (existingIndex < 0 && !optimistic) {
         existingIndex = cachedBookList.findIndex(candidate => {
-            return candidate._optimistic === true && candidate._matchKey === enhancedBook._matchKey;
+            return candidate._optimistic === true && candidate._matchKey === enhancedBook._matchKey
+                && normalizeBookCategory(candidate.categoryId) === normalizeBookCategory(enhancedBook.categoryId);
         });
     }
 
@@ -1312,7 +1377,8 @@ function upsertCachedBook(book, optimistic = false) {
         else delete existingBook._optimistic;
         currentBookList[existingIndex] = storedBook;
 
-        impact.structural = titleChanged || matchKeyChanged;
+        impact.structural = titleChanged || matchKeyChanged
+            || normalizeBookCategory(previousBook.categoryId) !== normalizeBookCategory(enhancedBook.categoryId);
         addBookToImpact(impact, previousBook);
         addBookToImpact(impact, existingBook);
         return { applied: true, impact, book: existingBook };
@@ -1336,7 +1402,8 @@ function deleteCachedBook(change) {
         existingIndex = cachedBookList.findIndex(candidate => areBookIdsEqual(candidate.id, targetId));
     }
     if (existingIndex < 0 && markerBook) {
-        existingIndex = cachedBookList.findIndex(candidate => candidate._matchKey === markerBook._matchKey);
+        existingIndex = cachedBookList.findIndex(candidate => candidate._matchKey === markerBook._matchKey
+            && normalizeBookCategory(candidate.categoryId) === normalizeBookCategory(markerBook.categoryId));
     }
     if (existingIndex < 0) {
         return {
@@ -1369,7 +1436,7 @@ function applyBookStoreDelta(change, optimistic = false) {
 
 function getBookChangeMatchKey(change) {
     if (!change || !change.book || !change.book.title) return '';
-    return getTitleMatchParts(String(change.book.title)).matchKey;
+    return getCategorizedBookMatchKey(getTitleMatchParts(String(change.book.title)).matchKey, change.book.categoryId);
 }
 
 function clearOptimisticRecoveryTimer() {
@@ -1536,10 +1603,40 @@ function applyBookStoreMarker(marker) {
     finalizeBookChangeImpact(combinedImpact);
 }
 
+function createRegistrationCategoryControl() {
+    ensureQuickUIStyles();
+    const dropdown = BookCategoryUI.createDropdown({
+        options: BookCategoryUI.categoryOptions(),
+        value: BookCategoryUI.getRegistrationCategory(),
+        label: '등록 분류',
+        text: (_value, label) => `분류: ${label}`,
+        className: 'bm-registration-category',
+        onChange: async value => {
+            try {
+                await BookCategoryUI.setRegistrationCategory(value);
+            } catch (error) {
+                showInfoToast('등록 분류를 저장하지 못했습니다. 다시 선택해주세요.', true);
+                throw error;
+            }
+        }
+    });
+    dropdown.element._bmCategoryDropdown = dropdown;
+    return dropdown.element;
+}
+
+if (typeof BookCategoryUI !== 'undefined') {
+    BookCategoryUI.subscribeRegistrationCategory(categoryId => {
+        document.querySelectorAll('.bm-registration-category').forEach(element => {
+            element._bmCategoryDropdown?.setValue(categoryId);
+        });
+    });
+}
+
 function injectQuickHidePanel() {
     if (!isTargetSite) return;
     
     if (isHideQuickMenu) {
+        document.getElementById('bm-quick-dock')?.remove();
         let existingPanel = document.getElementById('bm-quick-hide-panel');
         if (existingPanel) existingPanel.remove();
         return;
@@ -1555,11 +1652,21 @@ function injectQuickHidePanel() {
         hideTranslate: isHideTranslate,
         hideNew: isHideNew
     }, (key, checked) => safeStorageSet({ [key]: checked }));
-    document.body.appendChild(panel);
+    const dock = document.createElement('div');
+    dock.id = 'bm-quick-dock';
+    dock.className = 'bm-quick-dock';
+    const categoryPanel = document.createElement('div');
+    categoryPanel.className = 'bm-category-panel';
+    categoryPanel.setAttribute('role', 'region');
+    categoryPanel.setAttribute('aria-label', '도서 등록 분류');
+    categoryPanel.appendChild(createRegistrationCategoryControl());
+    dock.append(categoryPanel, panel);
+    document.body.appendChild(dock);
 }
 
 function updateQuickHidePanel() {
     if (isHideQuickMenu) {
+        document.getElementById('bm-quick-dock')?.remove();
         let existingPanel = document.getElementById('bm-quick-hide-panel');
         if (existingPanel) existingPanel.remove();
         return;
@@ -1729,10 +1836,16 @@ function getCurrentRightClickedContext() {
     try {
         const title = getPureLinkText(sourceElement).trim();
         if (!title) return lastRightClickedContext;
+        const hasTranslationEdition = !!lastRightClickedLink && hasSiteTranslationEdition(lastRightClickedLink);
+        const categoryId = typeof BookCategoryUI !== 'undefined' ? BookCategoryUI.getRegistrationCategory() : 'uncategorized';
+        const resolvedTitle = getResolvedSiteTitle(title, hasTranslationEdition, categoryId);
 
         return {
             title,
-            hasTranslationEdition: !!lastRightClickedLink && hasSiteTranslationEdition(lastRightClickedLink),
+            hasTranslationEdition,
+            categoryId,
+            correctedTitle: resolvedTitle.isCorrected ? resolvedTitle.title : null,
+            correctedBookId: resolvedTitle.isCorrected ? resolvedTitle.bookId : null,
             pageUrl: window.location.href,
             linkUrl: lastRightClickedLink ? lastRightClickedLink.href : ''
         };
@@ -1838,16 +1951,29 @@ function getSimilarity(regBodyOriginal, siteBodyOriginal) {
   return calculateLevenshtein(regBody, siteBody);
 }
 
-function findMatchingBook(titleParts, preferredBookId = null) {
+function findMatchingBook(titleParts, preferredBookId = null, categoryId = null) {
     const { baseOriginal, baseNoSpace, editionKey, matchKey } = titleParts;
     const editionState = titleParts.editionState || (editionKey ? 'positive' : 'unknown');
+    const category = categoryId === null || categoryId === undefined ? null : normalizeBookCategory(categoryId);
+    const scopedBooks = category === null ? cachedBookList
+        : cachedBookList.filter(candidate => normalizeBookCategory(candidate.categoryId) === category);
 
     if (preferredBookId !== null && preferredBookId !== undefined) {
-        const preferredBook = cachedBookList.find(candidate => String(candidate.id) === String(preferredBookId));
+        const preferredBook = scopedBooks.find(candidate => String(candidate.id) === String(preferredBookId));
         if (preferredBook) return { book: preferredBook, maxScore: 100, candidates: [] };
     }
 
-    const exactBook = exactMatchCache[matchKey];
+    if (category === null && titleParts.categoryCandidates?.length > 1) {
+        return { book: null, maxScore: 0, candidates: titleParts.categoryCandidates, ambiguous: true };
+    }
+
+    const exactBook = category === null ? exactMatchCache[matchKey]
+        : scopedBooks.findLast(candidate => candidate._matchKey === matchKey);
+    const exactTitleCategories = new Set(scopedBooks
+        .filter(candidate => candidate._regBodyNoSpace === baseNoSpace
+            && (editionState !== 'positive' || candidate._editionKey === editionKey)
+            && (editionState !== 'standard' || candidate._editionState === 'standard'))
+        .map(candidate => normalizeBookCategory(candidate.categoryId)));
     const isExactCompatible = exactBook && (
         editionState === 'positive'
             ? exactBook._editionKey === editionKey
@@ -1855,10 +1981,10 @@ function findMatchingBook(titleParts, preferredBookId = null) {
                 ? exactBook._editionState === 'standard'
                 : false
     );
-    if (isExactCompatible) {
-        return { book: exactMatchCache[matchKey], maxScore: 100 };
+    if (isExactCompatible && exactTitleCategories.size <= 1) {
+        return { book: exactBook, maxScore: 100 };
     }
-    const cacheKey = `${matchKey}::edition-state=${editionState}`;
+    const cacheKey = `${matchKey}::edition-state=${editionState}::category=${category || '*'}`;
     if (similarityCache[cacheKey] !== undefined) {
         return similarityCache[cacheKey];
     }
@@ -1868,10 +1994,17 @@ function findMatchingBook(titleParts, preferredBookId = null) {
         if (editionState === 'standard') return candidate._editionState === 'standard';
         return true;
     };
-    const getEditionGroup = candidate => candidate._editionKey || 'standard';
-    const exactBaseCandidates = cachedBookList.filter(candidate =>
+    const getEditionGroup = candidate => `${normalizeBookCategory(candidate.categoryId)}::${candidate._editionKey || 'standard'}`;
+    const exactBaseCandidates = scopedBooks.filter(candidate =>
         candidate._regBodyNoSpace === baseNoSpace && isCompatibleEdition(candidate)
     );
+
+    if (exactTitleCategories.size > 1) {
+        const groups = new Map(exactBaseCandidates.map(candidate => [getEditionGroup(candidate), candidate]));
+        const result = { book: null, maxScore: 0, candidates: Array.from(groups.values()), ambiguous: true };
+        similarityCache[cacheKey] = result;
+        return result;
+    }
 
     if (editionState === 'unknown' && exactBaseCandidates.length > 0) {
         const editionGroups = new Map();
@@ -1901,8 +2034,8 @@ function findMatchingBook(titleParts, preferredBookId = null) {
 
     const bestByEdition = new Map();
 
-    for (let i = cachedBookList.length - 1; i >= 0; i--) {
-        const candidate = cachedBookList[i];
+    for (let i = scopedBooks.length - 1; i >= 0; i--) {
+        const candidate = scopedBooks[i];
         if (!isCompatibleEdition(candidate)) continue;
         if (Math.abs(candidate._regBodyNoSpace.length - baseNoSpace.length) > Math.min(candidate._regBodyNoSpace.length, baseNoSpace.length) * 2.5) continue;
 
@@ -1914,7 +2047,8 @@ function findMatchingBook(titleParts, preferredBookId = null) {
         }
     }
 
-    if (editionState === 'unknown' && bestByEdition.size > 1) {
+    const matchedCategories = new Set(Array.from(bestByEdition.values(), item => normalizeBookCategory(item.book.categoryId)));
+    if ((editionState === 'unknown' && bestByEdition.size > 1) || matchedCategories.size > 1) {
         const candidates = Array.from(bestByEdition.values())
             .sort((a, b) => b.score - a.score)
             .map(item => item.book);
@@ -1943,6 +2077,10 @@ function renderDataReferencesImpact(renderData, impact) {
         return true;
     }
     if (renderData.siteMatchKey && impact.matchKeys.has(renderData.siteMatchKey)) return true;
+    if (impact.structural && renderData.autoTitle) {
+        const autoBase = getTitleMatchParts(renderData.autoTitle).baseNoSpace;
+        if (impact.books.some(book => book._regBodyNoSpace === autoBase)) return true;
+    }
     if (Array.isArray(renderData.matchCandidates) && renderData.matchCandidates.some(candidate => {
         return candidate && candidate.id !== undefined && impact.ids.has(String(candidate.id));
     })) {
@@ -1986,8 +2124,14 @@ function refreshRelatedBookElements(impact) {
 
     if (relatedLinks.length === 0 && relatedDetails.length === 0) return;
     suppressManagedMutationRefresh();
-    relatedLinks.forEach(applyStyleToSingleLink);
-    relatedDetails.forEach(applyStyleToDetailElement);
+    relatedLinks.forEach(link => {
+        if (impact.structural && link._bmData) link._bmData.raw = null;
+        applyStyleToSingleLink(link);
+    });
+    relatedDetails.forEach(element => {
+        if (impact.structural && element._bmDetailData) element._bmDetailData.raw = null;
+        applyStyleToDetailElement(element);
+    });
 }
 
 function showInfoToast(msg, isError = false) {
@@ -2079,15 +2223,15 @@ function showToast(book, isDelete = false) {
         typeColor = '#4dabf7';
     }
 
-    const details = [];
+    const details = [getBookCategoryLabel(book.categoryId)];
     if (book.resolution && !isDelete) details.push(book.resolution);
     if (book.lastVol && !isDelete) details.push(book.lastVol + '권');
     if (book.missingVols && book.missingVols.length > 0 && !isDelete) {
         details.push('누락:' + book.missingVols.join(','));
     }
 
-    const detailStr = details.length > 0 ? ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.join(' | ') + ')</span>' : '';
-    const message = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + book.title + detailStr;
+    const detailStr = ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.map(escapeToastText).join(' | ') + ')</span>';
+    const message = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + escapeToastText(book.title) + detailStr;
     showActionToast(message, true);
 }
 
@@ -2098,6 +2242,19 @@ function getBookTypeForTitle(titleStr, preferredBookId = null) {
     return match.book ? match.book.type : null;
 }
 
+function normalizeBuzzheavierShareUrl(value) {
+    try {
+        const url = new URL(value);
+        if (!['http:', 'https:'].includes(url.protocol)
+            || !['buzzheavier.com', 'www.buzzheavier.com'].includes(url.hostname)
+            || url.username || url.password || url.port) return '';
+        const match = url.pathname.match(/^\/([a-z0-9]{12})\/?$/i);
+        return match ? `https://buzzheavier.com/${match[1]}` : '';
+    } catch (_) {
+        return '';
+    }
+}
+
 function injectDirectDownloadButtons(allowedDLs) {
     if (!allowedDLs || allowedDLs.length === 0) return;
 
@@ -2106,6 +2263,7 @@ function injectDirectDownloadButtons(allowedDLs) {
     if (allowedDLs.includes('gofile')) regexParts.push('gofile\\.io');
     if (allowedDLs.includes('hk')) regexParts.push('hellkdis\\.net\\/s\\/|hellkaiv\\.net\\/s\\/');
     if (allowedDLs.includes('transfer')) regexParts.push('transfer\\.it\\/s\\/|transfer\\.it\\/t\\/'); 
+    if (allowedDLs.includes('buzzheavier')) regexParts.push('buzzheavier\\.com(?::(?:80|443))?\\/');
 
     if (regexParts.length === 0) return;
     
@@ -2198,6 +2356,11 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
 
         autoBtn.innerHTML = btnText;
         autoBtn.style.cssText = `display:inline-block; padding:3px 10px; margin-left:5px; background-color:${bgColor}; color:white; border-radius:3px; text-decoration:none; font-size:12px; font-weight:bold; cursor:pointer; vertical-align:middle; transition: background 0.2s;`;
+        const restoreButton = () => {
+            autoBtn.innerHTML = btnText;
+            autoBtn.style.backgroundColor = bgColor;
+            autoBtn.style.pointerEvents = 'auto';
+        };
         
         autoBtn.onclick = (e) => {
             e.preventDefault();
@@ -2212,7 +2375,7 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
             autoBtn.style.backgroundColor = "#6c757d";
             autoBtn.style.pointerEvents = "none";
             
-            const platformName = targetType === 'GOFILE' ? 'Gofile' : (targetType === 'HELLKDIS' ? 'Hellkdis' : (targetType === 'TRANSFERIT' ? 'Transfer.it' : 'Gigafile'));
+            const platformName = targetType === 'BUZZHEAVIER' ? 'Buzzheavier' : (targetType === 'GOFILE' ? 'Gofile' : (targetType === 'HELLKDIS' ? 'Hellkdis' : (targetType === 'TRANSFERIT' ? 'Transfer.it' : 'Gigafile')));
             showInfoToast(`🚀 ${platformName} 서버로 직접 다운로드를 요청합니다...`);
             
             try {
@@ -2230,20 +2393,31 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
                 const match = effectiveBookTitle
                     ? findMatchingBook(downloadTitleParts, resolvedDownloadTitle ? resolvedDownloadTitle.bookId : null)
                     : { book: null };
-                const matchedBook = match && match.book ? match.book : null;
-                const updateTitle = finalTitle;
+                let matchedBook = match && match.book ? match.book : null;
+                if (match?.ambiguous) {
+                    matchedBook = selectBookCategoryCandidate(match.candidates);
+                    if (!matchedBook) {
+                        autoBtn.innerHTML = btnText;
+                        autoBtn.style.backgroundColor = bgColor;
+                        autoBtn.style.pointerEvents = 'auto';
+                        return;
+                    }
+                }
+                const updateTitle = matchedBook ? matchedBook.title : finalTitle;
                 const isShortcutDownload = BookShortcuts.isDownloadTrigger(autoBtn);
                 const startDownload = downloadBook => {
                     const downloadTitle = downloadBook?.type === 'incomplete' ? '(미완)' + updateTitle : updateTitle;
                     const downloadFolder = buildDownloadFolder(downloadBook?.folderRule, downloadTitle);
-                    sendRuntimeMessage({
+                    const downloadRequest = {
                         action: "DOWNLOAD_" + targetType,
                         url: url,
                         password: pw,
                         title: downloadTitle,
                         downloadFolder: downloadFolder,
                         bookId: downloadBook?.id ?? null
-                    });
+                    };
+                    if (targetType === 'BUZZHEAVIER') requestRuntimeResponse(downloadRequest, restoreButton);
+                    else sendRuntimeMessage(downloadRequest);
                     if (isShortcutDownload) {
                         requestRuntimeResponse({
                             action: 'SEARCH_EVERYTHING_ON_DOWNLOAD',
@@ -2257,6 +2431,8 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
                     requestRuntimeResponse({
                         action: 'AUTO_UPDATE_DOWNLOAD_BOOK',
                         bookId: matchedBook ? matchedBook.id : null,
+                        categoryId: matchedBook ? normalizeBookCategory(matchedBook.categoryId)
+                            : typeof BookCategoryUI !== 'undefined' ? BookCategoryUI.getRegistrationCategory() : 'uncategorized',
                         title: updateTitle,
                         sourceTitle: sourceTitleText
                     }, response => {
@@ -2268,13 +2444,10 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
                 }
             } catch (err) {
                 showInfoToast("⚠️ 확장프로그램이 새로고침 되었습니다. 현재 페이지를 새로고침(F5) 해주세요!", true);
+                if (targetType === 'BUZZHEAVIER') restoreButton();
             }
 
-            setTimeout(() => {
-                autoBtn.innerHTML = btnText;
-                autoBtn.style.backgroundColor = bgColor;
-                autoBtn.style.pointerEvents = "auto";
-            }, 50000); 
+            if (targetType !== 'BUZZHEAVIER') setTimeout(restoreButton, 50000);
         };
         insertAfterElement.insertAdjacentElement('afterend', autoBtn);
     }
@@ -2293,8 +2466,10 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
 
         if (url) {
             let targetType = "";
+            const buzzheavierUrl = allowedDLs.includes('buzzheavier') ? normalizeBuzzheavierShareUrl(url) : '';
             let isHk = url.includes('hellkdis.net/s/') || url.includes('hellkaiv.net/s/');
-            if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
+            if (buzzheavierUrl) { targetType = 'BUZZHEAVIER'; url = buzzheavierUrl; }
+            else if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
             else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT"; 
@@ -2334,8 +2509,10 @@ function createButton(insertAfterElement, url, pw, targetType, bookTitle, hasTra
 
         if (url) {
             let targetType = "";
+            const buzzheavierUrl = allowedDLs.includes('buzzheavier') ? normalizeBuzzheavierShareUrl(url) : '';
             let isHk = url.includes('hellkdis.net/s/') || url.includes('hellkaiv.net/s/');
-            if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
+            if (buzzheavierUrl) { targetType = 'BUZZHEAVIER'; url = buzzheavierUrl; }
+            else if (allowedDLs.includes('hk') && isHk) targetType = "HELLKDIS";
             else if (allowedDLs.includes('gofile') && url.includes('gofile.io')) targetType = "GOFILE";
             else if (allowedDLs.includes('giga') && (url.includes('gigafile') || url.includes('xgf'))) targetType = "GIGAFILE";
             else if (allowedDLs.includes('transfer') && url.includes('transfer.it')) targetType = "TRANSFERIT";
@@ -2512,10 +2689,9 @@ function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId
         const preferredBook = preferredBookId !== null && preferredBookId !== undefined
             ? cachedBookList.find(book => areBookIdsEqual(book.id, preferredBookId))
             : null;
-        const dbBook = preferredBook
-            || exactMatchCache[targetMatchKey]
-            || cachedBookList.find(book => book._matchKey === targetMatchKey)
-            || null;
+        const candidates = cachedBookList.filter(book => book._matchKey === targetMatchKey);
+        const categories = new Set(candidates.map(book => normalizeBookCategory(book.categoryId)));
+        const dbBook = preferredBook || (categories.size <= 1 ? candidates[candidates.length - 1] : selectBookCategoryCandidate(candidates)) || null;
 
         if (!dbBook) {
             showInfoToast('도서 데이터가 아직 저장되지 않았습니다. 잠시 후 다시 시도해주세요.', true);
@@ -2577,25 +2753,42 @@ function openMissingPopoverContent(targetMatchKey, badgeElement, preferredBookId
 
 window.addEventListener('pagehide', flushPendingContentMissingVolSave);
 
+function selectBookCategoryCandidate(candidates) {
+    if (!candidates?.length) return null;
+    const candidateText = candidates.map((book, index) => `${index + 1}. [${getBookCategoryLabel(book.categoryId)}] ${book.title}`).join('\n');
+    const answer = window.prompt(`처리할 도서 번호를 선택하세요.\n${candidateText}`, '1');
+    if (answer === null) return null;
+    const index = Number(answer.trim()) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) {
+        showInfoToast('올바른 도서 번호를 입력해주세요.', true);
+        return null;
+    }
+    return candidates[index];
+}
+
 function createQuickActions(linkData, hasBook) {
+    ensureQuickUIStyles();
     const container = document.createElement('span');
     container.className = 'bm-quick-actions';
-    container.style.cssText = "display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle;";
+    container.style.cssText = BookMatchUI.quickActionsStyle + "display: inline-flex; margin-left: 8px;";
+    if (typeof BookCategoryUI !== 'undefined') container.appendChild(createRegistrationCategoryControl());
 
     const btnStyle = BookMatchUI.quickButtonStyle;
     const canCorrectTitle = hasBook || (Array.isArray(linkData.matchCandidates) && linkData.matchCandidates.length > 0);
     const buttons = BookMatchUI.quickButtons.map(button => ({
         ...button,
         display: button.action === 'correct_title' ? canCorrectTitle
-            : ['delete', 'missing_vol'].includes(button.action) ? hasBook : true
+            : ['delete', 'missing_vol'].includes(button.action) ? canCorrectTitle : true
     }));
 
     buttons.forEach(btnInfo => {
         if (btnInfo.display === false) return;
 
         const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'bm-quick-button';
         btn.textContent = btnInfo.label;
-        btn.style.cssText = btnStyle + `background-color: ${btnInfo.color};`;
+        btn.style.cssText = btnStyle + `background-color: ${btnInfo.color} !important;`;
         btn.onmouseover = () => btn.style.transform = 'translateY(-1px)';
         btn.onmouseout = () => btn.style.transform = 'translateY(0)';
         
@@ -2604,7 +2797,10 @@ function createQuickActions(linkData, hasBook) {
             e.stopPropagation();
             
             try {
-                const resolvedTitle = getResolvedQuickActionTitle(linkData, btn);
+                const isRegistration = ['exclude', 'incomplete', 'complete'].includes(btnInfo.action);
+                const registrationCategory = typeof BookCategoryUI !== 'undefined'
+                    ? BookCategoryUI.getRegistrationCategory() : 'uncategorized';
+                const resolvedTitle = getResolvedQuickActionTitle(linkData, btn, isRegistration ? registrationCategory : null);
                 const actionTitle = resolvedTitle.title;
 
                 if (btnInfo.action === 'correct_title') {
@@ -2616,15 +2812,8 @@ function createQuickActions(linkData, hasBook) {
                         : { book: null, candidates: [] };
                     let selectedBook = matched.book;
                     if (!selectedBook && Array.isArray(matched.candidates) && matched.candidates.length > 0) {
-                        const candidateText = matched.candidates.map((candidate, index) => `${index + 1}. ${candidate.title}`).join('\n');
-                        const selectedIndexText = window.prompt(`매칭할 판본 번호를 입력하세요.\n${candidateText}`, '1');
-                        if (selectedIndexText === null) return;
-                        const selectedIndex = parseInt(selectedIndexText, 10) - 1;
-                        if (selectedIndex < 0 || selectedIndex >= matched.candidates.length) {
-                            showInfoToast('올바른 판본 번호를 입력해주세요.', true);
-                            return;
-                        }
-                        selectedBook = matched.candidates[selectedIndex];
+                        selectedBook = selectBookCategoryCandidate(matched.candidates);
+                        if (!selectedBook) return;
                     }
                     const suggestedTitle = selectedBook ? selectedBook.title : actionTitle;
                     const inputTitle = window.prompt(
@@ -2636,14 +2825,25 @@ function createQuickActions(linkData, hasBook) {
                     const correctedTitle = inputTitle.trim();
                     safeStorageGet({ titleCorrections: {} }, (data) => {
                         const nextCorrections = { ...((data && data.titleCorrections) || {}) };
-                        const correctionStorageKey = resolvedTitle.appliedCorrectionKey || resolvedTitle.correctionKey;
+                        const correctionCategory = selectedBook ? normalizeBookCategory(selectedBook.categoryId) : registrationCategory;
+                        const correctionStorageKey = resolvedTitle.correctionKey.replace('::', `::category=${correctionCategory}::`);
                         if (correctedTitle) {
                             nextCorrections[correctionStorageKey] = {
                                 correctedTitle,
                                 bookId: selectedBook ? selectedBook.id : null,
-                                editionKey: selectedBook ? selectedBook._editionKey || '' : ''
+                                editionKey: selectedBook ? selectedBook._editionKey || '' : '',
+                                categoryId: correctionCategory
                             };
-                        } else delete nextCorrections[correctionStorageKey];
+                        } else {
+                            delete nextCorrections[correctionStorageKey];
+                            const appliedKey = resolvedTitle.appliedCorrectionKey;
+                            const applied = normalizeStoredTitleCorrection(nextCorrections[appliedKey]);
+                            if (applied && (applied.categoryId === correctionCategory
+                                || (applied.categoryId === null && (!applied.bookId
+                                    || String(applied.bookId) === String(selectedBook?.id))))) {
+                                delete nextCorrections[appliedKey];
+                            }
+                        }
 
                         const saveTitleCorrection = () => {
                             const saveStarted = safeStorageSet({ titleCorrections: nextCorrections }, (succeeded) => {
@@ -2695,10 +2895,10 @@ function createQuickActions(linkData, hasBook) {
                         const originalText = btn.textContent;
                         const originalColor = btn.style.backgroundColor;
                         btn.textContent = '복사됨!';
-                        btn.style.backgroundColor = '#20c997'; 
+                        btn.style.setProperty('background-color', '#20c997', 'important');
                         setTimeout(() => {
                             btn.textContent = originalText;
-                            btn.style.backgroundColor = originalColor;
+                            btn.style.setProperty('background-color', originalColor, 'important');
                         }, 1500);
                     }).catch(() => {
                         showInfoToast("제목 복사에 실패했습니다.", true);
@@ -2727,7 +2927,9 @@ function createQuickActions(linkData, hasBook) {
                 if (btnInfo.action === 'missing_vol') {
                     const pureCleanTitle = actionTitle;
                     const targetMatchKey = getTitleMatchParts(pureCleanTitle).matchKey;
-                    openMissingPopoverContent(targetMatchKey, btn, linkData.matchedBookId);
+                    const matched = findMatchingBook(getResolvedTitleMatchParts(resolvedTitle), linkData.matchedBookId);
+                    const targetBook = matched.book || selectBookCategoryCandidate(matched.candidates);
+                    if (targetBook) openMissingPopoverContent(targetMatchKey, btn, targetBook.id);
                     return;
                 }
 
@@ -2753,24 +2955,29 @@ function createQuickActions(linkData, hasBook) {
                     const pureCleanTitle = actionTitle;
                     const titleParts = getTitleMatchParts(pureCleanTitle);
                     const targetMatchKey = titleParts.matchKey;
-                    const matchingBooks = cachedBookList.filter(book => book._matchKey === targetMatchKey);
+                    const matchingBooks = cachedBookList.filter(book => book._matchKey === targetMatchKey
+                        && normalizeBookCategory(book.categoryId) === registrationCategory);
                     const hasPreferredBookId = linkData.matchedBookId !== null
                         && linkData.matchedBookId !== undefined;
                     const preferredBook = hasPreferredBookId
                         ? cachedBookList.find(book => areBookIdsEqual(book.id, linkData.matchedBookId)) || null
                         : null;
-                    const existingBook = hasPreferredBookId
-                        ? preferredBook
-                        : exactMatchCache[targetMatchKey] || matchingBooks[matchingBooks.length - 1] || null;
-                    const targetBookId = hasPreferredBookId
-                        ? linkData.matchedBookId
-                        : existingBook && existingBook.id;
+                    let existingBook = preferredBook && normalizeBookCategory(preferredBook.categoryId) === registrationCategory
+                        ? preferredBook : matchingBooks[matchingBooks.length - 1] || null;
+                    if (btnInfo.action === 'delete') {
+                        const matched = findMatchingBook(getResolvedTitleMatchParts(resolvedTitle), linkData.matchedBookId);
+                        existingBook = matched.book || selectBookCategoryCandidate(matched.candidates);
+                        if (!existingBook) return;
+                    }
+                    const targetBookId = existingBook ? existingBook.id : null;
+                    const targetCategory = btnInfo.action === 'delete'
+                        ? normalizeBookCategory(existingBook.categoryId) : registrationCategory;
                     const optimisticMatchKey = existingBook && existingBook._matchKey
                         ? existingBook._matchKey
                         : targetMatchKey;
                     const canApplyOptimistically = !!targetMatchKey
                         && !!optimisticMatchKey
-                        && (hasPreferredBookId ? !!preferredBook : matchingBooks.length <= 1);
+                        && (existingBook ? true : matchingBooks.length <= 1);
                     let optimisticResult = null;
 
                     if (btnInfo.action === 'delete') {
@@ -2789,6 +2996,7 @@ function createQuickActions(linkData, hasBook) {
                             }
                             : {
                                 title: pureCleanTitle,
+                                categoryId: targetCategory,
                                 type: btnInfo.action,
                                 resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                                 lastVol: linkData.siteVol ? linkData.siteVol.toString() : "",
@@ -2798,7 +3006,7 @@ function createQuickActions(linkData, hasBook) {
                     }
 
                     if (optimisticResult && optimisticResult.applied) {
-                        markPendingOptimisticChange(optimisticMatchKey);
+                        markPendingOptimisticChange(getCategorizedBookMatchKey(optimisticMatchKey, targetCategory));
                         finalizeBookChangeImpact(optimisticResult.impact);
                     }
 
@@ -2806,7 +3014,8 @@ function createQuickActions(linkData, hasBook) {
                         action: "QUICK_ACTION", 
                         type: btnInfo.action,
                         bookId: targetBookId,
-                        cleanTitle: pureCleanTitle,
+                        categoryId: targetCategory,
+                        cleanTitle: btnInfo.action === 'delete' && existingBook ? existingBook.title : pureCleanTitle,
                         useExactTitle: resolvedTitle.isCorrected,
                         resolution: linkData.siteRes ? linkData.siteRes + "px" : "",
                         lastVol: linkData.siteVol ? linkData.siteVol.toString() : ""
@@ -2983,7 +3192,7 @@ function applyStyleToSingleLink(link) {
     const presentation = BookMatchUI.getPresentation(book, siteRes, siteVol, maxScore);
     const badgeStyle = presentation.style;
     const newBadgeHTML = presentation.html;
-    const shouldHide = BookMatchUI.shouldHidePost({
+    const shouldHide = !match.ambiguous && BookMatchUI.shouldHidePost({
         book, score: maxScore, siteRes, siteVol, translated: hasTranslationTag,
         forceTranslationHide: isChatingWikiSite && link._bmData.hasSiteTranslationEdition
     }, {
@@ -3049,9 +3258,11 @@ function applyStyleToSingleLink(link) {
         let existingActions = actionsTarget.querySelector(':scope > .bm-quick-actions.list-actions');
         
         const hasBook = !!book;
+        const matchSignature = `${book?.id ?? ''}:${(match.candidates || []).map(candidate => `${candidate.id}/${normalizeBookCategory(candidate.categoryId)}`).join(',')}`;
         const hasTitleChanged = chatingWikiTitle !== null && existingActions?.dataset.titleSignature !== link._bmData.raw;
 
-        if (!existingActions || existingActions.dataset.hasBook !== String(hasBook) || hasTitleChanged) {
+        if (!existingActions || existingActions.dataset.hasBook !== String(hasBook) || hasTitleChanged
+            || existingActions.dataset.matchSignature !== matchSignature) {
             if (existingBr) existingBr.remove();
             if (existingActions) existingActions.remove();
 
@@ -3064,6 +3275,7 @@ function applyStyleToSingleLink(link) {
             const actions = createQuickActions(link._bmData, hasBook);
             actions.classList.add('list-actions');
             actions.dataset.hasBook = String(hasBook);
+            actions.dataset.matchSignature = matchSignature;
             if (chatingWikiTitle !== null) actions.dataset.titleSignature = link._bmData.raw;
             actions.style.marginLeft = "0";
             actions.style.marginTop = "4px";
@@ -3203,7 +3415,9 @@ function applyStyleToDetailElement(el) {
 
     const needsBadgeUpdate = newBadgeHTML && (!existingBadge || existingBadge.dataset.html !== newBadgeHTML);
     const needsBadgeRemoval = !newBadgeHTML && existingBadge;
-    const needsActionsUpdate = isAllowedBoard ? (!existingActions || existingActions.dataset.hasBook !== String(!!book)) : !!existingActions;
+    const matchSignature = `${book?.id ?? ''}:${(match.candidates || []).map(candidate => `${candidate.id}/${normalizeBookCategory(candidate.categoryId)}`).join(',')}`;
+    const needsActionsUpdate = isAllowedBoard ? (!existingActions || existingActions.dataset.hasBook !== String(!!book)
+        || existingActions.dataset.matchSignature !== matchSignature) : !!existingActions;
     const needsBr = renderTargets.usesSeparateTargets ? false : (isAllowedBoard ? !existingBr : !!existingBr);
 
     // 변경 사항이 하나라도 있을 때만 기존 요소를 뜯어내고 다시 그립니다
@@ -3230,6 +3444,7 @@ function applyStyleToDetailElement(el) {
 
             const actions = createQuickActions(el._bmDetailData, !!book);
             actions.dataset.hasBook = !!book;
+            actions.dataset.matchSignature = matchSignature;
             actions.style.marginLeft = "0";
             actions.style.marginTop = "5px";
             actionsTarget.appendChild(actions);
