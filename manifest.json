@@ -17,7 +17,6 @@
         "scripting",
         "downloads",
         "alarms",
-        "cookies",
         "sidePanel"
     ],
     "host_permissions": [
