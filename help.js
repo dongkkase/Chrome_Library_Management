@@ -18,6 +18,13 @@
     const hoverInput = document.getElementById('demoQuickHover');
     const feedback = document.getElementById('demoFeedback');
     const hiddenSettings = { hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false };
+    const quickDisplaySettings = { quickButtonsCompact: false, quickButtonsMini: false };
+    const quickDisplayControls = Array.from(document.querySelectorAll('[data-demo-quick-display]')).map(group => {
+        const compact = group.querySelector('[data-demo-quick-compact]');
+        const mini = group.querySelector('[data-demo-quick-mini]');
+        const panel = group.querySelector('[data-demo-quick-mini-panel]');
+        return { compact, mini, controller: LibraryMotion.createSlidePanel(panel, { focusTarget: compact }) };
+    });
     const registrationDropdowns = new Set();
     const initialRegistrationCategory = 'comic';
     let registrationCategory = initialRegistrationCategory;
@@ -36,12 +43,14 @@
         });
     }
 
-    function createRegistrationControl() {
+    function createRegistrationControl(compact = false) {
         const dropdown = BookCategoryUI.createDropdown({
             options: BOOK_CATEGORIES.map(category => ({ value: category.id, label: category.label })),
             value: registrationCategory,
             label: '체험 등록 분류',
             text: (_value, label) => `분류: ${label}`,
+            icon: compact ? 'quick-category.svg' : undefined,
+            showText: !compact,
             className: 'bm-registration-category demo-registration-category',
             onChange(value) {
                 registrationCategory = normalizeBookCategory(value);
@@ -119,18 +128,22 @@
     }
 
     function createActions(book, detail = false) {
+        const preferences = BookMatchUI.getQuickPreferences(quickDisplaySettings);
         const actions = element('span', undefined, `bm-quick-actions${detail ? '' : ' list-actions'}`);
+        actions.classList.toggle('bm-quick-actions--compact', preferences.compact);
+        actions.classList.toggle('bm-quick-actions--mini', preferences.mini);
         actions.setAttribute('role', 'group');
         actions.setAttribute('aria-label', `${book.title} 퀵 액션`);
         actions.style.cssText = BookMatchUI.quickActionsStyle + `display:inline-flex; margin-left:0; margin-top:${detail ? 5 : 4}px;`;
-        actions.appendChild(createRegistrationControl());
+        actions.appendChild(createRegistrationControl(preferences.compact));
         for (const definition of BookMatchUI.quickButtons) {
             if (!book.owned && ['delete', 'missing_vol', 'correct_title'].includes(definition.action)) continue;
-            const button = element('button', definition.label);
+            const button = element('button');
             button.type = 'button';
             button.className = 'bm-quick-button';
             button.dataset.demoAction = definition.action;
-            button.style.cssText = BookMatchUI.quickButtonStyle + `background-color:${definition.color} !important;`;
+            BookMatchUI.renderQuickButtonContent(button, definition, preferences.compact, '', preferences.mini);
+            if (preferences.compact) BookCategoryUI.attachTooltip(button, () => button.getAttribute('aria-label'));
             button.addEventListener('click', event => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -139,6 +152,23 @@
             actions.appendChild(button);
         }
         return actions;
+    }
+
+    function syncQuickDisplayControls({ animate = true } = {}) {
+        for (const { compact, mini, controller } of quickDisplayControls) {
+            compact.checked = quickDisplaySettings.quickButtonsCompact;
+            compact.disabled = !enabledInput.checked;
+            mini.checked = quickDisplaySettings.quickButtonsMini;
+            mini.disabled = !enabledInput.checked || !quickDisplaySettings.quickButtonsCompact;
+            void controller.setExpanded(quickDisplaySettings.quickButtonsCompact, { animate });
+        }
+    }
+
+    function updateQuickDisplay() {
+        closeMissing();
+        syncQuickDisplayControls();
+        renderBoard();
+        renderDetail();
     }
 
     function renderBoard() {
@@ -350,8 +380,18 @@
     categoryPanel.appendChild(createRegistrationControl());
     dock.append(categoryPanel, hidePanel);
     document.body.appendChild(dock);
-    enabledInput.addEventListener('change', () => { closeMissing(); renderBoard(); renderDetail(); });
+    enabledInput.addEventListener('change', updateQuickDisplay);
     hoverInput.addEventListener('change', () => document.body.classList.toggle('demo-quick-hover', hoverInput.checked));
+    for (const { compact, mini } of quickDisplayControls) {
+        compact.addEventListener('change', () => {
+            quickDisplaySettings.quickButtonsCompact = compact.checked;
+            updateQuickDisplay();
+        });
+        mini.addEventListener('change', () => {
+            quickDisplaySettings.quickButtonsMini = mini.checked;
+            updateQuickDisplay();
+        });
+    }
     document.getElementById('resetDemo').addEventListener('click', () => {
         books = createDemoBooks();
         registrationCategory = initialRegistrationCategory;
@@ -359,13 +399,16 @@
         selectedId = books[0].id;
         enabledInput.checked = true;
         hoverInput.checked = false;
+        quickDisplaySettings.quickButtonsCompact = false;
+        quickDisplaySettings.quickButtonsMini = false;
+        syncQuickDisplayControls({ animate: false });
         document.body.classList.remove('demo-quick-hover');
         Object.keys(hiddenSettings).forEach(key => { hiddenSettings[key] = false; });
         hidePanel.querySelectorAll('input').forEach(input => { input.checked = false; });
         const panelToggle = hidePanel.querySelector('.bm-qh-toggle-btn');
         if (panelToggle.getAttribute('aria-expanded') === 'false') panelToggle.click();
         closeMissing();
-        feedback.textContent = '예시 데이터, 등록 분류와 숨김 설정을 초기 상태로 되돌렸습니다.';
+        feedback.textContent = '예시 데이터, 등록 분류, 퀵 버튼 표시와 숨김 설정을 초기 상태로 되돌렸습니다.';
         renderBoard();
         renderDetail();
     });
@@ -393,6 +436,7 @@
         });
     }
 
+    syncQuickDisplayControls({ animate: false });
     renderBoard();
     renderDetail();
 })();

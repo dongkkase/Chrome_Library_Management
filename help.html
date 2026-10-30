@@ -60,7 +60,7 @@
                     <div class="card"><h3>분류: 자료의 종류</h3><p><strong>미분류 · 만화 · 도서(EPUB) · 도서(PDF) · 도서(TXT) · 도서(SCAN) · 오디오북 · 영상 · 기타</strong> 중 하나를 선택합니다. 분류가 없던 기존 도서는 미분류로 표시됩니다.</p></div>
                 </div>
                 <dl class="option-list">
-                    <div><dt>등록 분류를 고르는 곳</dt><dd>퀵 버튼 맨 왼쪽의 <strong>‘분류: 선택한 분류명’</strong>, 우측 하단 ‘게시물 숨김’ 옆의 분류 박스, 옵션의 일괄 등록 영역에서 고를 수 있습니다. 옵션에서는 타입 아래에 분류 선택란이 있습니다.</dd></div>
+                    <div><dt>등록 분류를 고르는 곳</dt><dd>퀵 버튼 맨 왼쪽의 <strong>‘분류: 선택한 분류명’</strong>(아이콘 모드에서는 폴더 아이콘), 우측 하단 ‘게시물 숨김’ 옆의 분류 박스, 옵션의 일괄 등록 영역에서 고를 수 있습니다. 옵션에서는 타입 아래에 분류 선택란이 있습니다.</dd></div>
                     <div><dt>마지막 선택 유지</dt><dd>등록 분류는 이 선택란들이 함께 사용합니다. 직접 바꾸기 전까지 다른 탭과 브라우저를 다시 연 뒤에도 마지막 선택이 유지됩니다. 분류를 선택하기만 해서는 이미 등록한 책의 분류나 게시물 숨김 상태가 바뀌지 않습니다.</dd></div>
                     <div><dt>같은 제목을 다른 분류로</dt><dd>제목이 같아도 분류가 다르면 별도 항목으로 등록합니다. 기존 도서를 다른 분류로 옮기려면 도서 목록에서 해당 행의 분류를 바꾸고 저장하세요.</dd></div>
                     <div><dt>검색 분류는 별도 설정</dt><dd>도서 목록의 분류 필터는 등록 분류와 별도로 기억합니다. 필터를 바꾸거나 기존 도서의 분류를 수정해도 다음 등록에 사용할 분류는 바뀌지 않습니다.</dd></div>
@@ -69,7 +69,7 @@
 
             <section id="examples">
                 <div class="section-heading"><p class="eyebrow">EXAMPLE 01</p><h2>게시판 목록에서 먼저 확인하기</h2></div>
-                <p>아래는 가상의 도서 게시판입니다. <strong>제목을 클릭하면 상세 예시가 열립니다.</strong> 퀵 버튼 왼쪽이나 우측 하단의 분류 박스에서 등록 분류를 고르고, ‘게시물 숨김’ 스위치로 타입·번역·신작 조건에 따른 숨김을 체험해 보세요.</p>
+                <p>아래는 가상의 도서 게시판입니다. <strong>제목을 클릭하면 상세 예시가 열립니다.</strong> 등록 분류와 게시물 숨김을 바꾸거나, 퀵 버튼을 아이콘·로고와 미니 모드로 줄여 보세요. 아이콘에 마우스를 올리거나 키보드로 초점을 맞추면 이름을 확인할 수 있습니다.</p>
                 <div class="notice">실제 확장 프로그램과 같은 배지·숨김 규칙·디자인을 사용하는 체험용 예시입니다. 조작은 실제 소장 목록이나 설정에 저장되지 않습니다. 실제 배치와 제공 기능은 사이트에 따라 다를 수 있습니다.</div>
                 <div class="demo-board">
                     <div class="board-heading"><div><span class="eyebrow">SAMPLE LIBRARY</span><h3>도서 소식 게시판</h3></div><span class="pill neutral">가상 데이터</span></div>
@@ -77,6 +77,22 @@
                         <label><input type="checkbox" id="demoEnabled" checked> 매칭 표시 적용</label>
                         <label><input type="checkbox" id="demoQuickHover"> 퀵 버튼을 마우스 오버 시에만 표시</label>
                         <button type="button" id="resetDemo" class="small-button">예시 초기화</button>
+                    </div>
+                    <div class="demo-quick-display" data-demo-quick-display role="group" aria-label="목록 예시 퀵 메뉴 표시">
+                        <label class="demo-quick-display-label" for="demoQuickCompact">
+                            <input type="checkbox" id="demoQuickCompact" data-demo-quick-compact aria-controls="demoQuickMiniPanel" aria-expanded="false" aria-describedby="demoQuickDisplayDescription">
+                            아이콘·로고로 간단히 표시
+                        </label>
+                        <p id="demoQuickDisplayDescription" class="demo-quick-display-description">두 예시가 함께 바뀌며 실제 설정에는 저장되지 않습니다. ‘예시 초기화’로 글자 표시로 돌아갑니다.</p>
+                        <div id="demoQuickMiniPanel" class="demo-mini-panel" data-demo-quick-mini-panel hidden inert aria-hidden="true">
+                            <div class="demo-mini-settings">
+                                <label class="demo-quick-display-label" for="demoQuickMini">
+                                    <input type="checkbox" id="demoQuickMini" data-demo-quick-mini aria-describedby="demoQuickMiniDescription" disabled>
+                                    미니 모드로 표시
+                                </label>
+                                <p id="demoQuickMiniDescription" class="demo-quick-display-description">아이콘 버튼 높이를 더 낮춥니다. 아이콘 표시를 꺼도 선택은 유지됩니다.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="table-scroll">
                         <table class="example-table">
@@ -103,6 +119,22 @@
                 <p>목록에서 선택한 게시물의 제목과 소장 정보를 비교합니다. 퀵 버튼 맨 왼쪽에서 <strong>등록 분류</strong>를 고른 뒤 제외·미완·완결 중 <strong>타입</strong>을 눌러 등록을 체험하세요. 삭제와 누락관리도 사용할 수 있으며, 검색 버튼은 체험 화면에 검색어를 표시합니다.</p>
                 <article class="detail-card" aria-labelledby="detailTitle">
                     <div class="detail-meta"><span>도서 소식 / 상세 예시</span><a href="#examples">목록으로 돌아가기 ↑</a></div>
+                    <div class="demo-quick-display" data-demo-quick-display role="group" aria-label="상세 예시 퀵 메뉴 표시">
+                        <label class="demo-quick-display-label" for="detailQuickCompact">
+                            <input type="checkbox" id="detailQuickCompact" data-demo-quick-compact aria-controls="detailQuickMiniPanel" aria-expanded="false" aria-describedby="detailQuickDisplayDescription">
+                            아이콘·로고로 간단히 표시
+                        </label>
+                        <p id="detailQuickDisplayDescription" class="demo-quick-display-description">위 목록 예시와 함께 바뀌며 실제 설정에는 저장되지 않습니다.</p>
+                        <div id="detailQuickMiniPanel" class="demo-mini-panel" data-demo-quick-mini-panel hidden inert aria-hidden="true">
+                            <div class="demo-mini-settings">
+                                <label class="demo-quick-display-label" for="detailQuickMini">
+                                    <input type="checkbox" id="detailQuickMini" data-demo-quick-mini aria-describedby="detailQuickMiniDescription" disabled>
+                                    미니 모드로 표시
+                                </label>
+                                <p id="detailQuickMiniDescription" class="demo-quick-display-description">아이콘 버튼 높이를 더 낮춥니다. 아이콘 표시를 꺼도 선택은 유지됩니다.</p>
+                            </div>
+                        </div>
+                    </div>
                     <h3 id="detailHeading"><span id="detailTitle" tabindex="-1"></span><span id="detailBadge"></span></h3>
                     <p class="muted">작성자: 예시 편집자 · 체험용 게시물</p>
                     <div id="detailActions" role="group" aria-label="상세페이지 퀵 액션"></div>
@@ -141,7 +173,7 @@
             <section id="tab-settings">
                 <div class="section-heading"><p class="eyebrow">OPTION TAB 02</p><h2>사이트 및 설정</h2></div>
                 <p>어디에서 작동할지, 제목을 어떻게 읽을지, 어떤 보조 기능을 사용할지 설정합니다. 체크박스 변경은 바로 저장됩니다.</p>
-                <div class="notice"><strong>필요한 영역만 펼쳐두세요.</strong> 새로운 도서 일괄 등록, 작동 허용 사이트, 제목 파싱 금지어, 판본 키워드, Everything 연동 안내, Google 동기화는 ‘접기 / 펼치기’ 글자와 화살표로 여닫습니다. 각 영역은 부드럽게 접히고 펼쳐지며, 마지막 상태를 기억해 옵션창이나 브라우저를 다시 열어도 유지합니다.</div>
+                <div class="notice"><strong>필요한 영역만 펼쳐두세요.</strong> 새로운 도서 일괄 등록, 작동 허용 사이트, 제목 파싱 금지어, 판본 키워드, Everything 연동 안내, 표시할 퀵 메뉴, Google 동기화는 ‘접기 / 펼치기’ 글자와 화살표로 여닫습니다. 각 영역은 부드럽게 접히고 펼쳐지며, 마지막 상태를 기억해 옵션창이나 브라우저를 다시 열어도 유지합니다.</div>
                 <h3 class="subheading">사이트와 제목 인식</h3>
                 <dl class="option-list">
                     <div><dt>작동 허용 사이트 / 상세 제목</dt><dd>실제 사용할 도메인을 입력하고 ‘수동 추가’를 누릅니다. 입력 형식 예시는 <code>books.example.com</code>입니다. 상세 제목은 실제 페이지에서 우클릭으로 지정합니다. 등록 항목의 ×는 해당 사이트 등록을 삭제합니다.</dd></div>
@@ -164,8 +196,11 @@
                 <dl class="option-list">
                     <div><dt>의미 없는 댓글 가림</dt><dd>지원되는 페이지에서 ‘감사합니다’, ‘고맙습니다’ 같은 반복적인 짧은 댓글을 숨깁니다.</dd></div>
                     <div><dt>에브리띵 연결</dt><dd>추출된 책 제목으로 PC의 Everything 검색을 실행합니다. Everything 설치와 <code>es:</code> URL 연결 설정이 필요합니다. 이 옵션 안의 ‘Everything 연동 방법 확인하기’를 펼쳐 설정한 뒤 상세페이지의 검색 버튼을 사용하세요.</dd></div>
-                    <div><dt>리스트 퀵 버튼 표시</dt><dd>지원되는 게시물 목록의 배지 아래에 등록·검색 등의 퀵 액션을 표시합니다.</dd></div>
+                    <div><dt>리스트 퀵 버튼 표시</dt><dd><strong>옵션 &gt; 사이트 및 설정 &gt; 리스트 퀵 버튼 표시</strong>에서 목록의 등록·검색 버튼을 켭니다. 하위 옵션에서 버튼별 표시와 아이콘·로고 표시를 조절할 수 있습니다.</dd></div>
                     <div><dt>마우스 오버 시에만 표시</dt><dd>‘리스트 퀵 버튼 표시’를 켠 상태에서 사용합니다. 마우스를 올렸을 때만 퀵 버튼을 보여 목록의 공간을 줄입니다.</dd></div>
+                    <div><dt>표시할 퀵 메뉴</dt><dd>펼친 뒤 스위치로 등록 분류와 각 버튼을 켜고 끕니다. 처음에는 접혀 있으며 마지막 접기·펼치기 상태를 기억합니다. 목록과 상세 화면에 함께 적용되고, 기본값은 모두 표시입니다. 삭제·누락관리·제목정정은 매칭된 도서가 있을 때 표시됩니다. 등록 분류를 숨겨도 마지막 선택은 유지됩니다.</dd></div>
+                    <div><dt>아이콘·로고로 간단히 표시</dt><dd>글자 버튼을 아이콘으로 줄여 표시합니다. 구글·리디·Everything 검색에는 서비스 로고를 사용합니다. 마우스를 올리거나 키보드로 초점을 맞추면 이름을 확인할 수 있습니다. 기본값은 꺼짐이며 목록과 상세 화면에 함께 적용됩니다.</dd></div>
+                    <div><dt>미니 모드로 표시</dt><dd>아이콘·로고 표시를 켜면 하위 옵션이 부드럽게 펼쳐집니다. 미니 모드를 켜면 아이콘 버튼 높이를 더 낮춥니다. 아이콘 표시를 끄면 하위 옵션은 접히지만 미니 모드 선택은 유지됩니다. 기본값은 꺼짐이며 목록과 상세 화면에 함께 적용됩니다.</dd></div>
                     <div><dt>1글자 매칭 지원</dt><dd>한글 한 글자 제목도 비교 대상에 포함합니다. 영어·숫자 한 글자는 제외됩니다. 짧은 제목은 다른 작품과 혼동될 수 있어 결과를 확인하세요.</dd></div>
                     <div><dt>게시판 전용 테마 적용</dt><dd>지원되는 게시판 목록의 디자인 일부를 변경합니다. 모든 사이트에 동일한 디자인을 적용하는 기능은 아닙니다.</dd></div>
                 </dl>

@@ -1147,6 +1147,57 @@ select.edit-type {
 .sub-options .quick-options > label { padding: 0 !important; border: 0 !important; border-radius: 0; background: transparent; }
 .sub-options .quick-options > label:hover { background: transparent; }
 .sub-options .quick-options > .quick-options-child { margin: 12px 0 0 28px !important; padding: 10px 0 0 12px !important; border-left: 2px solid var(--border) !important; }
+.quick-button-settings { min-width: 0; }
+.quick-settings-description { margin: 0 0 10px; color: var(--text-muted); font-size: 11px; line-height: 1.7; }
+.quick-button-visibility { min-width: 0; margin: 16px 0 10px; padding: 0; border: 0; }
+.quick-button-visibility-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; border-radius: 4px; color: var(--text); font-size: 12px; font-weight: 650; list-style: none; cursor: pointer; }
+.quick-button-visibility-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.quick-button-visibility[open] > .quick-button-visibility-summary { margin-bottom: 8px; }
+.quick-button-visibility .quick-settings-description { margin: 10px 0 0; }
+.quick-button-visibility-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 7px; }
+.sub-options .quick-button-settings .quick-setting-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel);
+}
+.sub-options .quick-button-settings .quick-setting-switch:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.sub-options .quick-button-settings .quick-setting-switch:has(input:disabled) { cursor: default; opacity: .6; }
+.sub-options .quick-button-settings .quick-setting-switch > .quick-setting-name {
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.sub-options .quick-button-settings .quick-compact-setting { margin-bottom: 7px; }
+.sub-options .quick-button-settings .quick-compact-setting > .quick-setting-name { font-size: 12px; }
+.quick-mini-panel { display: flow-root; min-width: 0; }
+.quick-mini-panel[hidden] { display: none; }
+.quick-mini-settings { min-width: 0; margin: 10px 0 14px 12px; padding-left: 12px; border-left: 2px solid var(--border); }
+.sub-options .quick-button-settings .quick-mini-setting { margin-bottom: 7px; }
+.quick-mini-settings > .quick-settings-description { margin-bottom: 0; }
+.sub-options .quick-button-settings .quick-setting-switch > .quick-setting-control { position: relative; flex: 0 0 32px; width: 32px; height: 20px; margin: 0; }
+.quick-setting-control > input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.quick-setting-control > input:disabled { cursor: default; }
+.quick-setting-track { position: relative; display: block; width: 32px; height: 20px; border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; background: var(--text-muted); pointer-events: none; }
+.quick-setting-thumb { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.quick-setting-control > input:checked + .quick-setting-track { border-color: var(--accent); background: var(--accent); }
+.quick-setting-control > input:checked + .quick-setting-track > .quick-setting-thumb { left: 15px; }
+.quick-setting-control > input:focus-visible + .quick-setting-track { outline: 2px solid var(--accent); outline-offset: 3px; }
+.quick-settings-status { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.quick-settings-status:empty { display: none; }
+.quick-settings-status[data-error="true"] { color: var(--danger); }
 .shortcut-key-badge {
     display: inline-flex;
     align-items: center;

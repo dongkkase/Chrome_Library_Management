@@ -13,7 +13,7 @@ function createHarness({ reducedMotion = false, available = true, hidden = false
     const renders = [];
     const initialStyle = {
         height: 'auto', paddingTop: '', paddingBottom: '', overflow: 'visible',
-        boxSizing: 'content-box', alignContent: 'normal'
+        boxSizing: 'content-box', alignContent: 'normal', opacity: ''
     };
     const makeNode = (children = []) => ({
         children,
@@ -49,7 +49,8 @@ function createHarness({ reducedMotion = false, available = true, hidden = false
             matchMedia: () => ({ matches: reducedMotion }),
             getComputedStyle: target => ({
                 paddingTop: target.style.paddingTop || (target.open ? '16px' : '6px'),
-                paddingBottom: target.style.paddingBottom || (target.open ? '16px' : '6px')
+                paddingBottom: target.style.paddingBottom || (target.open ? '16px' : '6px'),
+                opacity: target.style.opacity || '1'
             })
         }
     };
@@ -228,6 +229,166 @@ test('애니메이션 시작 실패나 재생 실패 시에도 스타일과 최�
     rejected.animations[0].reject(new Error('animation interrupted'));
     await closing;
     assert.equal(rejected.element.open, false);
+    assert.deepEqual(rejected.element.style, rejected.initialStyle);
+});
+
+test('슬라이드 패널은 초기 상태를 즉시 복원하고 이벤트를 자동 연결하지 않는다', () => {
+    for (const expanded of [false, true]) {
+        const fixture = createHarness();
+        const panel = fixture.api.createSlidePanel(fixture.element, { expanded, focusTarget: fixture.trigger });
+        assert.equal(panel.getExpanded(), expanded);
+        assert.equal(fixture.element.hidden, !expanded);
+        assert.equal(fixture.element.inert, !expanded);
+        assert.equal(fixture.element.attributes['aria-hidden'], String(!expanded));
+        assert.equal(fixture.trigger.attributes['aria-expanded'], String(expanded));
+        assert.equal(fixture.animations.length, 0);
+        assert.deepEqual(fixture.trigger.listeners, {});
+        assert.deepEqual(fixture.element.style, fixture.initialStyle);
+    }
+});
+
+test('슬라이드 펼치기는 0에서 자연 높이로 늘어나고 접기는 완료 후에만 숨긴다', async () => {
+    const fixture = createHarness();
+    const panel = fixture.api.createSlidePanel(fixture.element, { focusTarget: fixture.trigger });
+    const opening = panel.setExpanded(true);
+    assert.equal(fixture.element.hidden, false);
+    assert.equal(fixture.element.inert, false);
+    assert.equal(fixture.element.attributes['aria-hidden'], 'false');
+    assert.equal(fixture.element.style.overflow, 'hidden');
+    assert.deepEqual(Array.from(fixture.animations[0].keyframes.height), ['0px', '320px']);
+    assert.deepEqual(Array.from(fixture.animations[0].keyframes.opacity), [0, 1]);
+    assert.equal(fixture.animations[0].options.duration, 0.22);
+    fixture.animations[0].finish();
+    await opening;
+    assert.deepEqual(fixture.element.style, fixture.initialStyle);
+    const closing = panel.setExpanded(false);
+    assert.equal(fixture.element.hidden, false);
+    assert.equal(fixture.element.inert, true);
+    assert.equal(fixture.element.attributes['aria-hidden'], 'true');
+    assert.equal(fixture.trigger.attributes['aria-expanded'], 'false');
+    assert.deepEqual(Array.from(fixture.animations[1].keyframes.height), ['320px', '0px']);
+    assert.deepEqual(Array.from(fixture.animations[1].keyframes.opacity), [1, 0]);
+    fixture.animations[1].finish();
+    await closing;
+    assert.equal(fixture.element.hidden, true);
+    assert.equal(fixture.element.inert, true);
+    assert.deepEqual(fixture.element.style, fixture.initialStyle);
+});
+
+test('슬라이드 방향을 빠르게 바꾸면 현재 높이와 불투명도에서 이어지고 이전 완료를 무시한다', async () => {
+    const fixture = createHarness();
+    const panel = fixture.api.createSlidePanel(fixture.element);
+    const opening = panel.setExpanded(true);
+    fixture.element.style.height = '128px';
+    fixture.element.style.opacity = '0.4';
+    const closing = panel.setExpanded(false);
+    assert.equal(fixture.animations[0].stopped, true);
+    await opening;
+    assert.deepEqual(Array.from(fixture.animations[1].keyframes.height), ['128px', '0px']);
+    assert.deepEqual(Array.from(fixture.animations[1].keyframes.opacity), [0.4, 0]);
+    fixture.element.style.height = '64px';
+    fixture.element.style.opacity = '0.2';
+    const reopening = panel.setExpanded(true);
+    assert.equal(fixture.animations[1].stopped, true);
+    await closing;
+    assert.deepEqual(Array.from(fixture.animations[2].keyframes.height), ['64px', '320px']);
+    assert.deepEqual(Array.from(fixture.animations[2].keyframes.opacity), [0.2, 1]);
+    fixture.animations[0].finish();
+    fixture.animations[1].finish();
+    await flush();
+    assert.equal(fixture.element.hidden, false);
+    assert.equal(fixture.element.inert, false);
+    assert.equal(fixture.element.style.height, '64px');
+    assert.equal(fixture.element.style.opacity, 0.2);
+    fixture.animations[2].finish();
+    await reopening;
+    assert.equal(panel.getExpanded(), true);
+    assert.deepEqual(fixture.element.style, fixture.initialStyle);
+});
+
+test('슬라이드의 같은 상태 요청은 진행 중 모션을 다시 시작하지 않는다', async () => {
+    const fixture = createHarness();
+    const panel = fixture.api.createSlidePanel(fixture.element);
+    await panel.setExpanded(false);
+    assert.equal(fixture.animations.length, 0);
+    const opening = panel.setExpanded(true);
+    assert.equal(panel.setExpanded(true), opening);
+    assert.equal(panel.setExpanded(true, { animate: false }), opening);
+    assert.equal(fixture.animations.length, 1);
+    assert.equal(fixture.animations[0].stopped, false);
+    fixture.animations[0].finish();
+    await opening;
+    await panel.setExpanded(true);
+    assert.equal(fixture.animations.length, 1);
+});
+
+for (const [name, settings, callOptions] of [
+    ['동작 줄이기', { reducedMotion: true }, {}],
+    ['Motion 라이브러리 없음', { available: false }, {}],
+    ['모션 없는 상태 복원', {}, { animate: false }]
+]) {
+    test(`${name}에서는 슬라이드 상태를 즉시 적용한다`, async () => {
+        const fixture = createHarness(settings);
+        const panel = fixture.api.createSlidePanel(fixture.element);
+        await panel.setExpanded(true, callOptions);
+        assert.equal(fixture.element.hidden, false);
+        assert.equal(fixture.element.inert, false);
+        await panel.setExpanded(false, callOptions);
+        assert.equal(fixture.element.hidden, true);
+        assert.equal(fixture.element.inert, true);
+        assert.equal(fixture.animations.length, 0);
+        assert.deepEqual(fixture.element.style, fixture.initialStyle);
+    });
+}
+
+test('보이지 않는 상위 영역의 슬라이드 패널은 모션 없이 다음 표시 상태를 준비한다', async () => {
+    const fixture = createHarness();
+    fixture.element.getBoundingClientRect = () => ({ height: 0, width: 0 });
+    const panel = fixture.api.createSlidePanel(fixture.element);
+    await panel.setExpanded(true);
+    assert.equal(fixture.element.hidden, false);
+    assert.equal(fixture.element.inert, false);
+    await panel.setExpanded(false);
+    assert.equal(fixture.element.hidden, true);
+    assert.equal(fixture.animations.length, 0);
+});
+
+test('슬라이드 접기는 내부 포커스만 부모로 옮기고 취소 시 최신 표시 상태와 스타일을 확정한다', async () => {
+    const fixture = createHarness();
+    fixture.element.style.opacity = '0.85';
+    fixture.initialStyle.opacity = '0.85';
+    fixture.element.style.overflow = 'clip';
+    fixture.initialStyle.overflow = 'clip';
+    const panel = fixture.api.createSlidePanel(fixture.element, { expanded: true, focusTarget: fixture.trigger });
+    fixture.document.activeElement = fixture.input;
+    const closing = panel.setExpanded(false);
+    assert.equal(fixture.document.activeElement, fixture.trigger);
+    assert.equal(fixture.trigger.focusOptions.preventScroll, true);
+    assert.equal(fixture.element.inert, true);
+    await fixture.api.cancel(fixture.element);
+    await closing;
+    assert.equal(fixture.element.hidden, true);
+    assert.equal(fixture.animations[0].stopped, true);
+    assert.deepEqual(fixture.element.style, fixture.initialStyle);
+    fixture.document.activeElement = {};
+    const outsideFocus = fixture.document.activeElement;
+    await panel.setExpanded(true, { animate: false });
+    await panel.setExpanded(false, { animate: false });
+    assert.equal(fixture.document.activeElement, outsideFocus);
+});
+
+test('슬라이드 시작 또는 재생 실패 시 최종 hidden 상태와 원래 스타일을 복원한다', async () => {
+    const throwing = createHarness({ throwOnAnimate: true });
+    const opening = throwing.api.createSlidePanel(throwing.element).setExpanded(true);
+    await opening;
+    assert.equal(throwing.element.hidden, false);
+    assert.deepEqual(throwing.element.style, throwing.initialStyle);
+    const rejected = createHarness();
+    const closing = rejected.api.createSlidePanel(rejected.element, { expanded: true }).setExpanded(false);
+    rejected.animations[0].reject(new Error('animation interrupted'));
+    await closing;
+    assert.equal(rejected.element.hidden, true);
+    assert.equal(rejected.element.inert, true);
     assert.deepEqual(rejected.element.style, rejected.initialStyle);
 });
 

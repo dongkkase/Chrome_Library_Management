@@ -42,6 +42,141 @@ function updateShortcutSettingsUI(settings = {}) {
     }
 }
 
+function initializeQuickButtonSettings() {
+    const grid = document.getElementById('quickButtonVisibilityControls');
+    if (!grid) return Promise.resolve();
+    const defaults = {
+        showListQuickBtn: false,
+        showListQuickBtnHover: false,
+        quickButtonsCompact: false,
+        quickButtonsMini: false,
+        quickButtonVisibility: {}
+    };
+    const settings = { ...defaults };
+    const revisions = Object.fromEntries(Object.keys(defaults).map(key => [key, 0]));
+    const controls = new Map();
+    const pending = new Set();
+    const status = document.getElementById('quickButtonSettingsStatus');
+    const compactCheckbox = document.getElementById('quickButtonsCompactCheckbox');
+    const miniPanel = document.getElementById('quickMiniSettingsPanel');
+    const miniPanelController = miniPanel
+        ? LibraryMotion.createSlidePanel(miniPanel, { focusTarget: compactCheckbox })
+        : null;
+    let ready = false;
+    let hasRenderedReadyState = false;
+    let writes = Promise.resolve();
+
+    const visibilityMap = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const setStatus = message => {
+        if (!status) return;
+        status.textContent = message;
+        status.dataset.error = String(!!message);
+    };
+    const render = () => {
+        for (const [input, config] of controls) {
+            if (!pending.has(input)) {
+                input.checked = config.action
+                    ? visibilityMap(settings.quickButtonVisibility)[config.action] !== false
+                    : settings[config.key] === true;
+            }
+            input.disabled = !ready || pending.has(input)
+                || (config.key === 'showListQuickBtnHover' && !document.getElementById('showListQuickBtnCheckbox')?.checked)
+                || (config.key === 'quickButtonsMini' && !document.getElementById('quickButtonsCompactCheckbox')?.checked);
+        }
+        if (miniPanelController) {
+            void miniPanelController.setExpanded(ready && compactCheckbox?.checked === true, {
+                animate: ready && hasRenderedReadyState
+            });
+        }
+        if (ready) hasRenderedReadyState = true;
+    };
+    const refresh = async () => {
+        const started = { ...revisions };
+        const stored = await storageLocalGet(defaults);
+        for (const key of Object.keys(defaults)) {
+            if (started[key] === revisions[key]) settings[key] = stored[key];
+        }
+    };
+    const bind = (input, config) => {
+        if (!input) return;
+        controls.set(input, config);
+        input.addEventListener('change', () => {
+            const checked = input.checked;
+            pending.add(input);
+            setStatus('');
+            render();
+            writes = writes.then(async () => {
+                let value = checked;
+                if (config.action) {
+                    const stored = await storageLocalGet({ quickButtonVisibility: {} });
+                    value = { ...visibilityMap(stored.quickButtonVisibility), [config.action]: checked };
+                }
+                await storageLocalSet({ [config.key]: value });
+            }).catch(error => {
+                setStatus('퀵 메뉴 설정을 저장하지 못했습니다. 다시 시도해 주세요.');
+                console.error('퀵 메뉴 설정 저장 실패:', error);
+            }).finally(async () => {
+                try {
+                    await refresh();
+                } catch (error) {
+                    setStatus('퀵 메뉴 설정을 확인하지 못했습니다. 옵션창을 다시 열어 주세요.');
+                    console.error('퀵 메뉴 설정 확인 실패:', error);
+                }
+                pending.delete(input);
+                render();
+            });
+            return writes;
+        });
+    };
+
+    for (const key of ['showListQuickBtn', 'showListQuickBtnHover', 'quickButtonsCompact', 'quickButtonsMini']) {
+        bind(document.getElementById(`${key}Checkbox`), { key });
+    }
+    const items = [{ action: 'category', label: '등록 분류' }, ...BookMatchUI.quickButtons];
+    for (const item of items) {
+        const label = document.createElement('label');
+        label.className = 'quick-setting-switch';
+        const name = document.createElement('span');
+        name.className = 'quick-setting-name';
+        name.textContent = item.label;
+        const control = document.createElement('span');
+        control.className = 'quick-setting-control';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = `quickButtonVisibility-${item.action}`;
+        input.dataset.quickAction = item.action;
+        input.setAttribute('role', 'switch');
+        input.setAttribute('aria-label', `${item.label} 표시`);
+        const track = document.createElement('span');
+        track.className = 'quick-setting-track';
+        track.setAttribute('aria-hidden', 'true');
+        const thumb = document.createElement('span');
+        thumb.className = 'quick-setting-thumb';
+        track.appendChild(thumb);
+        control.append(input, track);
+        label.append(name, control);
+        grid.appendChild(label);
+        bind(input, { key: 'quickButtonVisibility', action: item.action });
+    }
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+        for (const key of Object.keys(defaults)) {
+            if (!Object.prototype.hasOwnProperty.call(changes, key)) continue;
+            revisions[key]++;
+            settings[key] = changes[key].newValue ?? defaults[key];
+        }
+        render();
+    });
+    render();
+    return refresh().catch(error => {
+        setStatus('퀵 메뉴 설정을 불러오지 못했습니다. 옵션창을 다시 열어 주세요.');
+        console.error('퀵 메뉴 설정 불러오기 실패:', error);
+    }).finally(() => {
+        ready = true;
+        render();
+    });
+}
+
 function requestRuntimeResult(message) {
     return new Promise(resolve => {
         try {
@@ -1725,6 +1860,7 @@ function initializeOptionDisclosures() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeOptionDisclosures();
+    void initializeQuickButtonSettings();
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -2029,8 +2165,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const slidePanelCheckbox = document.getElementById('openSlidePanelCheckbox');
     const hideUselessCommentsCheckbox = document.getElementById('hideUselessCommentsCheckbox');
     const connectEverythingCheckbox = document.getElementById('connectEverythingCheckbox');
-    const showListQuickBtnCheckbox = document.getElementById('showListQuickBtnCheckbox');
-    const showListQuickBtnHoverCheckbox = document.getElementById('showListQuickBtnHoverCheckbox');
     const customThemeCheckbox = document.getElementById('useCustomThemeCheckbox');
     const supportSingleCharCheckbox = document.getElementById('supportSingleCharCheckbox');
     const folderRulePreviewCheckbox = document.getElementById('showFolderRulePreviewCheckbox');
@@ -2041,7 +2175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hideNewCheckbox = document.getElementById('hideNewCheckbox');
     const hideQuickMenuCheckbox = document.getElementById('hideQuickMenuCheckbox');
 
-    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, showFolderRulePreview: true, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false }, (data) => {
+    chrome.storage.local.get({ showDownloadUI: true, autoConfirm: true, autoFolder: true, focusLeftTab: false, openSlidePanel: false, hideUselessComments: true, connectEverything: false, useCustomTheme: false, supportSingleChar: false, showFolderRulePreview: true, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false }, (data) => {
         if (uiCheckbox) uiCheckbox.checked = data.showDownloadUI;
         if (confirmCheckbox) confirmCheckbox.checked = data.autoConfirm;
         if (folderCheckbox) folderCheckbox.checked = data.autoFolder; 
@@ -2049,8 +2183,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (slidePanelCheckbox) slidePanelCheckbox.checked = data.openSlidePanel;
         if (hideUselessCommentsCheckbox) hideUselessCommentsCheckbox.checked = data.hideUselessComments;
         if (connectEverythingCheckbox) connectEverythingCheckbox.checked = data.connectEverything;
-        if (showListQuickBtnCheckbox) showListQuickBtnCheckbox.checked = data.showListQuickBtn;
-        if (showListQuickBtnHoverCheckbox) showListQuickBtnHoverCheckbox.checked = data.showListQuickBtnHover;
         if (customThemeCheckbox) customThemeCheckbox.checked = data.useCustomTheme;
         if (supportSingleCharCheckbox) supportSingleCharCheckbox.checked = data.supportSingleChar;
         setFolderRulePreviewEnabled(data.showFolderRulePreview);
@@ -2159,16 +2291,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (connectEverythingCheckbox) {
         connectEverythingCheckbox.addEventListener('change', (e) => {
             chrome.storage.local.set({ connectEverything: e.target.checked });
-        });
-    }
-    if (showListQuickBtnCheckbox) {
-        showListQuickBtnCheckbox.addEventListener('change', (e) => {
-            chrome.storage.local.set({ showListQuickBtn: e.target.checked });
-        });
-    }
-    if (showListQuickBtnHoverCheckbox) {
-        showListQuickBtnHoverCheckbox.addEventListener('change', (e) => {
-            chrome.storage.local.set({ showListQuickBtnHover: e.target.checked });
         });
     }
     if (customThemeCheckbox) {

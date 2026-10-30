@@ -343,10 +343,50 @@
                                 <span>게시물 목록의 뱃지 아래에 퀵 액션 버튼을 표시합니다</span>
                             </label>
                             <label class="quick-options-child">
-                                <input type="checkbox" id="showListQuickBtnHoverCheckbox">
+                                <input type="checkbox" id="showListQuickBtnHoverCheckbox" disabled>
                                 <b>마우스 오버 시에만 표시 (퀵 버튼)</b>
                                 <span>마우스를 올렸을 때만 퀵 버튼을 표시하여 목록을 깔끔하게 유지합니다</span>
                             </label>
+                            <div class="quick-options-child quick-button-settings">
+                                <p id="quickButtonSettingsDescription" class="quick-settings-description">아래 설정은 목록과 상세 화면의 퀵 메뉴에 함께 적용됩니다.</p>
+                                <label class="quick-setting-switch quick-compact-setting">
+                                    <span class="quick-setting-name">아이콘·로고로 간단히 표시</span>
+                                    <span class="quick-setting-control">
+                                        <input type="checkbox" id="quickButtonsCompactCheckbox" role="switch" aria-describedby="quickCompactDescription" aria-controls="quickMiniSettingsPanel" aria-expanded="false" disabled>
+                                        <span class="quick-setting-track" aria-hidden="true"><span class="quick-setting-thumb"></span></span>
+                                    </span>
+                                </label>
+                                <p id="quickCompactDescription" class="quick-settings-description">글자 대신 아이콘과 검색 서비스 로고를 표시합니다. 버튼에 마우스를 올리면 이름을 볼 수 있습니다.</p>
+                                <div id="quickMiniSettingsPanel" class="quick-mini-panel" hidden inert aria-hidden="true">
+                                    <div class="quick-mini-settings">
+                                        <label class="quick-setting-switch quick-mini-setting">
+                                            <span class="quick-setting-name">미니 모드로 표시</span>
+                                            <span class="quick-setting-control">
+                                                <input type="checkbox" id="quickButtonsMiniCheckbox" role="switch" aria-describedby="quickMiniDescription" disabled>
+                                                <span class="quick-setting-track" aria-hidden="true"><span class="quick-setting-thumb"></span></span>
+                                            </span>
+                                        </label>
+                                        <p id="quickMiniDescription" class="quick-settings-description">아이콘·로고 모드에서 버튼을 더 작게 표시합니다. 아이콘 모드를 꺼도 미니 모드 선택은 유지됩니다.</p>
+                                    </div>
+                                </div>
+                                <details id="quickButtonVisibilityPanel" class="quick-button-visibility">
+                                    <summary class="quick-button-visibility-summary options-disclosure-trigger" aria-controls="quickButtonVisibilityContent">
+                                        <span id="quickButtonVisibilityTitle" class="options-disclosure-title">표시할 퀵 메뉴</span>
+                                        <span class="options-disclosure-toggle" aria-hidden="true">
+                                            <span class="options-disclosure-expand">펼치기</span>
+                                            <span class="options-disclosure-collapse">접기</span>
+                                            <svg class="options-disclosure-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="m4 6 4 4 4-4"></path>
+                                            </svg>
+                                        </span>
+                                    </summary>
+                                    <div id="quickButtonVisibilityContent">
+                                        <div id="quickButtonVisibilityControls" class="quick-button-visibility-grid" role="group" aria-labelledby="quickButtonVisibilityTitle" aria-describedby="quickButtonSettingsDescription quickButtonAvailabilityNote"></div>
+                                        <p id="quickButtonAvailabilityNote" class="quick-settings-description">삭제·누락관리·제목정정은 매칭된 도서가 있을 때 표시됩니다. 등록 분류를 숨겨도 마지막 선택은 유지됩니다.</p>
+                                    </div>
+                                </details>
+                                <p id="quickButtonSettingsStatus" class="quick-settings-status" role="status" aria-live="polite"></p>
+                            </div>
                         </div>
                         <label>
                             <input type="checkbox" id="supportSingleCharCheckbox">
@@ -523,6 +563,7 @@
         <script src="library-motion.js"></script>
         <script src="button-ui.js"></script>
         <script src="category-ui.js"></script>
+        <script src="book-ui.js"></script>
         <script src="options.js"></script>
         <script src="google-sync-ui.js"></script>
     </body>

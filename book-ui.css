@@ -91,6 +91,7 @@ body.dark-mode .bm-hide-panel {
 .bm-quick-actions > .bm-quick-button::after { content: none !important; display: none !important; }
 .bm-quick-actions > .bm-quick-button:focus-visible { outline: 2px solid #0d6efd !important; outline-offset: 2px !important; }
 .bm-quick-actions > .bm-quick-button:disabled { cursor: default !important; opacity: .45; }
+.bm-quick-actions[class][hidden] { display: none !important; }
 .bm-quick-dock { position: fixed; right: 16px; bottom: 16px; z-index: 999999; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 8px; width: max-content; max-width: calc(100% - 32px); }
 .bm-quick-dock > .bm-hide-panel { position: relative; inset: auto; flex: 0 1 auto; max-width: 100%; }
 .bm-category-panel { display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 44px; padding: 7px 12px; border: 1px solid #e0e6ef; border-radius: 12px; background: #fff; box-shadow: 0 6px 24px rgba(25, 42, 75, .12), 0 1px 4px rgba(25, 42, 75, .06); font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
@@ -101,6 +102,14 @@ body.dark-mode .bm-hide-panel {
     --bm-category-button-line-height: 1.2;
     --bm-category-button-radius: 4px;
     flex: 0 0 auto;
+}
+.bm-quick-actions--compact > .bm-registration-category {
+    --bm-category-button-height: 24px;
+    --bm-category-button-padding: 3px 5px;
+}
+.bm-quick-actions--mini > .bm-registration-category {
+    --bm-category-button-height: 18px;
+    --bm-category-button-padding: 0 5px;
 }
 .bm-quick-actions > button,
 .bm-quick-actions .bm-registration-category .bm-dropdown-button { box-sizing: border-box; min-height: 18px; height: 18px; }

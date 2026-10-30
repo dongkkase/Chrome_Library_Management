@@ -981,8 +981,8 @@ test('옵션 단건 수정과 삭제는 전체 replace 경로를 사용하지 �
 
     const singleRowBranches = extractBranch(
         optionsSource,
-        "if (id && e.target.classList.contains('btn-del'))",
-        "else if (id && e.target.classList.contains('btn-title-correction-bulk'))"
+        "if (id && button.classList.contains('btn-del'))",
+        "else if (id && button.classList.contains('btn-title-correction-bulk'))"
     );
     assert.match(singleRowBranches, /deleteSingleBookWithUndo\s*\(/);
     assert.match(singleRowBranches, /saveSingleBookWithUndo\s*\(/);

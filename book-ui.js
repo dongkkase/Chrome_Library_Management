@@ -104,17 +104,77 @@ const BookMatchUI = (() => {
         'float: none', 'cursor: pointer', 'user-select: none'
     ]);
     const quickButtons = [
-        { label: '복사', color: '#845ef7', action: 'copy' },
-        { label: '제외', color: '#ff6b6b', action: 'exclude' },
-        { label: '미완', color: '#ff922b', action: 'incomplete' },
-        { label: '완결', color: '#4dabf7', action: 'complete' },
-        { label: '삭제', color: '#868e96', action: 'delete' },
-        { label: '누락관리', color: '#f06595', action: 'missing_vol' },
-        { label: '구글검색', color: '#20c997', action: 'search' },
-        { label: '리디검색', color: '#1e90ff', action: 'ridi_preview' },
-        { label: '에브리띵검색', color: '#495057', action: 'everything_search' },
-        { label: '제목정정', color: '#5c7cfa', action: 'correct_title' }
+        { label: '복사', color: '#845ef7', action: 'copy', icon: 'images/quick-copy.svg' },
+        { label: '제외', color: '#ff6b6b', action: 'exclude', icon: 'images/quick-exclude.svg' },
+        { label: '미완', color: '#ff922b', action: 'incomplete', icon: 'images/quick-incomplete.svg' },
+        { label: '완결', color: '#4dabf7', action: 'complete', icon: 'images/quick-complete.svg' },
+        { label: '삭제', color: '#868e96', action: 'delete', icon: 'images/quick-delete.svg' },
+        { label: '누락관리', color: '#f06595', action: 'missing_vol', icon: 'images/quick-missing.svg' },
+        { label: '구글검색', color: '#20c997', action: 'search', icon: 'images/logo-google.svg', brand: true },
+        { label: '리디검색', color: '#1e90ff', action: 'ridi_preview', icon: 'images/logo-ridi.svg', brand: true },
+        { label: '에브리띵검색', color: '#495057', action: 'everything_search', icon: 'images/logo-everything.svg', brand: true },
+        { label: '제목정정', color: '#5c7cfa', action: 'correct_title', icon: 'images/quick-edit.svg' }
     ];
+
+    function getQuickPreferences(settings = {}) {
+        const saved = settings?.quickButtonVisibility;
+        const visibility = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+        return {
+            compact: settings?.quickButtonsCompact === true,
+            mini: settings?.quickButtonsCompact === true && settings?.quickButtonsMini === true,
+            visibility: Object.fromEntries(['category', ...quickButtons.map(button => button.action)]
+                .map(action => [action, visibility[action] !== false]))
+        };
+    }
+
+    function getQuickSettingsSignature(settings = {}) {
+        const preferences = getQuickPreferences(settings);
+        return `${Number(preferences.compact)}:${Number(preferences.mini)}:${Object.values(preferences.visibility).map(Number).join('')}`;
+    }
+
+    function renderQuickButtonContent(button, info, compact, state = '', mini = false) {
+        const label = state === 'copied' ? '복사됨!' : state === 'busy' ? `${info.label} 검색 중` : info.label;
+        button.dataset.action = info.action;
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-busy', String(state === 'busy'));
+        button.classList.toggle('bm-quick-button--compact', compact);
+        button.classList.toggle('bm-quick-button--brand', compact && !!info.brand);
+        const color = state === 'copied' ? '#20c997' : compact && info.brand ? '#ffffff' : info.color;
+        button.style.cssText = quickButtonStyle + `background-color: ${color} !important;`;
+        if (!compact) {
+            button.textContent = label;
+            return;
+        }
+        const width = info.action === 'ridi_preview' ? 40 : 26;
+        const height = mini ? 18 : 24;
+        const iconHeight = mini ? 12 : 14;
+        button.style.cssText += protectStyles([
+            `width: ${width}px`, `min-width: ${width}px`, `max-width: ${width}px`,
+            `height: ${height}px`, `min-height: ${height}px`, `max-height: ${height}px`,
+            `padding: ${mini ? '2px 4px' : '4px'}`,
+            `border: 1px solid ${info.brand ? '#d5dbe3' : 'transparent'}`
+        ]);
+        const icon = document.createElement('img');
+        const resource = state === 'copied' ? 'images/quick-complete.svg' : info.icon;
+        icon.src = typeof chrome !== 'undefined' && chrome.runtime?.getURL ? chrome.runtime.getURL(resource) : resource;
+        icon.alt = '';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.draggable = false;
+        icon.className = 'bm-quick-icon';
+        icon.style.cssText = protectStyles([
+            'display: block', 'position: static', 'box-sizing: border-box', 'width: 100%', `height: ${iconHeight}px`,
+            'min-width: 0', 'min-height: 0', 'max-width: 100%', `max-height: ${iconHeight}px`,
+            'margin: 0', 'padding: 0', 'border: 0', 'border-radius: 0', 'background: transparent',
+            'object-fit: contain', 'box-shadow: none', 'pointer-events: none',
+            `filter: ${info.brand && state !== 'copied' ? 'none' : 'brightness(0) invert(1)'}`
+        ]);
+        icon.addEventListener('error', () => {
+            if (icon.parentNode !== button) return;
+            renderQuickButtonContent(button, info, false, state);
+        }, { once: true });
+        button.replaceChildren(icon);
+    }
 
     function createHidePanel(settings, onChange, prefix = 'bm', demo = false) {
         const panel = document.createElement('div');
@@ -221,5 +281,5 @@ const BookMatchUI = (() => {
             </div>`;
     }
 
-    return { getPresentation, getUpgrades, shouldHidePost, displayMatchScore, matchScoreHtml, createHidePanel, quickActionsStyle, quickButtonStyle, quickButtons, missingPopoverStyle, missingPopoverHtml };
+    return { getPresentation, getUpgrades, shouldHidePost, displayMatchScore, matchScoreHtml, createHidePanel, quickActionsStyle, quickButtonStyle, quickButtons, getQuickPreferences, getQuickSettingsSignature, renderQuickButtonContent, missingPopoverStyle, missingPopoverHtml };
 })();

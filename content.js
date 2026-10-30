@@ -1,5 +1,5 @@
 // [사이트 분리 로직] 사이트별로 허용할 다운로드 모듈을 제한합니다.
-const BM_STORAGE_DEFAULTS = { allowedSites: [], missingVolsMap: {}, titleCorrections: {}, editionKeywords: getDefaultEditionKeywords(), filterWords: [], bookStoreChange: null, showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
+const BM_STORAGE_DEFAULTS = { allowedSites: [], missingVolsMap: {}, titleCorrections: {}, editionKeywords: getDefaultEditionKeywords(), filterWords: [], bookStoreChange: null, showDownloadUI: true, hideUselessComments: true, connectEverything: false, showListQuickBtn: false, showListQuickBtnHover: false, quickButtonVisibility: {}, quickButtonsCompact: false, quickButtonsMini: false, useCustomTheme: false, supportSingleChar: false, hideExclude: false, hideComplete: false, hideIncomplete: false, hideTranslate: false, hideNew: false, hideQuickMenu: false };
 
 function isExtensionContextValid() {
     try {
@@ -1603,13 +1603,15 @@ function applyBookStoreMarker(marker) {
     finalizeBookChangeImpact(combinedImpact);
 }
 
-function createRegistrationCategoryControl() {
+function createRegistrationCategoryControl(compact = false) {
     ensureQuickUIStyles();
     const dropdown = BookCategoryUI.createDropdown({
         options: BookCategoryUI.categoryOptions(),
         value: BookCategoryUI.getRegistrationCategory(),
         label: '등록 분류',
         text: (_value, label) => `분류: ${label}`,
+        icon: compact ? 'quick-category.svg' : undefined,
+        showText: !compact,
         className: 'bm-registration-category',
         onChange: async value => {
             try {
@@ -2768,12 +2770,18 @@ function selectBookCategoryCandidate(candidates) {
 
 function createQuickActions(linkData, hasBook) {
     ensureQuickUIStyles();
+    const settings = typeof currentStorageData === 'undefined' ? {} : currentStorageData;
+    const preferences = BookMatchUI.getQuickPreferences(settings);
     const container = document.createElement('span');
     container.className = 'bm-quick-actions';
+    container.classList.toggle('bm-quick-actions--compact', preferences.compact);
+    container.classList.toggle('bm-quick-actions--mini', preferences.mini);
+    container.dataset.preferencesSignature = BookMatchUI.getQuickSettingsSignature(settings);
     container.style.cssText = BookMatchUI.quickActionsStyle + "display: inline-flex; margin-left: 8px;";
-    if (typeof BookCategoryUI !== 'undefined') container.appendChild(createRegistrationCategoryControl());
+    if (preferences.visibility.category && typeof BookCategoryUI !== 'undefined') {
+        container.appendChild(createRegistrationCategoryControl(preferences.compact));
+    }
 
-    const btnStyle = BookMatchUI.quickButtonStyle;
     const canCorrectTitle = hasBook || (Array.isArray(linkData.matchCandidates) && linkData.matchCandidates.length > 0);
     const buttons = BookMatchUI.quickButtons.map(button => ({
         ...button,
@@ -2782,13 +2790,15 @@ function createQuickActions(linkData, hasBook) {
     }));
 
     buttons.forEach(btnInfo => {
-        if (btnInfo.display === false) return;
+        if (btnInfo.display === false || !preferences.visibility[btnInfo.action]) return;
 
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'bm-quick-button';
-        btn.textContent = btnInfo.label;
-        btn.style.cssText = btnStyle + `background-color: ${btnInfo.color} !important;`;
+        BookMatchUI.renderQuickButtonContent(btn, btnInfo, preferences.compact, '', preferences.mini);
+        if (preferences.compact && typeof BookCategoryUI !== 'undefined') {
+            BookCategoryUI.attachTooltip(btn, () => btn.getAttribute('aria-label'));
+        }
         btn.onmouseover = () => btn.style.transform = 'translateY(-1px)';
         btn.onmouseout = () => btn.style.transform = 'translateY(0)';
         
@@ -2892,13 +2902,10 @@ function createQuickActions(linkData, hasBook) {
                     navigator.clipboard.writeText(titleToCopy).then(() => {
                         const copyMessage = '<span style="color:#b197fc; margin-right:5px;">[복사됨]</span>' + escapeToastText(titleToCopy);
                         showActionToast(copyMessage, true);
-                        const originalText = btn.textContent;
-                        const originalColor = btn.style.backgroundColor;
-                        btn.textContent = '복사됨!';
-                        btn.style.setProperty('background-color', '#20c997', 'important');
-                        setTimeout(() => {
-                            btn.textContent = originalText;
-                            btn.style.setProperty('background-color', originalColor, 'important');
+                        clearTimeout(btn._bmFeedbackTimer);
+                        BookMatchUI.renderQuickButtonContent(btn, btnInfo, preferences.compact, 'copied', preferences.mini);
+                        btn._bmFeedbackTimer = setTimeout(() => {
+                            BookMatchUI.renderQuickButtonContent(btn, btnInfo, preferences.compact, '', preferences.mini);
                         }, 1500);
                     }).catch(() => {
                         showInfoToast("제목 복사에 실패했습니다.", true);
@@ -2935,12 +2942,11 @@ function createQuickActions(linkData, hasBook) {
 
                 if (btnInfo.action === 'search' || btnInfo.action === 'ridi_preview' || btnInfo.action === 'everything_search') {
                     if (btnInfo.action === 'ridi_preview') {
-                        const originalText = btn.textContent;
-                        btn.textContent = '⏳';
-                        btn.style.pointerEvents = 'none';
+                        BookMatchUI.renderQuickButtonContent(btn, btnInfo, preferences.compact, 'busy', preferences.mini);
+                        btn.disabled = true;
                         setTimeout(() => { 
-                            btn.textContent = originalText; 
-                            btn.style.pointerEvents = 'auto';
+                            BookMatchUI.renderQuickButtonContent(btn, btnInfo, preferences.compact, '', preferences.mini);
+                            btn.disabled = false;
                         }, 2500);
                     }
                     sendRuntimeMessage({
@@ -3028,6 +3034,7 @@ function createQuickActions(linkData, hasBook) {
         };
         container.appendChild(btn);
     });
+    container.hidden = container.childElementCount === 0;
     return container;
 }
 
@@ -3260,19 +3267,21 @@ function applyStyleToSingleLink(link) {
         const hasBook = !!book;
         const matchSignature = `${book?.id ?? ''}:${(match.candidates || []).map(candidate => `${candidate.id}/${normalizeBookCategory(candidate.categoryId)}`).join(',')}`;
         const hasTitleChanged = chatingWikiTitle !== null && existingActions?.dataset.titleSignature !== link._bmData.raw;
+        const preferencesSignature = BookMatchUI.getQuickSettingsSignature(typeof currentStorageData === 'undefined' ? {} : currentStorageData);
 
         if (!existingActions || existingActions.dataset.hasBook !== String(hasBook) || hasTitleChanged
-            || existingActions.dataset.matchSignature !== matchSignature) {
+            || existingActions.dataset.matchSignature !== matchSignature
+            || existingActions.dataset.preferencesSignature !== preferencesSignature) {
             if (existingBr) existingBr.remove();
             if (existingActions) existingActions.remove();
 
-            if (!renderTargets.usesSeparateTargets) {
+            const actions = createQuickActions(link._bmData, hasBook);
+            if (!renderTargets.usesSeparateTargets && !actions.hidden) {
                 const br = document.createElement('br');
                 br.className = 'bm-badge-br list-br';
                 actionsTarget.appendChild(br);
             }
 
-            const actions = createQuickActions(link._bmData, hasBook);
             actions.classList.add('list-actions');
             actions.dataset.hasBook = String(hasBook);
             actions.dataset.matchSignature = matchSignature;
@@ -3416,9 +3425,11 @@ function applyStyleToDetailElement(el) {
     const needsBadgeUpdate = newBadgeHTML && (!existingBadge || existingBadge.dataset.html !== newBadgeHTML);
     const needsBadgeRemoval = !newBadgeHTML && existingBadge;
     const matchSignature = `${book?.id ?? ''}:${(match.candidates || []).map(candidate => `${candidate.id}/${normalizeBookCategory(candidate.categoryId)}`).join(',')}`;
+    const preferencesSignature = BookMatchUI.getQuickSettingsSignature(typeof currentStorageData === 'undefined' ? {} : currentStorageData);
     const needsActionsUpdate = isAllowedBoard ? (!existingActions || existingActions.dataset.hasBook !== String(!!book)
-        || existingActions.dataset.matchSignature !== matchSignature) : !!existingActions;
-    const needsBr = renderTargets.usesSeparateTargets ? false : (isAllowedBoard ? !existingBr : !!existingBr);
+        || existingActions.dataset.matchSignature !== matchSignature
+        || existingActions.dataset.preferencesSignature !== preferencesSignature) : !!existingActions;
+    const needsBr = renderTargets.usesSeparateTargets ? false : (isAllowedBoard && !existingActions?.hidden ? !existingBr : !!existingBr);
 
     // 변경 사항이 하나라도 있을 때만 기존 요소를 뜯어내고 다시 그립니다
     if (needsBadgeUpdate || needsBadgeRemoval || needsActionsUpdate || needsBr) {
@@ -3436,13 +3447,13 @@ function applyStyleToDetailElement(el) {
         }
 
         if (isAllowedBoard) {
-            if (!renderTargets.usesSeparateTargets) {
+            const actions = createQuickActions(el._bmDetailData, !!book);
+            if (!renderTargets.usesSeparateTargets && !actions.hidden) {
                 const br = document.createElement('br');
                 br.className = 'bm-badge-br';
                 actionsTarget.appendChild(br);
             }
 
-            const actions = createQuickActions(el._bmDetailData, !!book);
             actions.dataset.hasBook = !!book;
             actions.dataset.matchSignature = matchSignature;
             actions.style.marginLeft = "0";
@@ -3900,6 +3911,9 @@ const BM_CONTENT_SETTING_KEYS = [
     'connectEverything',
     'showListQuickBtn',
     'showListQuickBtnHover',
+    'quickButtonVisibility',
+    'quickButtonsCompact',
+    'quickButtonsMini',
     'useCustomTheme',
     'supportSingleChar',
     'hideExclude',

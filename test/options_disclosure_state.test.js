@@ -10,7 +10,7 @@ const end = source.indexOf("document.addEventListener('DOMContentLoaded'", start
 assert.ok(start >= 0 && end > start, '옵션 disclosure 초기화 함수가 있어야 한다.');
 const disclosureSource = source.slice(start, end);
 const settle = () => new Promise(resolve => setImmediate(resolve));
-const panelIds = ['allowedSitesPanel', 'filterWordsPanel', 'editionKeywordsPanel', 'everythingGuidePanel', 'googleSyncPanel'];
+const panelIds = ['allowedSitesPanel', 'filterWordsPanel', 'editionKeywordsPanel', 'everythingGuidePanel', 'quickButtonVisibilityPanel', 'googleSyncPanel'];
 const keyFor = id => id === 'bulkPanel' ? 'bulkPanelCollapsed' : `optionsPanelExpanded:${id}`;
 
 function createHarness(initialStorage = {}) {
@@ -124,7 +124,7 @@ function createHarness(initialStorage = {}) {
     };
 }
 
-test('6개 패널 상태를 독립 복원하고 bulk는 기존 collapsed 키의 반전 의미를 유지한다', async () => {
+test('7개 패널 상태를 독립 복원하고 bulk는 기존 collapsed 키의 반전 의미를 유지한다', async () => {
     const stored = Object.fromEntries(panelIds.map((id, index) => [keyFor(id), index % 2 === 1]));
     stored.bulkPanelCollapsed = true;
     const fixture = createHarness(stored);
@@ -136,11 +136,11 @@ test('6개 패널 상태를 독립 복원하고 bulk는 기존 collapsed 키의 
     assert.equal(fixture.writes.length, 0, '초기 복원이 저장을 발생시키면 안 된다.');
     for (const id of [...panelIds, 'bulkPanel']) fixture.click(id);
     await settle();
-    assert.equal(fixture.writes.length, 6);
+    assert.equal(fixture.writes.length, 7);
     const pending = Object.assign({}, ...fixture.writes.map(write => write.values));
     panelIds.forEach((id, index) => assert.equal(pending[keyFor(id)], index % 2 !== 1));
     assert.equal(pending.bulkPanelCollapsed, false);
-    assert.equal(Object.keys(pending).length, 6);
+    assert.equal(Object.keys(pending).length, 7);
     for (let index = 0; index < fixture.writes.length; index++) fixture.finishWrite(index);
     await settle();
     for (let index = 1; index < fixture.reads.length; index++) fixture.resolveRead(index);
@@ -152,17 +152,20 @@ test('저장값이 없거나 boolean이 아니면 마크업 기본값을 유지�
     const fixture = createHarness({
         [keyFor('allowedSitesPanel')]: 'false',
         [keyFor('everythingGuidePanel')]: 1,
+        [keyFor('quickButtonVisibilityPanel')]: 'true',
         bulkPanelCollapsed: 'true'
     });
     fixture.resolveRead(0);
     await settle();
     assert.equal(fixture.expanded('allowedSitesPanel'), true);
     assert.equal(fixture.expanded('everythingGuidePanel'), false);
+    assert.equal(fixture.expanded('quickButtonVisibilityPanel'), false);
     assert.equal(fixture.expanded('googleSyncPanel'), false);
     assert.equal(fixture.expanded('bulkPanel'), true);
-    fixture.change({ [keyFor('allowedSitesPanel')]: false, [keyFor('googleSyncPanel')]: true, bulkPanelCollapsed: true });
-    fixture.change({ [keyFor('allowedSitesPanel')]: undefined, [keyFor('googleSyncPanel')]: undefined, bulkPanelCollapsed: undefined });
+    fixture.change({ [keyFor('allowedSitesPanel')]: false, [keyFor('quickButtonVisibilityPanel')]: true, [keyFor('googleSyncPanel')]: true, bulkPanelCollapsed: true });
+    fixture.change({ [keyFor('allowedSitesPanel')]: undefined, [keyFor('quickButtonVisibilityPanel')]: undefined, [keyFor('googleSyncPanel')]: undefined, bulkPanelCollapsed: undefined });
     assert.equal(fixture.expanded('allowedSitesPanel'), true);
+    assert.equal(fixture.expanded('quickButtonVisibilityPanel'), false);
     assert.equal(fixture.expanded('googleSyncPanel'), false);
     assert.equal(fixture.expanded('bulkPanel'), true);
     assert.equal(fixture.writes.length, 0);

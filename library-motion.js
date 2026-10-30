@@ -160,6 +160,59 @@ const LibraryMotion = (() => {
         return { setExpanded, getExpanded: () => isExpanded };
     }
 
+    function createSlidePanel(element, { expanded = false, focusTarget = null } = {}) {
+        let isExpanded;
+        let revision = 0;
+        let transition = Promise.resolve();
+
+        function measure() {
+            if (element.hidden) return { height: 0, opacity: 0 };
+            const opacity = Number.parseFloat(window.getComputedStyle(element).opacity);
+            return {
+                height: element.getBoundingClientRect().height,
+                opacity: Number.isFinite(opacity) ? opacity : 1
+            };
+        }
+
+        function setExpanded(nextExpanded, { animate = true } = {}) {
+            const next = nextExpanded === true;
+            if (isExpanded === next) return transition;
+            const previous = measure();
+            const currentRevision = ++revision;
+            cancel(element);
+            isExpanded = next;
+            focusTarget?.setAttribute('aria-expanded', String(next));
+            if (!next && element.contains(document.activeElement)) {
+                focusTarget?.focus({ preventScroll: true });
+            }
+            element.inert = !next;
+            element.setAttribute('aria-hidden', String(!next));
+            element.hidden = false;
+            const natural = measure();
+            const finish = () => {
+                if (revision !== currentRevision) return;
+                element.hidden = !isExpanded;
+                element.inert = !isExpanded;
+            };
+            if (!animate || reducedMotion() || typeof Motion === 'undefined' || natural.height === 0) {
+                finish();
+                transition = Promise.resolve();
+                return transition;
+            }
+            transition = animateElement(element, {
+                height: [`${previous.height}px`, `${next ? natural.height : 0}px`],
+                opacity: [previous.opacity, next ? natural.opacity : 0]
+            }, 0.22, {
+                styles: { overflow: 'hidden', boxSizing: 'border-box' },
+                onFinish: finish
+            });
+            return transition;
+        }
+
+        void setExpanded(expanded, { animate: false });
+        return { setExpanded, getExpanded: () => isExpanded };
+    }
+
     function feedback(element) {
         cancel(element);
         if (!element || reducedMotion() || typeof anime === 'undefined') return Promise.resolve();
@@ -195,6 +248,7 @@ const LibraryMotion = (() => {
         toggleSwitch,
         resize,
         bindDisclosure,
+        createSlidePanel,
         cancel
     };
 })();

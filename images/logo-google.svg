@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="10 10 20 20" fill="none">
+    <mask id="mask0_1298_12516" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="10" y="10" width="20" height="20">
+        <path d="M29.3987 18.1814H19.9849V22.0445H25.3598C25.1286 23.294 24.4294 24.3596 23.3676 25.0712C22.4746 25.6716 21.3266 26.0211 19.9849 26.0211C17.3864 26.0211 15.1823 24.2666 14.3947 21.9004C14.1952 21.2989 14.0853 20.6599 14.0853 19.9983C14.0853 19.3367 14.1952 18.6966 14.3947 18.0962C15.1823 15.7311 17.3864 13.9755 19.9849 13.9755C21.4524 13.9755 22.767 14.4816 23.8039 15.4713L26.6653 12.6057C24.936 10.9908 22.6786 10 19.9849 10C16.0832 10 12.705 12.2414 11.0618 15.5076C10.383 16.8592 10 18.3834 10 19.9994C10 21.6155 10.383 23.1396 11.0618 24.4913C12.705 27.7597 16.0832 30 19.9849 30C22.6797 30 24.9485 29.1137 26.6018 27.5861C28.4887 25.8452 29.5732 23.2702 29.5732 20.2275C29.5732 19.5182 29.5131 18.835 29.3987 18.1825V18.1814Z" fill="#E94FFF" />
+    </mask>
+    <g mask="url(#mask0_1298_12516)">
+        <g filter="url(#filter0_f_1298_12516)">
+            <g clip-path="url(#paint0_angular_1298_12516_clip_path)">
+                <g transform="matrix(0.00804129 -0.00805186 0.00804128 0.00805186 19.6819 19.7927)">
+                    <path d="M0 0L2999.995 -5.236L2995.610 162.236Z" fill="#ff4641" />
+                    <path d="M0 0L2996.158 151.779L2983.014 318.792Z" fill="#fd4743" />
+                    <path d="M0 0L2984.108 308.378L2962.241 474.474Z" fill="#eb4c53" />
+                    <path d="M0 0L2963.880 464.131L2933.350 628.856Z" fill="#da5263" />
+                    <path d="M0 0L2935.527 618.613L2896.418 781.514Z" fill="#c85774" />
+                    <path d="M0 0L2899.128 771.398L2851.547 932.029Z" fill="#b65d84" />
+                    <path d="M0 0L2854.783 922.070L2798.861 1079.990Z" fill="#a56294" />
+                    <path d="M0 0L2802.613 1070.214L2738.503 1224.991Z" fill="#9368a5" />
+                    <path d="M0 0L2742.762 1215.425L2670.638 1366.635Z" fill="#816db5" />
+                    <path d="M0 0L2675.393 1357.304L2595.454 1504.532Z" fill="#7073c5" />
+                    <path d="M0 0L2600.690 1495.463L2513.156 1638.306Z" fill="#5e78d5" />
+                    <path d="M0 0L2518.860 1629.523L2423.970 1767.589Z" fill="#4c7de6" />
+                    <path d="M0 0L2430.125 1759.117L2328.139 1892.027Z" fill="#3b83f6" />
+                    <path d="M0 0L2334.729 1883.889L2225.928 2011.280Z" fill="#3186ff" />
+                    <path d="M0 0L2232.935 2003.498L2117.615 2125.020Z" fill="#3186ff" />
+                    <path d="M0 0L2125.020 2117.615L2003.498 2232.935Z" fill="#3186ff" />
+                    <path d="M0 0L2011.280 2225.928L1883.889 2334.729Z" fill="#3186ff" />
+                    <path d="M0 0L1892.027 2328.139L1759.117 2430.125Z" fill="#3186ff" />
+                    <path d="M0 0L1767.589 2423.970L1629.523 2518.860Z" fill="#3186ff" />
+                    <path d="M0 0L1638.306 2513.156L1495.463 2600.690Z" fill="#3186ff" />
+                    <path d="M0 0L1504.532 2595.454L1357.304 2675.393Z" fill="#3186ff" />
+                    <path d="M0 0L1366.635 2670.638L1215.425 2742.762Z" fill="#3186ff" />
+                    <path d="M0 0L1224.991 2738.503L1070.214 2802.613Z" fill="#3186ff" />
+                    <path d="M0 0L1079.990 2798.861L922.070 2854.783Z" fill="#3186ff" />
+                    <path d="M0 0L932.029 2851.547L771.398 2899.128Z" fill="#2e88fb" />
+                    <path d="M0 0L781.514 2896.418L618.613 2935.527Z" fill="#288cf2" />
+                    <path d="M0 0L628.856 2933.350L464.131 2963.880Z" fill="#228fe9" />
+                    <path d="M0 0L474.474 2962.241L308.378 2984.108Z" fill="#1c93e0" />
+                    <path d="M0 0L318.792 2983.014L151.779 2996.158Z" fill="#1697d8" />
+                    <path d="M0 0L162.236 2995.610L-5.236 2999.995Z" fill="#109bcf" />
+                    <path d="M0 0L5.236 2999.995L-162.236 2995.610Z" fill="#0a9ec6" />
+                    <path d="M0 0L-151.779 2996.158L-318.792 2983.014Z" fill="#04a2be" />
+                    <path d="M0 0L-308.378 2984.108L-474.474 2962.241Z" fill="#00a6b4" />
+                    <path d="M0 0L-464.131 2963.880L-628.856 2933.350Z" fill="#02a9a9" />
+                    <path d="M0 0L-618.613 2935.527L-781.514 2896.418Z" fill="#04ab9e" />
+                    <path d="M0 0L-771.398 2899.128L-932.029 2851.547Z" fill="#06ae93" />
+                    <path d="M0 0L-922.070 2854.783L-1079.990 2798.861Z" fill="#07b189" />
+                    <path d="M0 0L-1070.214 2802.613L-1224.991 2738.503Z" fill="#09b47e" />
+                    <path d="M0 0L-1215.425 2742.762L-1366.635 2670.638Z" fill="#0bb773" />
+                    <path d="M0 0L-1357.304 2675.393L-1504.532 2595.454Z" fill="#0dba68" />
+                    <path d="M0 0L-1495.463 2600.690L-1638.306 2513.156Z" fill="#0ebc5f" />
+                    <path d="M0 0L-1629.523 2518.860L-1767.589 2423.970Z" fill="#0ebc5f" />
+                    <path d="M0 0L-1759.117 2430.125L-1892.027 2328.139Z" fill="#0ebc5f" />
+                    <path d="M0 0L-1883.889 2334.729L-2011.280 2225.928Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2003.498 2232.935L-2125.020 2117.615Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2117.615 2125.020L-2232.935 2003.498Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2225.928 2011.280L-2334.729 1883.889Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2328.139 1892.027L-2430.125 1759.117Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2423.970 1767.589L-2518.860 1629.523Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2513.156 1638.306L-2600.690 1495.463Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2595.454 1504.532L-2675.393 1357.304Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2670.638 1366.635L-2742.762 1215.425Z" fill="#0ebc5f" />
+                    <path d="M0 0L-2738.503 1224.991L-2802.613 1070.214Z" fill="#19bd54" />
+                    <path d="M0 0L-2798.861 1079.990L-2854.783 922.070Z" fill="#24be49" />
+                    <path d="M0 0L-2851.547 932.029L-2899.128 771.398Z" fill="#30bf3d" />
+                    <path d="M0 0L-2896.418 781.514L-2935.527 618.613Z" fill="#3bc031" />
+                    <path d="M0 0L-2933.350 628.856L-2963.880 464.131Z" fill="#47c125" />
+                    <path d="M0 0L-2962.241 474.474L-2984.108 308.378Z" fill="#52c21a" />
+                    <path d="M0 0L-2983.014 318.792L-2996.158 151.779Z" fill="#5ec30e" />
+                    <path d="M0 0L-2995.610 162.236L-2999.995 -5.236Z" fill="#6ac402" />
+                    <path d="M0 0L-2999.995 5.236L-2995.610 -162.236Z" fill="#7ac500" />
+                    <path d="M0 0L-2996.158 -151.779L-2983.014 -318.792Z" fill="#8cc600" />
+                    <path d="M0 0L-2984.108 -308.378L-2962.241 -474.474Z" fill="#9ec700" />
+                    <path d="M0 0L-2963.880 -464.131L-2933.350 -628.856Z" fill="#b0c800" />
+                    <path d="M0 0L-2935.527 -618.613L-2896.418 -781.514Z" fill="#c2c900" />
+                    <path d="M0 0L-2899.128 -771.398L-2851.547 -932.029Z" fill="#d4ca00" />
+                    <path d="M0 0L-2854.783 -922.070L-2798.861 -1079.990Z" fill="#e6cb00" />
+                    <path d="M0 0L-2802.613 -1070.214L-2738.503 -1224.991Z" fill="#f8cc00" />
+                    <path d="M0 0L-2742.762 -1215.425L-2670.638 -1366.635Z" fill="#ffcd02" />
+                    <path d="M0 0L-2675.393 -1357.304L-2595.454 -1504.532Z" fill="#ffcd04" />
+                    <path d="M0 0L-2600.690 -1495.463L-2513.156 -1638.306Z" fill="#ffce07" />
+                    <path d="M0 0L-2518.860 -1629.523L-2423.970 -1767.589Z" fill="#ffcf09" />
+                    <path d="M0 0L-2430.125 -1759.117L-2328.139 -1892.027Z" fill="#ffd00c" />
+                    <path d="M0 0L-2334.729 -1883.889L-2225.928 -2011.280Z" fill="#ffd10e" />
+                    <path d="M0 0L-2232.935 -2003.498L-2117.615 -2125.020Z" fill="#ffd211" />
+                    <path d="M0 0L-2125.020 -2117.615L-2003.498 -2232.935Z" fill="#ffd314" />
+                    <path d="M0 0L-2011.280 -2225.928L-1883.889 -2334.729Z" fill="#ffd212" />
+                    <path d="M0 0L-1892.027 -2328.139L-1759.117 -2430.125Z" fill="#ffd10f" />
+                    <path d="M0 0L-1767.589 -2423.970L-1629.523 -2518.860Z" fill="#ffd10d" />
+                    <path d="M0 0L-1638.306 -2513.156L-1495.463 -2600.690Z" fill="#ffd00b" />
+                    <path d="M0 0L-1504.532 -2595.454L-1357.304 -2675.393Z" fill="#ffcf08" />
+                    <path d="M0 0L-1366.635 -2670.638L-1215.425 -2742.762Z" fill="#ffce06" />
+                    <path d="M0 0L-1224.991 -2738.503L-1070.214 -2802.613Z" fill="#ffcd03" />
+                    <path d="M0 0L-1079.990 -2798.861L-922.070 -2854.783Z" fill="#ffcc01" />
+                    <path d="M0 0L-932.029 -2851.547L-771.398 -2899.128Z" fill="#ffc404" />
+                    <path d="M0 0L-781.514 -2896.418L-618.613 -2935.527Z" fill="#ffb60a" />
+                    <path d="M0 0L-628.856 -2933.350L-464.131 -2963.880Z" fill="#ffa810" />
+                    <path d="M0 0L-474.474 -2962.241L-308.378 -2984.108Z" fill="#ff9b16" />
+                    <path d="M0 0L-318.792 -2983.014L-151.779 -2996.158Z" fill="#ff8d1c" />
+                    <path d="M0 0L-162.236 -2995.610L5.236 -2999.995Z" fill="#ff7f22" />
+                    <path d="M0 0L-5.236 -2999.995L162.236 -2995.610Z" fill="#ff7128" />
+                    <path d="M0 0L151.779 -2996.158L318.792 -2983.014Z" fill="#ff672d" />
+                    <path d="M0 0L308.378 -2984.108L474.474 -2962.241Z" fill="#fe6031" />
+                    <path d="M0 0L464.131 -2963.880L628.856 -2933.350Z" fill="#fe5a35" />
+                    <path d="M0 0L618.613 -2935.527L781.514 -2896.418Z" fill="#fe5339" />
+                    <path d="M0 0L771.398 -2899.128L932.029 -2851.547Z" fill="#fd4c3d" />
+                    <path d="M0 0L922.070 -2854.783L1079.990 -2798.861Z" fill="#fd4641" />
+                    <path d="M0 0L1070.214 -2802.613L1224.991 -2738.503Z" fill="#fd4641" />
+                    <path d="M0 0L1215.425 -2742.762L1366.635 -2670.638Z" fill="#fd4641" />
+                    <path d="M0 0L1357.304 -2675.393L1504.532 -2595.454Z" fill="#fd4641" />
+                    <path d="M0 0L1495.463 -2600.690L1638.306 -2513.156Z" fill="#fd4641" />
+                    <path d="M0 0L1629.523 -2518.860L1767.589 -2423.970Z" fill="#fd4641" />
+                    <path d="M0 0L1759.117 -2430.125L1892.027 -2328.139Z" fill="#fe4641" />
+                    <path d="M0 0L1883.889 -2334.729L2011.280 -2225.928Z" fill="#fe4641" />
+                    <path d="M0 0L2003.498 -2232.935L2125.020 -2117.615Z" fill="#fe4641" />
+                    <path d="M0 0L2117.615 -2125.020L2232.935 -2003.498Z" fill="#fe4641" />
+                    <path d="M0 0L2225.928 -2011.280L2334.729 -1883.889Z" fill="#fe4641" />
+                    <path d="M0 0L2328.139 -1892.027L2430.125 -1759.117Z" fill="#fe4641" />
+                    <path d="M0 0L2423.970 -1767.589L2518.860 -1629.523Z" fill="#fe4641" />
+                    <path d="M0 0L2513.156 -1638.306L2600.690 -1495.463Z" fill="#fe4641" />
+                    <path d="M0 0L2595.454 -1504.532L2675.393 -1357.304Z" fill="#fe4641" />
+                    <path d="M0 0L2670.638 -1366.635L2742.762 -1215.425Z" fill="#fe4641" />
+                    <path d="M0 0L2738.503 -1224.991L2802.613 -1070.214Z" fill="#fe4641" />
+                    <path d="M0 0L2798.861 -1079.990L2854.783 -922.070Z" fill="#fe4641" />
+                    <path d="M0 0L2851.547 -932.029L2899.128 -771.398Z" fill="#ff4641" />
+                    <path d="M0 0L2896.418 -781.514L2935.527 -618.613Z" fill="#ff4641" />
+                    <path d="M0 0L2933.350 -628.856L2963.880 -464.131Z" fill="#ff4641" />
+                    <path d="M0 0L2962.241 -474.474L2984.108 -308.378Z" fill="#ff4641" />
+                    <path d="M0 0L2983.014 -318.792L2996.158 -151.779Z" fill="#ff4641" />
+                    <path d="M0 0L2995.610 -162.236L2999.995 5.236Z" fill="#ff4641" />
+                </g>
+            </g>
+        </g>
+        <g filter="url(#filter1_f_1298_12516)">
+            <ellipse cx="20.0496" cy="20.2413" rx="5.39634" ry="2.83537" transform="rotate(24.4473 20.0496 20.2413)" fill="#3186FF" />
+        </g>
+        <g filter="url(#filter2_f_1298_12516)">
+            <ellipse cx="33.3538" cy="18.2155" rx="7.43918" ry="3.09357" fill="#3186FF" />
+        </g>
+        <g filter="url(#filter3_f_1298_12516)">
+            <ellipse cx="25.2744" cy="16.2195" rx="7.40854" ry="2.37805" fill="#FF4641" />
+        </g>
+        <g filter="url(#filter4_f_1298_12516)">
+            <ellipse cx="29.5427" cy="12.9268" rx="7.40854" ry="2.37805" fill="#FF5B8B" />
+        </g>
+        <g filter="url(#filter5_f_1298_12516)">
+            <ellipse cx="24.4817" cy="19.878" rx="8.5061" ry="3.10976" fill="#3186FF" />
+        </g>
+        <g filter="url(#filter6_f_1298_12516)">
+            <ellipse cx="25.1842" cy="14.0197" rx="4.53882" ry="2.37805" transform="rotate(-28.6599 25.1842 14.0197)" fill="#FF4641" />
+        </g>
+    </g>
+    <defs>
+        <filter id="filter0_f_1298_12516" x="5.25922" y="4.90668" width="29.7381" height="29.772" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <clipPath id="paint0_angular_1298_12516_clip_path">
+            <path d="M7.25922 19.7927C7.25922 12.6759 13.0209 6.90668 20.1283 6.90668C27.2357 6.90668 32.9973 12.6759 32.9973 19.7927C32.9973 26.9094 27.2357 32.6786 20.1283 32.6786C13.0209 32.6786 7.25921 26.9094 7.25922 19.7927Z" />
+        </clipPath>
+        <filter id="filter1_f_1298_12516" x="12.9977" y="14.828" width="14.1038" height="10.8265" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <filter id="filter2_f_1298_12516" x="23.9146" y="13.1219" width="18.8784" height="10.1871" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <filter id="filter3_f_1298_12516" x="15.8659" y="11.8415" width="18.8171" height="8.7561" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <filter id="filter4_f_1298_12516" x="20.1341" y="8.54878" width="18.8171" height="8.7561" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <filter id="filter5_f_1298_12516" x="13.9756" y="14.7683" width="21.0122" height="10.2195" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+        <filter id="filter6_f_1298_12516" x="19.0404" y="9.00419" width="12.2878" height="10.0309" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+            <feFlood flood-opacity="0" result="BackgroundImageFix" />
+            <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape" />
+            <feGaussianBlur stdDeviation="1" result="effect1_foregroundBlur_1298_12516" />
+        </filter>
+    </defs>
+</svg>

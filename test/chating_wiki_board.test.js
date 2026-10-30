@@ -49,10 +49,11 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
         'normalizeTitleCorrectionKeyPart', 'getTitleCorrectionKey', 'normalizeStoredTitleCorrection',
         'getResolvedSiteTitle', 'getResolvedTitleMatchParts', 'getResolvedLinkTitle', 'getResolvedQuickActionTitle',
         'calculateLevenshtein', 'getSimilarity', 'findMatchingBook',
-        'syncSiteTitleColorBadges', 'getListRenderTargets', 'setManagedTitleStyle',
-        'clearManagedTitleStyles', 'removeBadge', 'createQuickActions', 'applyStyleToSingleLink'
+        'syncSiteTitleColorBadges', 'getListRenderTargets', 'getDetailRenderTargets', 'setManagedTitleStyle',
+        'clearManagedTitleStyles', 'removeBadge', 'createQuickActions', 'applyStyleToSingleLink', 'applyStyleToDetailElement'
     ].map(name => extractFunction(source, name)).join('\n');
     const script = `
+        const chrome = { runtime: { getURL: value => new URL(value, ${JSON.stringify(pathToFileURL(root + path.sep).href)}).href } };
         ${commonSource}
         ${uiSource}
         const api = (function(window) {
@@ -60,6 +61,8 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
             const config = PRE_DEFINED_SITES.find(site => site.url === 'chating.wiki');
             const globalHideSelector = config.hideSelector;
             const titleCorrections = {};
+            let currentStorageData = {};
+            const ensureQuickUIStyles = () => {};
             const isSupportSingleCharEnabled = false;
             const isShowListQuickBtn = true, isAllowedBoard = true;
             const isHideExclude = false, isHideComplete = false, isHideNew = false;
@@ -80,7 +83,8 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
             ${functions}
             return {
                 config, messages, getPureLinkText, getChatingWikiListTitle,
-                hasSiteTranslationEdition, applyStyleToSingleLink,
+                hasSiteTranslationEdition, applyStyleToSingleLink, applyStyleToDetailElement,
+                setQuickPreferences: settings => { currentStorageData = settings; },
                 setHide: settings => {
                     isHideIncomplete = !!settings.incomplete;
                     isHideTranslate = !!settings.translate;
@@ -89,10 +93,14 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
                     isHideIncomplete = false;
                     isHideTranslate = false;
                     similarityCache = {};
+                    currentStorageData = {};
                     messages.length = 0;
                 }
             };
-        })({ location: { hostname: 'chating.wiki', href: 'https://chating.wiki/게시판/남성향/만화-웹툰' } });
+        })({
+            location: { hostname: 'chating.wiki', href: 'https://chating.wiki/게시판/남성향/만화-웹툰' },
+            getComputedStyle: window.getComputedStyle.bind(window)
+        });
         ${runBoardTests.toString()}
         const results = runBoardTests(api);
         document.body.replaceChildren();
@@ -103,7 +111,7 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
     `;
     fs.writeFileSync(path.join(directory, 'test.js'), script);
     const page = path.join(directory, 'test.html');
-    fs.writeFileSync(page, '<!doctype html><html lang="ko"><meta charset="utf-8"><body><script src="test.js"></script></body></html>');
+    fs.writeFileSync(page, `<!doctype html><html lang="ko"><meta charset="utf-8"><link rel="stylesheet" href="${pathToFileURL(path.join(root, 'book-ui.css')).href}"><body><script src="test.js"></script></body></html>`);
     const browser = spawnSync(browserPath, [
         '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
         '--disable-background-networking', '--disable-component-update', '--disable-extensions',
@@ -114,7 +122,7 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
     const match = browser.stdout.match(/<pre id="results">([\s\S]*?)<\/pre>/);
     assert.ok(match, `브라우저 테스트 결과가 없습니다: ${browser.stderr}\n${browser.stdout}`);
     const results = JSON.parse(match[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
-    assert.equal(results.length, 10, '필수 브라우저 테스트가 실행되지 않았습니다.');
+    assert.equal(results.length, 12, '필수 브라우저 테스트가 실행되지 않았습니다.');
     for (const result of results) {
         await t.test(result.name, () => assert.equal(result.ok, true, result.error));
     }
@@ -267,6 +275,55 @@ function runBoardTests(api) {
         api.applyStyleToSingleLink(link);
         assert(link._bmData.matchedBookId === 1);
         clickSearch(row, '먼작귀');
+    });
+
+    check('새 구조: 퀵 버튼 설정 변경은 제목과 매칭을 유지하며 목록 메뉴에 반영', () => {
+        const { row, link } = createRow();
+        api.applyStyleToSingleLink(link);
+        const original = row.querySelector('.bm-quick-actions');
+        const matchedId = link._bmData.matchedBookId;
+        api.setQuickPreferences({ quickButtonsCompact: true, quickButtonVisibility: { search: false } });
+        api.applyStyleToSingleLink(link);
+        const compact = row.querySelector('.bm-quick-actions');
+        assert(compact !== original && !compact.querySelector('[data-action="search"]'), '숨김 설정이 기존 메뉴에 반영되지 않았습니다.');
+        assert(compact.querySelector('[data-action="copy"] img'), '아이콘 표시가 반영되지 않았습니다.');
+        assert(link._bmData.matchedBookId === matchedId && link._bmData.originalText === title, '옵션 변경이 제목이나 매칭을 바꿨습니다.');
+        api.applyStyleToSingleLink(link);
+        assert(row.querySelector('.bm-quick-actions') === compact, '같은 설정에서 메뉴를 반복 생성했습니다.');
+        api.setQuickPreferences({ quickButtonVisibility: Object.fromEntries(['category', ...BookMatchUI.quickButtons.map(button => button.action)].map(action => [action, false])) });
+        api.applyStyleToSingleLink(link);
+        const hidden = row.querySelector('.bm-quick-actions');
+        assert(hidden.hidden && getComputedStyle(hidden).display === 'none', '빈 퀵 메뉴가 화면에 남았습니다.');
+        assert(row.querySelectorAll('.book-badge').length === 1, '도서 배지가 사라지거나 중복되었습니다.');
+        api.setQuickPreferences({});
+        api.applyStyleToSingleLink(link);
+        clickSearch(row, '먼작귀');
+    });
+
+    check('상세 구조: 속성 영역의 퀵 메뉴는 설정 변경을 반영하고 기본 표시로 복원', () => {
+        const header = document.createElement('div');
+        header.className = 'cw-article-header';
+        const heading = document.createElement('h1');
+        heading.textContent = title;
+        const attributes = document.createElement('div');
+        attributes.className = 'cw-article-attributes';
+        header.append(heading, attributes);
+        document.body.appendChild(header);
+        api.applyStyleToDetailElement(heading);
+        const original = attributes.querySelector('.bm-quick-actions');
+        assert(original && heading.querySelectorAll('.bm-quick-actions').length === 0, '상세 메뉴가 속성 영역에 생성되지 않았습니다.');
+        api.setQuickPreferences({ quickButtonsCompact: true, quickButtonVisibility: { copy: false } });
+        api.applyStyleToDetailElement(heading);
+        const compact = attributes.querySelector('.bm-quick-actions');
+        assert(compact !== original && !compact.querySelector('[data-action="copy"]'), '상세 메뉴 숨김이 반영되지 않았습니다.');
+        assert(compact.querySelector('[data-action="search"] img'), '상세 메뉴 아이콘 모드가 반영되지 않았습니다.');
+        api.applyStyleToDetailElement(heading);
+        assert(attributes.querySelector('.bm-quick-actions') === compact, '변경 없는 상세 메뉴를 다시 생성했습니다.');
+        api.setQuickPreferences({});
+        api.applyStyleToDetailElement(heading);
+        const restored = attributes.querySelector('.bm-quick-actions');
+        assert(restored.querySelector('[data-action="copy"]').textContent === '복사', '상세 메뉴 기본 표시가 복원되지 않았습니다.');
+        assert(header.querySelectorAll('.bm-quick-actions').length === 1 && heading.querySelectorAll('.book-badge').length === 1, '상세 메뉴나 배지가 중복되었습니다.');
     });
 
     return results;
