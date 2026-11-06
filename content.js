@@ -450,7 +450,7 @@ const PRE_DEFINED_SITES = [
 {
     url: "chating.wiki",
     shortcuts: { openSelector: '.cw-material-purchase-action', downloadSelector: '.auto-dl-btn', titleSelector: '.cw-article-header > h1' },
-    selector: "a.cw-board-item, .cw-board-item > a.cw-board-item__title",
+    selector: "a.cw-board-item, .cw-board-item > a.cw-board-item__title, .cw-board-item > .cw-board-item__title a.cw-material-evaluation-title-link",
     detailSelector: ".cw-article-header > h1",
     hideSelector: ".cw-board-item",
     translationDetector: link => /번역/.test((link.closest('.cw-board-item') || link).getAttribute('data-attributes') || ''),
@@ -1815,13 +1815,14 @@ function getChatingWikiListTitle(link) {
         || item.querySelector('.cw-board-item__title');
     if (!titleContainer) return null;
 
-    const titleElement = titleContainer.querySelector('strong');
+    const titleElement = titleContainer.querySelector('a.cw-material-evaluation-title-link')
+        || titleContainer.querySelector('strong');
     if (titleElement) {
-        const title = getTitleTextContent(titleElement, '.cw-post-media');
+        const title = getTitleTextContent(titleElement, '.cw-post-media, .cw-material-evaluation-badges');
         if (title) return title;
     }
 
-    return getTitleTextContent(titleContainer, '.cw-post-media, .cw-board-item__comments, .cw-board-item__tags') || null;
+    return getTitleTextContent(titleContainer, '.cw-post-media, .cw-material-evaluation-badges, .cw-board-item__comments, .cw-board-item__tags') || null;
 }
 
 function getPureLinkText(link) {
@@ -3072,7 +3073,8 @@ function getListRenderTargets(link) {
         : link.closest('.cw-board-item__title');
     if (!titleTarget) return defaultTargets;
 
-    const titleStyleTarget = titleTarget.querySelector('strong') || link;
+    const titleStyleTarget = titleTarget.querySelector('a.cw-material-evaluation-title-link')
+        || titleTarget.querySelector('strong') || link;
 
     const itemTarget = link.closest('.cw-board-item');
     const tagsTarget = titleTarget.querySelector(':scope > .cw-board-item__tags')
@@ -3182,7 +3184,7 @@ function applyStyleToSingleLink(link) {
     const isChatingWikiSite = hostname.includes('chating.wiki');
     const chatingWikiItem = isChatingWikiSite ? link.closest('.cw-board-item') : null;
     const chatingWikiTagText = isChatingWikiSite
-        ? Array.from(link.querySelectorAll('.cw-board-item__tags > i:not([data-kind])')).map(tag => tag.textContent || '').join(' ')
+        ? Array.from((chatingWikiItem || link).querySelectorAll('.cw-board-item__tags > i:not([data-kind])')).map(tag => tag.textContent || '').join(' ')
         : '';
     const translationText = tcafeRow
         ? tcafeRow.textContent || ''

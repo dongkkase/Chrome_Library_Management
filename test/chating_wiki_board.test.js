@@ -122,7 +122,7 @@ test('채팅위키 게시판: 새 목록 구조와 기존 목록의 매칭 및 �
     const match = browser.stdout.match(/<pre id="results">([\s\S]*?)<\/pre>/);
     assert.ok(match, `브라우저 테스트 결과가 없습니다: ${browser.stderr}\n${browser.stdout}`);
     const results = JSON.parse(match[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
-    assert.equal(results.length, 12, '필수 브라우저 테스트가 실행되지 않았습니다.');
+    assert.equal(results.length, 15, '필수 브라우저 테스트가 실행되지 않았습니다.');
     for (const result of results) {
         await t.test(result.name, () => assert.equal(result.ok, true, result.error));
     }
@@ -147,20 +147,25 @@ function runBoardTests(api) {
         }
     }
 
-    function createRow(legacy = false, titleText = title) {
+    function createRow(layout = 'nested', titleText = title) {
+        const legacy = layout === 'row';
+        const nested = layout === 'nested';
         const row = document.createElement(legacy ? 'a' : 'div');
         row.className = 'cw-board-item has-material is-secret-material has-selectable-title';
         row.setAttribute('role', 'row');
         row.dataset.postId = '180165';
         row.dataset.attributes = '펌|구작|만화|웹추출|1500px이상|미완결';
         const href = '/게시판/남성향/만화-웹툰/글/180165';
-        const titleTag = legacy ? 'span' : 'a';
+        const titleTag = legacy ? 'span' : nested ? 'div' : 'a';
         const tags = '<span class="cw-board-item__tags"><i>펌</i><i>구작</i><i>만화</i><i>웹추출</i><i>1500px이상</i><i>미완결</i><span class="cw-board-item__material-tags"><i data-kind="cost">● 200P</i><i data-kind="expiry">● 28D 23:28:06</i></span></span>';
-        const headline = `<span class="cw-board-item__headline"><strong><span class="cw-post-media" role="img" aria-label="이미지 · 링크"><span class="cw-post-media__icon is-image" aria-hidden="true"><svg viewBox="0 0 24 24"><title>이미지 아이콘</title><path d="M5 3h14"></path></svg></span></span>${titleText}</strong><em class="cw-board-item__comments" aria-label="댓글 0개">0</em></span>`;
-        row.innerHTML = `<${titleTag} class="cw-board-item__title" ${legacy ? '' : `href="${href}" role="cell"`}>${headline}${legacy ? '' : tags}</${titleTag}>${legacy ? tags : ''}<span class="cw-board-item__meta"><span class="cw-board-item__recommend" role="cell">2/0</span><span class="cw-board-item__views" role="cell">31</span><time class="cw-board-item__time" role="cell" datetime="2026-10-19T02:33:30.562Z">31분 전</time></span>`;
+        const titleContent = nested
+            ? `<span class="cw-material-evaluation-badges" data-material-evaluation-post-id="180165" hidden></span><a href="${href}" class="cw-material-evaluation-title-link" style="color:rgb(40, 40, 40)">${titleText}</a>`
+            : titleText;
+        const headline = `<span class="cw-board-item__headline"><strong><span class="cw-post-media" role="img" aria-label="이미지 · 링크"><span class="cw-post-media__icon is-image" aria-hidden="true"><svg viewBox="0 0 24 24"><title>이미지 아이콘</title><path d="M5 3h14"></path></svg></span></span>${titleContent}</strong><em class="cw-board-item__comments" aria-label="댓글 0개">0</em></span>`;
+        row.innerHTML = `<${titleTag} class="cw-board-item__title" ${layout === 'title' ? `href="${href}"` : ''} role="cell">${headline}${legacy ? '' : tags}</${titleTag}>${legacy ? tags : ''}<span class="cw-board-item__meta"><span class="cw-board-item__recommend" role="cell">2/0</span><span class="cw-board-item__views" role="cell">31</span><time class="cw-board-item__time" role="cell" datetime="2026-10-19T02:33:30.562Z">31분 전</time></span>`;
         if (legacy) row.href = href;
         document.body.appendChild(row);
-        return { row, link: legacy ? row : row.querySelector('.cw-board-item__title') };
+        return { row, link: legacy ? row : row.querySelector(nested ? '.cw-material-evaluation-title-link' : '.cw-board-item__title') };
     }
 
     function clickSearch(row, expectedTitle) {
@@ -175,19 +180,21 @@ function runBoardTests(api) {
         assert(message.cleanTitle === expectedTitle, `잘못 전송된 제목: ${message.cleanTitle}`);
     }
 
-    check('사이트 선택자는 새 제목 링크와 기존 게시물 링크를 각각 한 번 선택', () => {
+    check('사이트 선택자는 안쪽 제목 링크, 제목 셀 링크, 게시물 행 링크를 각각 한 번 선택', () => {
         const current = createRow();
-        const legacy = createRow(true);
+        const titleCell = createRow('title');
+        const legacy = createRow('row');
+        current.row.querySelector('.cw-material-evaluation-badges').innerHTML = '<a href="/평가">확인 요청</a>';
         const selected = Array.from(document.querySelectorAll(api.config.selector));
-        assert(selected.length === 2, `선택된 요소: ${selected.length}`);
-        assert(selected[0] === current.link && selected[1] === legacy.link, '게시물 제목 링크가 선택되지 않았습니다.');
+        assert(selected.length === 3, `선택된 요소: ${selected.length}`);
+        assert(selected[0] === current.link && selected[1] === titleCell.link && selected[2] === legacy.link, '게시물 제목 링크가 선택되지 않았습니다.');
         assert(selected.every(link => link.tagName === 'A'), '목록 처리 대상으로 링크가 아닌 요소가 선택되었습니다.');
     });
 
-    for (const legacy of [false, true]) {
-        const label = legacy ? '기존 구조' : '새 구조';
+    for (const layout of ['nested', 'title', 'row']) {
+        const label = { nested: '안쪽 제목 링크 구조', title: '제목 셀 링크 구조', row: '게시물 행 링크 구조' }[layout];
         check(`${label}: 댓글, 속성, 자료 정보, 아이콘을 제외한 원본 제목 추출`, () => {
-            const { row, link } = createRow(legacy);
+            const { row, link } = createRow(layout);
             const before = row.innerHTML;
             assert(api.getPureLinkText(link) === title, api.getPureLinkText(link));
             assert(api.getChatingWikiListTitle(row.querySelector('strong')) === title);
@@ -195,7 +202,7 @@ function runBoardTests(api) {
         });
 
         check(`${label}: 일치 도서 뱃지와 퀵메뉴 위치 및 반복 렌더링 유지`, () => {
-            const { row, link } = createRow(legacy);
+            const { row, link } = createRow(layout);
             const metadata = row.querySelector('.cw-board-item__meta');
             const metadataBefore = metadata.outerHTML;
             api.applyStyleToSingleLink(link);
@@ -207,7 +214,12 @@ function runBoardTests(api) {
             assert(badge?.parentElement === row.querySelector('.cw-board-item__title'), '뱃지 위치가 잘못되었습니다.');
             assert(badge.textContent.includes('(100%)'), badge.textContent);
             assert(actions?.parentElement === row.querySelector('.cw-board-item__tags'), '퀵메뉴 위치가 잘못되었습니다.');
-            assert(row.querySelector('strong').dataset.bmTitleStyled === 'true', '제목 스타일이 적용되지 않았습니다.');
+            const styledTitle = layout === 'nested' ? link : row.querySelector('strong');
+            assert(styledTitle.dataset.bmTitleStyled === 'true', '제목 스타일이 적용되지 않았습니다.');
+            if (layout === 'nested') {
+                assert(getComputedStyle(link).color === 'rgb(217, 72, 15)', '제목 링크에 매칭 색상이 표시되지 않았습니다.');
+                assert(!row.querySelector('strong').dataset.bmTitleStyled, '아이콘과 평가 배지를 포함한 영역에 제목 스타일이 적용되었습니다.');
+            }
             clickSearch(row, '먼작귀');
             for (let index = 0; index < 3; index++) api.applyStyleToSingleLink(link);
             assert(row.querySelectorAll('.book-badge').length === 1, '뱃지가 중복되었습니다.');
@@ -219,7 +231,7 @@ function runBoardTests(api) {
     }
 
     check('새 구조: 미등록 게시물에도 퀵메뉴를 표시하고 실제 제목 전송', () => {
-        const { row, link } = createRow(false, '테스트 미등록 도서 1권 (1500px)');
+        const { row, link } = createRow('nested', '테스트 미등록 도서 1권 (1500px)');
         api.applyStyleToSingleLink(link);
         assert(link._bmData.matchedBookId === null && !row.querySelector('.book-badge'));
         assert(row.querySelectorAll('.bm-quick-actions').length === 1);
@@ -229,7 +241,7 @@ function runBoardTests(api) {
     check('새 구조: 동적으로 바뀐 제목을 퀵버튼과 재매칭에 즉시 반영', () => {
         const { row, link } = createRow();
         api.applyStyleToSingleLink(link);
-        row.querySelector('strong').textContent = '나이트런 나이트폴 5권 (1500px)';
+        link.textContent = '나이트런 나이트폴 5권 (1500px)';
         clickSearch(row, '나이트런 나이트폴');
         api.applyStyleToSingleLink(link);
         assert(link._bmData.matchedBookId === 2, `도서 ID: ${link._bmData.matchedBookId}`);
@@ -275,6 +287,27 @@ function runBoardTests(api) {
         api.applyStyleToSingleLink(link);
         assert(link._bmData.matchedBookId === 1);
         clickSearch(row, '먼작귀');
+    });
+
+    check('새 구조: 평가 배지 갱신은 제목, 권수, 해상도 및 퀵메뉴에 영향을 주지 않음', () => {
+        const titleText = '랜드리올 1~31권 1428px';
+        const { row, link } = createRow('nested', titleText);
+        api.applyStyleToSingleLink(link);
+        const actions = row.querySelector('.bm-quick-actions');
+        const evaluation = row.querySelector('.cw-material-evaluation-badges');
+        evaluation.hidden = false;
+        evaluation.textContent = '확인 요청 2';
+        assert(api.getPureLinkText(link) === titleText, api.getPureLinkText(link));
+        assert(api.getChatingWikiListTitle(evaluation) === titleText);
+        api.applyStyleToSingleLink(link);
+        assert(link._bmData.pureTitle === '랜드리올' && link._bmData.siteVol === 31 && link._bmData.siteRes === 1428);
+        assert(row.querySelector('.bm-quick-actions') === actions, '평가 배지 변경으로 퀵메뉴가 다시 생성되었습니다.');
+        clickSearch(row, '랜드리올');
+        link.replaceWith(document.createTextNode(titleText));
+        assert(api.getPureLinkText(row) === titleText, '제목 링크가 없을 때 평가 배지가 제목에 포함되었습니다.');
+        const strong = row.querySelector('strong');
+        strong.replaceWith(...strong.childNodes);
+        assert(api.getPureLinkText(row) === titleText, 'strong이 없을 때 평가 배지가 제목에 포함되었습니다.');
     });
 
     check('새 구조: 퀵 버튼 설정 변경은 제목과 매칭을 유지하며 목록 메뉴에 반영', () => {
