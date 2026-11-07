@@ -3676,7 +3676,7 @@ loadInitialContentData((data, usedLegacyBookList, markerTokenBeforeBooks) => {
         if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
         if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
         if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
-        if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
+        if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions, .cw-board-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
         fixStyle.textContent = styleContent;
 
         applyStyles();
@@ -3935,7 +3935,7 @@ function updateManagedStyleSheet() {
     if (globalCustomCss && isAllowedBoard) styleContent += "\n" + globalCustomCss;
     if (globalBoardCss2) styleContent += "\n" + globalBoardCss2;
     if (globalThemeCss && isAllowedBoard && isCustomThemeEnabled) styleContent += "\n" + globalThemeCss;
-    if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
+    if (isShowListQuickBtnHover) styleContent += "\n.bm-quick-actions.list-actions { opacity: 0 !important; visibility: hidden !important; transition: opacity 0.2s, visibility 0.2s; }\na:hover .bm-quick-actions.list-actions, td:hover .bm-quick-actions.list-actions, li:hover .bm-quick-actions.list-actions, div.list-item:hover .bm-quick-actions.list-actions, .cw-board-item:hover .bm-quick-actions.list-actions { opacity: 1 !important; visibility: visible !important; }";
     fixStyle.textContent = styleContent;
 }
 
