@@ -1338,7 +1338,7 @@ async function renderSnapshots() {
     try {
         const snapshots = await db.snapshots.orderBy('timestamp').reverse().toArray();
         if (snapshots.length === 0) {
-            container.innerHTML = '<li style="font-size: 13px; color: var(--text-muted);">저장된 복원 지점이 없습니다. 일일 백업 또는 Google 동기화로 목록을 교체하기 전에 생성됩니다.</li>';
+            container.innerHTML = '<li class="snapshot-empty">저장된 복원 지점이 없습니다. 일일 백업 또는 Google 동기화로 목록을 교체하기 전에 생성됩니다.</li>';
             return;
         }
         container.innerHTML = snapshots.map(snap => {
@@ -1346,12 +1346,12 @@ async function renderSnapshots() {
             const displayTime = `${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
             const bookCount = snap.data && snap.data.bookList ? snap.data.bookList.length : 0;
             return `
-                <li style="display:flex; justify-content:space-between; align-items:center; background:var(--input-bg); border:1px solid var(--border); padding:10px 15px; border-radius:6px;">
-                    <div>
-                        <strong style="color:var(--text); font-size:13px;">📅 ${snap.dateStr} 자동 백업</strong><br>
-                        <span style="color:var(--text-muted); font-size:11px;">저장 시간: ${displayTime} | 도서 데이터: ${bookCount}건</span>
+                <li class="snapshot-item">
+                    <div class="snapshot-details">
+                        <strong>${escapeOptionsHtml(snap.dateStr)} 자동 백업</strong>
+                        <span>저장 시간: ${displayTime} · 도서 ${bookCount.toLocaleString('ko-KR')}건</span>
                     </div>
-                    <button class="btn-restore-snap" data-id="${snap.id}" style="background:#fd7e14; padding:5px 12px; font-size:12px; border:none;">이 시점으로 복원</button>
+                    <button class="btn-restore-snap backup-secondary" type="button" data-id="${snap.id}">이 시점으로 복원</button>
                 </li>`;
         }).join('');
         
@@ -1392,7 +1392,7 @@ async function renderSnapshots() {
             };
         });
     } catch (err) {
-        container.innerHTML = '<li style="font-size: 13px; color: #dc3545;">스냅샷을 불러오는 데 실패했습니다.</li>';
+        container.innerHTML = '<li class="snapshot-empty is-error" role="alert">복원 지점을 불러오지 못했습니다.</li>';
     }
 }
 
@@ -1859,6 +1859,9 @@ function initializeOptionDisclosures() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('change', event => {
+        if (event.target.matches('input[role="switch"]')) void LibraryMotion.animateSwitch(event.target);
+    }, true);
     initializeOptionDisclosures();
     void initializeQuickButtonSettings();
 

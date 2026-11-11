@@ -103,6 +103,7 @@ test('다운로드 파일명 제안은 정리된 폴더를 사용하고 파일�
     `, {
         downloadTitlesMap: { 42: '만화./예시 도서...' },
         expectedDownloadFolder: '(미완)다른 도서. ',
+        FileBackup: { isBackupDownload: item => item.url?.startsWith('blob:chrome-extension://test/') },
         chrome: { storage: { local: { get: (_defaults, callback) => callback({ autoFolder: true }) } } }
     });
     for (const [id, expectedFolder] of [[42, '만화/예시 도서'], [43, '(미완)다른 도서']]) {
@@ -112,4 +113,8 @@ test('다운로드 파일명 제안은 정리된 폴더를 사용하고 파일�
         assert.equal(suggestion.filename, `${expectedFolder}/Vol.1.archive.zip`);
         assert.equal(suggestion.conflictAction, 'uniquify');
     }
+    let backupSuggestion;
+    const result = listener({ id: 44, url: 'blob:chrome-extension://test/backup', filename: 'backup.json' }, value => { backupSuggestion = value; });
+    assert.equal(result, false);
+    assert.equal(backupSuggestion, undefined);
 });

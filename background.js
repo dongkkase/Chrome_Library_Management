@@ -1,4 +1,4 @@
-importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'buzzheavier-download.js', 'google-drive.js', 'google-sync.js');
+importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'buzzheavier-download.js', 'google-drive.js', 'google-sync.js', 'file-backup-folder.js', 'file-backup.js');
 
 const rightClickedContexts = new Map();
 const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
@@ -1943,6 +1943,7 @@ function startProgressBroadcasting() {
     if (progressInterval) return;
     progressInterval = setInterval(() => {
         chrome.downloads.search({ state: "in_progress" }, (results) => {
+            results = results?.filter(item => !FileBackup.isBackupDownload(item));
             if (!results || results.length === 0) {
                 clearInterval(progressInterval);
                 progressInterval = null;
@@ -1989,14 +1990,16 @@ function broadcastToAllTabs(message) {
 }
 
 chrome.downloads.onCreated.addListener((downloadItem) => {
+    if (FileBackup.isBackupDownload(downloadItem)) return;
     startProgressBroadcasting();
 });
 
 // [수정] 다운로드가 끝났을 때 메모리 누수 방지를 위해 제목 맵핑 데이터(downloadTitlesMap) 삭제
 chrome.downloads.onChanged.addListener((delta) => {
+    if (FileBackup.isBackupDownloadId(delta.id)) return;
     if (delta.state && delta.state.current === 'complete') {
         chrome.downloads.search({ id: delta.id }, (res) => {
-            if (res && res[0]) {
+            if (res && res[0] && !FileBackup.isBackupDownload(res[0])) {
                 broadcastToAllTabs({ action: "DOWNLOAD_COMPLETE_TOAST", id: delta.id, filename: res[0].filename });
             }
         });
@@ -2017,6 +2020,7 @@ let expectedDownloadFolder = null;
 let hookFallbackTimer = null;
 
 const dynamicFolderListener = (item, suggest) => {
+    if (FileBackup.isBackupDownload(item)) return false;
     const targetPath = downloadTitlesMap[item.id] || expectedDownloadFolder;
     const safePath = sanitizeDownloadFolderPath(targetPath);
     if (safePath) {
@@ -2056,6 +2060,7 @@ chrome.runtime.onMessage.addListener((message) => {
 
 // 2. 다운로드가 끝나면 즉시 스위치를 물리적으로 OFF (VDH에게 통제권 100% 반환)
 chrome.downloads.onChanged.addListener((delta) => {
+    if (FileBackup.isBackupDownloadId(delta.id)) return;
     if (delta.state && (delta.state.current === 'complete' || delta.state.current === 'interrupted')) {
         if (Object.keys(downloadTitlesMap).length === 0) {
             // 진행 중인 우리 다운로드가 없다면 브라우저에서 리스너 완전 철거
@@ -2226,3 +2231,4 @@ function initFocusLeftMacro() {
 initFocusLeftMacro();
 
 void GoogleBookSync.initialize({ syncOnStart: false }).catch(() => {});
+void FileBackup.initialize();

@@ -380,6 +380,9 @@
     categoryPanel.appendChild(createRegistrationControl());
     dock.append(categoryPanel, hidePanel);
     document.body.appendChild(dock);
+    document.addEventListener('change', event => {
+        if (event.target.matches('input[role="switch"]')) void LibraryMotion.animateSwitch(event.target);
+    }, true);
     enabledInput.addEventListener('change', updateQuickDisplay);
     hoverInput.addEventListener('change', () => document.body.classList.toggle('demo-quick-hover', hoverInput.checked));
     for (const { compact, mini } of quickDisplayControls) {

@@ -62,10 +62,51 @@ const LibraryMotion = (() => {
 
     function toggleSwitch(thumb, checked) {
         if (!thumb?.parentElement) return Promise.resolve();
-        const distance = Math.max(0, thumb.parentElement.clientWidth - thumb.offsetWidth - 8);
+        const trackStyle = window.getComputedStyle(thumb.parentElement);
+        const configuredDistance = parseFloat(trackStyle.getPropertyValue('--switch-travel'));
+        const distance = Number.isFinite(configuredDistance) ? configuredDistance
+            : Math.max(0, thumb.parentElement.clientWidth - thumb.offsetWidth - 8);
+        const transform = running.has(thumb) ? window.getComputedStyle(thumb).transform : '';
+        const matrix = transform?.match(/matrix(?:3d)?\(([^)]+)\)/)?.[1].split(',').map(Number);
+        const offset = matrix ? matrix[matrix.length === 16 ? 12 : 4] : 0;
         return animateElement(thumb, {
-            transform: [`translateX(${checked ? -distance : distance}px)`, 'translateX(0px)']
+            transform: [`translateX(${offset + (checked ? -distance : distance)}px)`, 'translateX(0px)']
         }, 0.18);
+    }
+
+    function animateSwitchTrack(track, checked) {
+        const style = window.getComputedStyle(track);
+        const from = running.has(track) ? style.backgroundColor
+            : style.getPropertyValue(checked ? '--switch-off-color' : '--switch-on-color').trim();
+        cancel(track);
+        if (reducedMotion() || typeof anime === 'undefined' || !from) return Promise.resolve();
+        const to = window.getComputedStyle(track).backgroundColor;
+        return new Promise(resolve => {
+            let finished = false;
+            let animation;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                animation?.revert();
+                if (running.get(track)?.finish === finish) running.delete(track);
+                resolve();
+            };
+            running.set(track, { finish, cancel: finish });
+            try {
+                animation = anime.animate(track, {
+                    backgroundColor: [from, to], duration: 180, ease: 'out(3)', onComplete: finish
+                });
+            } catch (_) {
+                finish();
+            }
+        });
+    }
+
+    function animateSwitch(input) {
+        const track = input?.nextElementSibling;
+        const thumb = track?.querySelector('.quick-setting-thumb, .switch-thumb');
+        if (!thumb) return Promise.resolve();
+        return Promise.all([toggleSwitch(thumb, input.checked), animateSwitchTrack(track, input.checked)]);
     }
 
     function spin(element) {
@@ -246,6 +287,7 @@ const LibraryMotion = (() => {
         feedback,
         spin,
         toggleSwitch,
+        animateSwitch,
         resize,
         bindDisclosure,
         createSlidePanel,

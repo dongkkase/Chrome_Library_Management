@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>백업 폴더 설정 · 도서 목록 매칭 매니저</title>
+    <link rel="icon" href="icon.png">
+    <link rel="stylesheet" href="file-backup-folder-window.css">
+    <script src="file-backup-folder.js" defer></script>
+    <script src="file-backup-folder-window.js" defer></script>
+</head>
+<body>
+    <main>
+        <header>
+            <img src="icon.png" width="32" height="32" alt="">
+            <div><p class="app-name">도서 목록 매칭 매니저</p><h1>백업 폴더 설정</h1></div>
+        </header>
+        <p class="description">원하는 폴더를 선택하면 그 안의 <strong>LibraryMatchingManagerBackups</strong>에 백업합니다.</p>
+        <section class="folder-card" aria-labelledby="locationHeading">
+            <h2 id="locationHeading">현재 저장 위치</h2>
+            <p id="folderLocation">확인하고 있습니다.</p>
+            <div class="actions">
+                <button id="chooseFolder" type="button" disabled>폴더 선택</button>
+                <button id="grantFolder" type="button" disabled hidden>접근 허용</button>
+            </div>
+            <p class="note">기존 백업 파일은 이동하지 않습니다.</p>
+        </section>
+        <div class="status-box" role="status" aria-live="polite">
+            <strong id="folderStatus">백업 상태를 확인하고 있습니다.</strong>
+            <span id="lastBackup"></span>
+        </div>
+        <p id="folderError" role="alert" hidden></p>
+        <p id="permissionNote" class="note" hidden>브라우저에 ‘방문할 때마다 허용’이 표시되면 선택하세요. 한 번만 허용하면 이 창을 닫은 뒤 다시 권한이 필요할 수 있습니다.</p>
+        <footer>
+            <button id="backupNow" class="secondary" type="button" disabled hidden>지금 백업</button>
+            <button id="closeWindow" class="secondary" type="button">닫기</button>
+        </footer>
+    </main>
+</body>
+</html>
