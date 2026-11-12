@@ -16,6 +16,8 @@ node scripts/package-extension.mjs \
 
 명령의 예시 ID는 실제 Google Cloud 값으로 교체해야 합니다. Node.js와 `zip` 명령이 필요합니다. 기존 출력 파일은 덮어쓰지 않습니다. 소스의 `manifest.json`은 변경하지 않고 배포 ZIP에만 `oauth2`와 웹스토어 업데이트 주소를 추가합니다. ZIP에는 새 동기화 스크립트 3개가 포함됩니다. 원본 manifest에는 OAuth ID를 임의로 넣지 않았으므로, 설정 전에는 Google 연결 버튼이 활성화되지 않습니다.
 
+배포 파일 목록은 `scripts/extension-files.txt`에서 관리하며, 로컬 `build.sh`도 같은 목록을 사용합니다. 자동 백업 스크립트와 offscreen 문서 4개가 포함되어야 합니다. 두 빌드 경로 모두 필수 파일 존재 여부와 ZIP 무결성을 확인합니다. `build.sh`는 현재 manifest 그대로 빌드하며, 검증에 성공한 뒤 기존 ZIP을 교체합니다. Google OAuth 설정을 추가하려면 위 Node.js 배포 명령을 사용하세요.
+
 웹스토어에 ZIP을 게시하기 전 manifest 버전 번호도 기존 게시 버전보다 높게 변경해야 합니다. 기존 웹스토어 항목에 게시해야 하며 새 ID로 게시하는 경우 `google-sync.js`의 `STORE_ID` 및 OAuth 클라이언트의 확장 ID를 함께 변경해야 합니다.
 
 ## 직접 설치용 배포 파일

@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,20 +71,20 @@ if (target === 'manual') {
 const filename = target === 'manual' ? 'libmanagement-manual.zip' : 'libmanagement.zip';
 const output = path.resolve(options['--output'] || path.join(root, filename));
 if (existsSync(output)) throw new Error(`기존 파일을 덮어쓸 수 없습니다. 다른 출력 경로를 지정해 주세요: ${output}`);
+const files = readFileSync(path.join(root, 'scripts', 'extension-files.txt'), 'utf8')
+    .split(/\r?\n/).filter(Boolean);
+if (!files.length) throw new Error('배포 파일 목록이 비어 있습니다.');
+for (const file of files) {
+    if (!existsSync(path.join(root, file))) throw new Error(`배포에 필요한 파일 또는 폴더가 없습니다: ${file}`);
+}
 const stage = mkdtempSync(path.join(tmpdir(), 'book-manager-release-'));
-const files = [
-    'db.js', 'dexie.min.js', 'background.js', 'common.js', 'content.js',
-    'google-drive.js', 'google-sync.js', 'google-sync-ui.js', 'download-book-update.js', 'buzzheavier-download.js',
-    'file-backup.js', 'file-backup-ui.js', 'file-backup-offscreen.html', 'file-backup-offscreen.js',
-    'book-ui.js', 'book-ui.css', 'book-shortcuts.js', 'icon.png', 'manifest.json',
-    'options.html', 'options.css', 'options.js', 'help.html', 'help.css',
-    'help.js', 'help-navigation.js', 'images', 'author.json', 'category-ui.js', 'category-ui.css',
-    'library-motion.js', 'button-ui.js', 'vendor'
-];
 try {
     for (const file of files) cpSync(path.join(root, file), path.join(stage, file), { recursive: true });
     writeFileSync(path.join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 4)}\n`);
-    execFileSync('zip', ['-q', '-r', output, ...files], { cwd: stage, stdio: 'inherit' });
+    const archive = path.join(stage, 'extension.zip');
+    execFileSync('zip', ['-q', '-r', archive, ...files], { cwd: stage, stdio: 'inherit' });
+    execFileSync('zip', ['-T', archive], { stdio: 'inherit' });
+    copyFileSync(archive, output, constants.COPYFILE_EXCL);
     process.stdout.write(`${target === 'manual' ? '직접 설치용' : '웹스토어'} 배포 파일: ${output}\n`);
 } finally {
     rmSync(stage, { recursive: true, force: true });

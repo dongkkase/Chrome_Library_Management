@@ -7,6 +7,8 @@ const { createHash, generateKeyPairSync } = require('node:crypto');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const sourceScript = path.join(__dirname, '..', 'scripts', 'package-extension.mjs');
+const sourceFiles = path.join(__dirname, '..', 'scripts', 'extension-files.txt');
+const backupFiles = ['file-backup.js', 'file-backup-ui.js', 'file-backup-offscreen.html', 'file-backup-offscreen.js'];
 const clientId = '123456789-release_client.apps.googleusercontent.com';
 const storeId = 'kjfmielegfhljmjjmhjmidlfdponknpm';
 const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -33,6 +35,7 @@ function fixture(t, options = {}) {
     fs.mkdirSync(path.join(root, 'vendor'));
     const script = path.join(root, 'scripts', 'package-extension.mjs');
     fs.copyFileSync(sourceScript, script);
+    fs.copyFileSync(sourceFiles, path.join(root, 'scripts', 'extension-files.txt'));
     for (const file of packageFiles) fs.writeFileSync(path.join(root, file), `fixture: ${file}\n`);
     fs.writeFileSync(path.join(root, 'images', 'fixture.png'), 'fixture image');
     fs.writeFileSync(path.join(root, 'vendor', 'motion.js'), 'fixture motion');
@@ -77,6 +80,13 @@ function assertFailed(input, result, message) {
     assertSourceUntouched(input);
 }
 
+function assertBackupFiles(input) {
+    for (const file of backupFiles) {
+        assert.equal(execFileSync('unzip', ['-p', input.output, file], { encoding: 'utf8' }),
+            fs.readFileSync(path.join(input.root, file), 'utf8'));
+    }
+}
+
 test('기본 웹스토어 패키징은 OAuth와 업데이트 주소를 설정하고 원본을 보존한다', t => {
     const input = fixture(t);
     const result = runPackage(input);
@@ -89,6 +99,7 @@ test('기본 웹스토어 패키징은 OAuth와 업데이트 주소를 설정하
         client_id: clientId,
         scopes: ['https://www.googleapis.com/auth/drive.appdata']
     });
+    assertBackupFiles(input);
     assertSourceUntouched(input);
 });
 
@@ -101,6 +112,7 @@ test('직접 설치 패키지는 검증된 PEM 공개 키를 포함하고 웹스
     assert.equal(manifest.key, publicBase64);
     assert.equal(manifest.update_url, undefined);
     assert.equal(manifest.oauth2.client_id, clientId);
+    assertBackupFiles(input);
     const entries = execFileSync('unzip', ['-Z1', input.output], { encoding: 'utf8' }).split('\n');
     assert.ok(entries.includes('images/fixture.png'));
     assert.ok(entries.includes('category-ui.js'));
@@ -207,4 +219,22 @@ test('기존 출력 파일을 덮어쓰지 않는다', t => {
     assert.match(result.stderr, /기존 파일을 덮어쓸 수 없습니다/);
     assert.equal(fs.readFileSync(input.output, 'utf8'), 'previous release');
     assertSourceUntouched(input);
+});
+
+test('백업 파일이 하나라도 없으면 배포 ZIP을 만들지 않는다', async t => {
+    for (const file of backupFiles) {
+        await t.test(file, subtest => {
+            const input = fixture(subtest);
+            fs.unlinkSync(path.join(input.root, file));
+            const result = runPackage(input);
+            assertFailed(input, result, /배포에 필요한 파일 또는 폴더가 없습니다/);
+            assert.ok(result.stderr.includes(file));
+        });
+    }
+});
+
+test('빈 배포 파일 목록으로는 ZIP을 만들지 않는다', t => {
+    const input = fixture(t);
+    fs.writeFileSync(path.join(input.root, 'scripts', 'extension-files.txt'), '\n');
+    assertFailed(input, runPackage(input), /배포 파일 목록이 비어 있습니다/);
 });
