@@ -4,7 +4,7 @@ const FileBackup = (() => {
     const LEGACY_DESTINATION_KEY = 'fileBackupDestination';
     const ALARM = 'book-manager-file-backup';
     const CHECK_ALARM = 'book-manager-file-backup-check';
-    const QUIET_MS = 30 * 1000; // 임시 테스트용. 테스트 후 5 * 60 * 1000으로 복원합니다.
+    const QUIET_MS = 5 * 60 * 1000;
     const MAX_WAIT_MS = 30 * 60 * 1000;
     const FOLDER = 'LibraryMatchingManagerBackups';
     const OFFSCREEN_PAGE = 'file-backup-offscreen.html';

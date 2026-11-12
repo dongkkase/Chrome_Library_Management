@@ -8,7 +8,7 @@ const { webcrypto } = require('node:crypto');
 const source = fs.readFileSync(path.join(__dirname, '..', 'file-backup.js'), 'utf8');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const MINUTE = 60 * 1000;
-const BACKUP_DELAY = 30 * 1000;
+const BACKUP_DELAY = 5 * MINUTE;
 const ALARM = 'book-manager-file-backup';
 
 function event() {
@@ -132,7 +132,7 @@ function harness(options = {}) {
     return { state, chrome, api, request, fire, change, finish };
 }
 
-test('기본값은 꺼짐이며 백업을 켜면 현재 목록을 30초 뒤 예약한다', async () => {
+test('기본값은 꺼짐이며 백업을 켜면 현재 목록을 5분 뒤 예약한다', async () => {
     const h = harness();
     await h.api.initialize();
     assert.equal(h.state.alarms.size, 0);
@@ -143,7 +143,7 @@ test('기본값은 꺼짐이며 백업을 켜면 현재 목록을 30초 뒤 예�
     assert.equal(h.state.requests.length, 0);
 });
 
-test('마지막 변경 30초 뒤 새 JSON 파일을 저장하고 완료된 파일만 성공 처리한다', async () => {
+test('마지막 변경 5분 뒤 새 JSON 파일을 저장하고 완료된 파일만 성공 처리한다', async () => {
     const h = harness({ completeImmediately: false });
     await h.request('FILE_BACKUP_SET_ENABLED', { enabled: true });
     h.state.now += BACKUP_DELAY - 1000;
@@ -207,7 +207,7 @@ test('서비스 워커가 재시작되어 예약이 없어져도 원래 기한�
     assert.equal(restarted.state.requests.length, 1);
 });
 
-test('파일 저장 시작 실패는 성공 기록을 남기지 않고 30초 뒤 재시도한다', async () => {
+test('파일 저장 시작 실패는 성공 기록을 남기지 않고 5분 뒤 재시도한다', async () => {
     const h = harness();
     h.state.downloadError = new Error('디스크 오류');
     await h.request('FILE_BACKUP_SET_ENABLED', { enabled: true });
