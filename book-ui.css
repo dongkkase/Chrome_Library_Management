@@ -134,3 +134,51 @@ body.dark-mode .bm-category-panel { background: #1c2738; border-color: #354259; 
 @media (prefers-reduced-motion: reduce) {
     .bm-missing-popover { animation: none; transform: translateX(-50%); }
 }
+#book-manager-toast-container > .bm-action-toast {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: rgba(33, 37, 41, 0.95);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font: bold 15px/1.5 sans-serif;
+    text-align: left;
+    pointer-events: auto;
+}
+
+#book-manager-toast-container .bm-action-toast-message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+#book-manager-toast-container .bm-action-toast-undo {
+    flex: none;
+    margin: 0;
+    padding: 5px 10px;
+    border: 1px solid #74c0fc;
+    border-radius: 5px;
+    background: transparent;
+    color: #a5d8ff;
+    font: inherit;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#book-manager-toast-container .bm-action-toast-undo:hover {
+    background: #364252;
+}
+
+#book-manager-toast-container .bm-action-toast-undo:focus-visible {
+    outline: 2px solid #a5d8ff;
+    outline-offset: 3px;
+}
+
+#book-manager-toast-container .bm-action-toast-undo:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}

@@ -663,7 +663,7 @@ test('DB 대상 조회는 stale ID의 low-coverage 제목을 거부하고 exact 
     );
     assert.match(
         deleteBookByMatchKey,
-        /bookStoreDeleteByTarget\s*\(\s*\{\s*id:\s*bookId,\s*matchKey:\s*targetMatchKey,\s*title,\s*categoryId,\s*rejectLowCoverageId:\s*true\s*\}\s*\)/
+        /bookStoreDeleteByTarget\s*\(\s*\{\s*id:\s*bookId,\s*matchKey:\s*targetMatchKey,\s*title,\s*categoryId,\s*rejectLowCoverageId:\s*true\s*\},\s*undoContext\s*\)/
     );
 });
 

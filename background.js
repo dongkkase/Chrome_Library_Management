@@ -1,4 +1,4 @@
-importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'buzzheavier-download.js', 'google-drive.js', 'google-sync.js', 'file-backup-folder.js', 'file-backup.js');
+importScripts('dexie.min.js', 'db.js', 'common.js', 'download-book-update.js', 'buzzheavier-download.js', 'google-drive.js', 'google-sync.js', 'file-backup.js');
 
 const rightClickedContexts = new Map();
 const RIGHT_CLICK_CONTEXT_MAX_AGE_MS = 30 * 1000;
@@ -376,7 +376,9 @@ async function handleQuickAction(message, sender) {
 
     if (message.type === "delete") {
         return enqueueBookMutation(() => {
-            return deleteBookByMatchKey(sanitizedTitle, tabId, 'quick-action', message.bookId, categoryId);
+            return bookStoreWithSyncLock(() => deleteBookByMatchKey(
+                sanitizedTitle, tabId, 'quick-action', message.bookId, categoryId, { tabId }
+            ));
         });
     }
 
@@ -389,9 +391,18 @@ async function handleQuickAction(message, sender) {
         lastVol: message.lastVol,
         type: message.type,
         dateString: new Date().toISOString(),
-        tabId
+        tabId,
+        undoContext: { tabId }
     };
-    return enqueueBookMutation(() => processSaveQueue([task]));
+    return enqueueBookMutation(() => bookStoreWithSyncLock(() => processSaveQueue([task])));
+}
+
+async function handleQuickActionUndo(message, sender) {
+    return bookStoreWithSyncLock(async () => {
+        const change = await bookStoreUndoQuickAction(message.undoToken, sender.tab?.id ?? null);
+        await bookStorePublishChange({ ...change, reason: 'quick-action-undo' });
+        return { ok: true };
+    });
 }
 
 function waitForBuzzheavierTabReady(tabId, timeoutMs = 20000) {
@@ -692,6 +703,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return true;
   }
+
+    else if (message.action === 'UNDO_QUICK_ACTION') {
+        enqueueBookMutation(() => handleQuickActionUndo(message, sender)).then(sendResponse).catch(error => {
+            sendResponse({ ok: false, error: getBookStoreErrorMessage(error) });
+        });
+        return true;
+    }
 
   else if (message.action === "QUICK_ACTION") {
       handleQuickAction(message, sender).then(result => {
@@ -1625,7 +1643,7 @@ async function handleDownloadBookUpdate(message, sender) {
     });
 }
 
-async function deleteBookByMatchKey(title, tabId, reason, bookId = null, categoryId) {
+async function deleteBookByMatchKey(title, tabId, reason, bookId = null, categoryId, undoContext = null) {
     try {
         await customFiltersReady;
         const targetMatchKey = getTitleMatchParts(title || '').matchKey;
@@ -1635,7 +1653,7 @@ async function deleteBookByMatchKey(title, tabId, reason, bookId = null, categor
             title,
             categoryId,
             rejectLowCoverageId: true
-        });
+        }, undoContext);
 
         if (!deletedBook) {
             sendTabMessage(tabId, {
@@ -1652,7 +1670,7 @@ async function deleteBookByMatchKey(title, tabId, reason, bookId = null, categor
             id: deletedBook.id,
             book: deletedBook
         });
-        sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true });
+        sendTabMessage(tabId, { action: "SHOW_TOAST", book: deletedBook, isDelete: true, undoToken: deletedBook._quickUndoToken });
         return { ok: true, book: deletedBook };
     } catch (error) {
         const errorMessage = getBookStoreErrorMessage(error);
@@ -1881,6 +1899,7 @@ async function processSaveQueue(tasks) {
                     categoryId: task.categoryId,
                     rejectLowCoverageId: true
                 },
+                undoContext: task.undoContext,
                 updateBook: existingBook => {
                     return existingBook ? {
                         ...existingBook,
@@ -1920,7 +1939,8 @@ async function processSaveQueue(tasks) {
             if (queuedTasks.length > 1) {
                 msgBook.title = "[총 " + queuedTasks.length + "건 연속 처리] " + msgBook.title;
             }
-            sendTabMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook });
+            const undoToken = queuedTasks.length === 1 ? mutationResult.undoTokens?.[0] : null;
+            sendTabMessage(targetTabId, { action: "SHOW_TOAST", book: msgBook, undoToken });
         }
         return { ok: true, book: lastSavedBook, books: savedChanges.map(change => change.book) };
     } catch (error) {

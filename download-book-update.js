@@ -21,7 +21,8 @@ const DownloadBookUpdate = (() => {
                 addVolume(current);
                 if (index > 0 && /^[~\-～〜〰∼–—ㅡ_]$/.test(tokens[index - 1])) {
                     const previous = Number(tokens[index - 2]);
-                    if (previous > 0 && current >= previous && current <= MAX_VOLUME) {
+                    // 0부터 시작하는 범위도 1권 이후를 포함하며, 0권 자체는 저장하지 않습니다.
+                    if (previous >= 0 && current >= previous && current <= MAX_VOLUME) {
                         for (let volume = previous + 1; volume < current; volume++) addVolume(volume);
                     }
                 }

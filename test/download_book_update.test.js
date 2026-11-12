@@ -86,6 +86,47 @@ test('권수 범위, 개별 목록, 총 권수 및 해상도를 구분한다', (
     for (const [title, expected] of cases) assert.deepEqual(plain(api.parseTitle(title).volumes), expected, title);
 });
 
+const zeroStartCompleteTitle = '[직공5] (K사 금일완결) 낭만검객 곽사부 0-154(完)';
+
+test('0으로 시작하는 범위는 1권부터 마지막 권까지 포함한다', () => {
+    for (const separator of ['~', '-', '～', '〜', '〰', '∼', '–', '—', '_']) {
+        for (const range of [`0${separator}3`, `0${separator}3권`, `0권${separator}3권`, `0${separator}3화`]) {
+            const title = `예시 도서 ${range} 완결`;
+            const metadata = api.parseTitle(title);
+            assert.deepEqual(plain(metadata.volumes), [1, 2, 3], title);
+            assert.equal(metadata.lastVolume, 3, title);
+        }
+    }
+    for (const title of ['예시 도서 0,3권', '예시 도서 0/3권', '예시 도서 0&3권']) {
+        assert.deepEqual(plain(api.parseTitle(title).volumes), [3], title);
+        assert.deepEqual(plain(update(null, title).missingVols), [1, 2], title);
+    }
+    for (const title of ['예시 도서 0권', '예시 도서 0-0권', '예시 도서 0-100001권']) {
+        assert.deepEqual(plain(api.parseTitle(title).volumes), [], title);
+    }
+});
+
+test('제보된 0-154 완결 도서를 처음 등록해도 누락 권수를 생성하지 않는다', () => {
+    const metadata = api.parseTitle(zeroStartCompleteTitle);
+    assert.equal(metadata.complete, true);
+    assert.deepEqual(plain(metadata.volumes), Array.from({ length: 154 }, (_, index) => index + 1));
+    const completed = update(null, zeroStartCompleteTitle);
+    assert.equal(completed.type, 'complete');
+    assert.equal(completed.lastVol, '154');
+    assert.deepEqual(plain(completed.missingVols), []);
+});
+
+test('0으로 시작하는 범위는 기존 누락 중 포함된 권수만 해제한다', () => {
+    const existing = book({ lastVol: '160', missingVols: [1, 2, 153, 154, 158] });
+    const completed = update(existing, zeroStartCompleteTitle);
+    assert.equal(completed.type, 'complete');
+    assert.equal(completed.lastVol, '160');
+    assert.deepEqual(plain(completed.missingVols), [158]);
+    assert.equal(update(completed, zeroStartCompleteTitle), null);
+    const sparse = update(null, '예시 도서 0-3,5권 완결');
+    assert.deepEqual(plain(sparse.missingVols), [4]);
+});
+
 test('범위에 포함된 누락만 해제하고 건너뛴 권수 및 다른 누락은 보존한다', () => {
     const next = update(book({ missingVols: [2, 5] }), '예시 도서 7~9권');
     assert.deepEqual(plain(next.missingVols), [2, 5]);
@@ -171,6 +212,24 @@ test('저장된 최신 도서와 누락 지도 기준으로 갱신하고 DB, 설
     await harness.update('예시 도서 7권');
     assert.equal(harness.writes, 2);
     assert.equal(harness.markers.length, 2);
+});
+
+test('0-154 범위로 다시 갱신하면 잘못 저장된 전체 누락을 DB와 설정에서 해제한다', async () => {
+    const missingVols = Array.from({ length: 153 }, (_, index) => index + 1);
+    const harness = createStoreHarness(book({ type: 'complete', lastVol: '154', missingVols }),
+        { '1': missingVols, 'other': [3] });
+    const result = await harness.update(zeroStartCompleteTitle);
+    assert.equal(result.ok, true);
+    assert.ok(result.book);
+    assert.equal(result.book.type, 'complete');
+    assert.equal(result.book.lastVol, '154');
+    assert.deepEqual(plain(harness.currentBook.missingVols), []);
+    assert.deepEqual(plain(harness.settings.missingVolsMap), { '1': [], 'other': [3] });
+    assert.deepEqual(plain(harness.settings.missingVolsUpdate.missingVols), []);
+    assert.deepEqual(harness.markers[0].book.missingVols, []);
+    assert.deepEqual(harness.toasts[0].book.missingVols, []);
+    assert.equal((await harness.update(zeroStartCompleteTitle)).skipped, true);
+    assert.equal(harness.writes, 1);
 });
 
 test('부모/하위 옵션 OFF 및 미지원/유사 도메인에서는 저장하지 않는다', async () => {

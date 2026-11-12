@@ -200,42 +200,35 @@ function runOptionsAsyncTask(task, actionLabel = '도서 목록 처리', button 
 }
 
 function showInfoToast(msg, isError = false) {
-  let container = document.getElementById('book-manager-info-toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'book-manager-info-toast-container';
-    container.style.cssText = "position:fixed; bottom:20px; right:20px; z-index:999999; display:flex; flex-direction:column; gap:10px; pointer-events:none;";
-    document.body.appendChild(container);
-  }
-  
-  const toast = document.createElement('div');
-  const bgColor = isError ? '#dc3545' : '#17a2b8';
-  
-  toast.style.cssText = "background: " + bgColor + "; color: white; max-width: calc(100vw - 40px); box-sizing: border-box; padding: 12px 35px 12px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(20px); transition: all 0.3s ease; white-space: normal; pointer-events: auto; position: relative;";
-  toast.innerHTML = msg;
-
-  const closeBtn = document.createElement('span');
-  closeBtn.innerHTML = "&times;";
-  closeBtn.style.cssText = "position: absolute; top: 8px; right: 12px; font-size: 20px; font-weight: normal; cursor: pointer; opacity: 0.6; line-height: 1;";
-  closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
-  closeBtn.onmouseout = () => closeBtn.style.opacity = '0.6';
-  closeBtn.onclick = () => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateX(20px)';
-      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
-  };
-  toast.appendChild(closeBtn);
-  container.appendChild(toast);
-
-  void toast.offsetWidth;
-  toast.style.opacity = '1';
-  toast.style.transform = 'translateX(0)';
-  
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(20px)';
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350); 
-  }, 3000);
+    let container = document.getElementById('book-manager-info-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'book-manager-info-toast-container';
+        container.className = 'info-toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `info-toast${isError ? ' is-error' : ''}`;
+    toast.setAttribute('role', isError ? 'alert' : 'status');
+    toast.innerHTML = msg;
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'info-toast-close';
+    closeButton.setAttribute('aria-label', '알림 닫기');
+    closeButton.textContent = '×';
+    let closing = false;
+    let timer;
+    function close() {
+        if (closing) return;
+        closing = true;
+        clearTimeout(timer);
+        void LibraryMotion.conceal(toast, { offset: 8 }).then(() => toast.remove());
+    }
+    closeButton.addEventListener('click', close);
+    toast.appendChild(closeButton);
+    container.appendChild(toast);
+    void LibraryMotion.reveal(toast, { offset: 8 });
+    timer = setTimeout(close, isError ? 5000 : 3000);
 }
 
 function parseDateStr(str) {

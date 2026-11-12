@@ -18,6 +18,7 @@ const BOOK_STORE_MIGRATION_SENTINEL = 'legacy-book-list-v5';
 const BOOK_STORE_INDEX_META_KEY = 'book-index-signature';
 const BOOK_STORE_REVISION_META_KEY = 'book-store-revision';
 const BOOK_STORE_CHANGE_KEY = 'bookStoreChange';
+const BOOK_STORE_QUICK_UNDO_META_KEY = 'quick-action-undo';
 const BOOK_STORE_CONTEXT_ID = `book-store-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let bookStoreReadyPromise = null;
 let bookStoreIndexedSignature = null;
@@ -366,6 +367,7 @@ function toPublicBook(book) {
     const publicBook = { ...book };
     delete publicBook.cleanTitleStr;
     delete publicBook._bookStoreRevision;
+    delete publicBook._quickUndoToken;
     return publicBook;
 }
 
@@ -618,7 +620,8 @@ async function bookStorePutManyByTarget(entries) {
         }
         return {
             target: entry.target && typeof entry.target === 'object' ? entry.target : {},
-            updateBook: entry.updateBook
+            updateBook: entry.updateBook,
+            undoContext: entry.undoContext
         };
     });
 
@@ -631,6 +634,7 @@ async function bookStorePutManyByTarget(entries) {
 
     const mutationResult = await runBookStoreIndexTransaction('rw', async () => {
         const storedBooks = [];
+        const undoTokens = [];
         for (const entry of normalizedEntries) {
             const existingStoredBook = await findStoredBookByTarget(entry.target);
             const existingBook = toPublicBook(existingStoredBook);
@@ -643,21 +647,25 @@ async function bookStorePutManyByTarget(entries) {
             if (existingStoredBook) storedBook.id = existingStoredBook.id;
             const id = await db.books.put(storedBook);
             storedBooks.push({ ...storedBook, id });
+            undoTokens.push(entry.undoContext
+                ? await rememberQuickActionUndo(existingStoredBook, { ...storedBook, id }, entry.undoContext)
+                : null);
         }
 
         const revision = await incrementBookStoreRevisionInTransaction();
-        return { storedBooks, revision };
+        return { storedBooks, revision, undoTokens };
     });
 
     return {
         books: mutationResult.storedBooks.map(book => {
             return attachBookStoreRevision(book, mutationResult.revision);
         }),
-        revision: mutationResult.revision
+        revision: mutationResult.revision,
+        undoTokens: mutationResult.undoTokens
     };
 }
 
-async function bookStoreDeleteByTarget(target) {
+async function bookStoreDeleteByTarget(target, undoContext = null) {
     await ensureBookStoreReady();
 
     const mutationResult = await runBookStoreIndexTransaction('rw', async () => {
@@ -665,11 +673,99 @@ async function bookStoreDeleteByTarget(target) {
         if (!existingBook) return null;
 
         await db.books.delete(existingBook.id);
+        const undoToken = undoContext ? await rememberQuickActionUndo(existingBook, null, undoContext) : null;
         const revision = await incrementBookStoreRevisionInTransaction();
-        return { book: existingBook, revision };
+        return { book: existingBook, revision, undoToken };
     });
     if (!mutationResult) return null;
-    return attachBookStoreRevision(mutationResult.book, mutationResult.revision);
+    const deletedBook = attachBookStoreRevision(mutationResult.book, mutationResult.revision);
+    if (mutationResult.undoToken) deletedBook._quickUndoToken = mutationResult.undoToken;
+    return deletedBook;
+}
+
+async function rememberQuickActionUndo(before, after, context) {
+    const data = await Dexie.waitFor(chrome.storage.local.get({ missingVolsMap: {} }));
+    const missingVolsMap = data.missingVolsMap || {};
+    const book = before || after;
+    const key = String(book.id);
+    const history = await db.meta.get(BOOK_STORE_QUICK_UNDO_META_KEY);
+    const token = crypto.randomUUID();
+    const entry = {
+        token,
+        tabId: context.tabId,
+        before: toPublicBook(before),
+        after: toPublicBook(after),
+        relatedBookIds: before && !after
+            ? (await db.books.where('cleanTitleStr').equals(getBookStoreMatchKey(before.title)).toArray())
+                .filter(candidate => normalizeBookCategory(candidate.categoryId) === normalizeBookCategory(before.categoryId))
+                .map(candidate => candidate.id)
+            : [],
+        missingVols: getBookMissingVols(book, missingVolsMap),
+        hasMissingVolsEntry: Object.prototype.hasOwnProperty.call(missingVolsMap, key),
+        missingVolsEntry: missingVolsMap[key]
+    };
+    await db.meta.put({
+        key: BOOK_STORE_QUICK_UNDO_META_KEY,
+        entries: [...(history?.entries || []).slice(-99), entry]
+    });
+    return token;
+}
+
+function getQuickUndoComparableBook(book) {
+    const normalize = value => {
+        if (Array.isArray(value)) return value.map(normalize);
+        if (!value || typeof value !== 'object') return value;
+        return Object.fromEntries(Object.keys(value).sort().map(key => [key, normalize(value[key])]));
+    };
+    return JSON.stringify(normalize(toPublicBook(book)));
+}
+
+async function bookStoreUndoQuickAction(token, tabId) {
+    await ensureBookStoreReady();
+    return runBookStoreIndexTransaction('rw', async () => {
+        const history = await db.meta.get(BOOK_STORE_QUICK_UNDO_META_KEY);
+        const entry = history?.entries?.find(item => item.token === token && item.tabId === tabId);
+        if (!entry) throw new Error('되돌릴 작업이 없거나 이미 되돌린 작업입니다.');
+
+        const book = entry.before || entry.after;
+        const current = await db.books.get(book.id);
+        const data = await Dexie.waitFor(chrome.storage.local.get({ missingVolsMap: {} }));
+        const missingVolsMap = { ...(data.missingVolsMap || {}) };
+        const hasChanged = getQuickUndoComparableBook(current) !== getQuickUndoComparableBook(entry.after)
+            || JSON.stringify(getBookMissingVols(current || book, missingVolsMap)) !== JSON.stringify(entry.missingVols);
+        if (hasChanged) throw new Error('이 도서가 이후에 변경되어 되돌릴 수 없습니다. 최근 작업부터 되돌려주세요.');
+
+        if (entry.before && !entry.after) {
+            const matches = await db.books.where('cleanTitleStr').equals(getBookStoreMatchKey(book.title)).toArray();
+            if (matches.some(candidate => normalizeBookCategory(candidate.categoryId) === normalizeBookCategory(book.categoryId)
+                && !entry.relatedBookIds.includes(candidate.id))) {
+                throw new Error('같은 분류에 도서가 다시 등록되어 삭제를 되돌릴 수 없습니다.');
+            }
+        }
+
+        if (entry.before) {
+            await db.books.put({ ...entry.before, cleanTitleStr: getBookStoreMatchKey(entry.before.title) });
+        } else {
+            await db.books.delete(book.id);
+        }
+        const revision = await incrementBookStoreRevisionInTransaction();
+        await db.meta.put({
+            key: BOOK_STORE_QUICK_UNDO_META_KEY,
+            entries: history.entries.filter(item => item.token !== token)
+        });
+        if (entry.hasMissingVolsEntry) missingVolsMap[String(book.id)] = entry.missingVolsEntry;
+        else delete missingVolsMap[String(book.id)];
+        if (JSON.stringify(missingVolsMap) !== JSON.stringify(data.missingVolsMap || {})) {
+            await Dexie.waitFor(chrome.storage.local.set({ missingVolsMap }));
+        }
+
+        return {
+            type: entry.before ? 'upsert' : 'delete',
+            id: book.id,
+            book: attachBookStoreRevision(entry.before || entry.after, revision),
+            revision
+        };
+    });
 }
 
 async function bookStorePut(book) {

@@ -1,18 +1,16 @@
 const FileBackup = (() => {
     const ENABLED_KEY = 'fileBackupEnabled';
     const STATE_KEY = 'fileBackupState';
-    const DESTINATION_KEY = 'fileBackupDestination';
+    const LEGACY_DESTINATION_KEY = 'fileBackupDestination';
     const ALARM = 'book-manager-file-backup';
     const CHECK_ALARM = 'book-manager-file-backup-check';
-    const QUIET_MS = 5 * 60 * 1000;
+    const QUIET_MS = 30 * 1000; // 임시 테스트용. 테스트 후 5 * 60 * 1000으로 복원합니다.
     const MAX_WAIT_MS = 30 * 60 * 1000;
-    const FOLDER = FileBackupFolder.NAME;
+    const FOLDER = 'LibraryMatchingManagerBackups';
     const OFFSCREEN_PAGE = 'file-backup-offscreen.html';
-    const FOLDER_WINDOW_PAGE = 'file-backup-folder-window.html';
     const CHANGE_KEYS = ['bookStoreChange', 'missingVolsMap', 'allowedSites', 'filterWords', 'editionKeywords'];
     const downloadIds = new Set();
     let queue = Promise.resolve();
-    let folderWindowId = null;
 
     function enqueue(operation) {
         const result = queue.then(operation, operation);
@@ -21,8 +19,23 @@ const FileBackup = (() => {
     }
 
     async function read() {
-        const values = await chrome.storage.local.get({ [ENABLED_KEY]: false, [STATE_KEY]: {}, [DESTINATION_KEY]: null });
-        return { enabled: values[ENABLED_KEY] === true, state: { ...values[STATE_KEY] }, destination: values[DESTINATION_KEY] };
+        const values = await chrome.storage.local.get({ [ENABLED_KEY]: false, [STATE_KEY]: {}, [LEGACY_DESTINATION_KEY]: null });
+        const enabled = values[ENABLED_KEY] === true;
+        const state = { ...values[STATE_KEY] };
+        const hadCustomFolder = !!values[LEGACY_DESTINATION_KEY] || !!state.pending?.destination;
+        if (hadCustomFolder || state.folderAccessIssue) {
+            // 기존 폴더의 파일은 그대로 두고 이후 백업만 다운로드 방식으로 전환한다.
+            if (state.pending?.destination) state.pending = null;
+            delete state.folderAccessIssue;
+            state.error = '';
+            state.retryAt = 0;
+            if (hadCustomFolder && !state.pending) {
+                if (state.lastDestinationId !== 'downloads') state.lastHash = null;
+                if (enabled) markChanged(state);
+            }
+            await chrome.storage.local.set({ [LEGACY_DESTINATION_KEY]: null, [STATE_KEY]: state });
+        }
+        return { enabled, state };
     }
 
     async function save(state) {
@@ -148,7 +161,7 @@ const FileBackup = (() => {
         state.lastDownloadId = downloadId;
         state.lastBookCount = pending.bookCount;
         state.lastHash = pending.hash;
-        state.lastDestinationId = pending.destination?.id || 'downloads';
+        state.lastDestinationId = 'downloads';
         state.error = '';
         state.retryAt = 0;
         state.pending = null;
@@ -158,18 +171,6 @@ const FileBackup = (() => {
     async function reconcilePending(state) {
         if (!state.pending) return;
         const pending = state.pending;
-        if (pending.destination) {
-            try {
-                const file = await FileBackupFolder.readFile(pending.destination.id, pending.filename);
-                if (!file || await hash(JSON.parse(await file.text())) !== pending.hash) {
-                    throw new Error('완료되지 않은 백업입니다. 새 파일로 다시 저장합니다.');
-                }
-                await complete(state, pending, `${pending.destination.label} → ${pending.filename}`);
-            } catch (error) {
-                await fail(state, `백업 파일 확인 실패: ${error.message || error}`);
-            }
-            return;
-        }
         let items = [];
         if (Number.isInteger(pending.downloadId)) {
             downloadIds.add(pending.downloadId);
@@ -205,12 +206,11 @@ const FileBackup = (() => {
 
     async function startBackup(state, force = false) {
         if (state.pending) return;
-        const { destination } = await read();
         const snapshot = await capture(true);
         const contentHash = await hash(snapshot.data);
         state.observedSignature = snapshot.signature;
         if (!force && contentHash === state.lastHash
-            && (state.lastDestinationId || 'downloads') === (destination?.id || 'downloads')) {
+            && (state.lastDestinationId || 'downloads') === 'downloads') {
             state.firstChangeAt = 0;
             state.lastChangeAt = 0;
             state.retryAt = 0;
@@ -221,21 +221,6 @@ const FileBackup = (() => {
         const requestId = crypto.randomUUID();
         const targetFilename = filename();
         try {
-            if (destination) {
-                const pending = {
-                    destination, filename: targetFilename.slice(FOLDER.length + 1), hash: contentHash,
-                    startedAt: Date.now(), firstChangeAt: state.firstChangeAt || Date.now(),
-                    bookCount: snapshot.data.bookList.length
-                };
-                state.pending = pending;
-                state.firstChangeAt = 0;
-                state.lastChangeAt = 0;
-                state.error = '';
-                await save(state);
-                await FileBackupFolder.writeFile(destination.id, pending.filename, JSON.stringify(snapshot.data, null, 2));
-                await complete(state, pending, `${destination.label} → ${pending.filename}`);
-                return;
-            }
             const url = await createBlobUrl(JSON.stringify(snapshot.data, null, 2), requestId);
             state.pending = {
                 requestId, url, filename: targetFilename, hash: contentHash,
@@ -284,15 +269,7 @@ const FileBackup = (() => {
     }
 
     async function status() {
-        const { enabled, state, destination } = await read();
-        let folder = null;
-        if (destination) {
-            try {
-                folder = await FileBackupFolder.describe(destination.id);
-            } catch (error) {
-                folder = { ...destination, permission: 'missing', error: error.message || String(error) };
-            }
-        }
+        const { enabled, state } = await read();
         return {
             enabled, busy: !!state.pending,
             nextBackupAt: enabled ? dueAt(state) : 0,
@@ -300,38 +277,14 @@ const FileBackup = (() => {
             lastFilename: state.lastFilename || '',
             lastBookCount: state.lastBookCount ?? null,
             hasDownload: Number.isInteger(state.lastDownloadId),
-            destination: folder,
-            lastBackupMatchesDestination: (state.lastDestinationId || 'downloads') === (destination?.id || 'downloads'),
+            lastBackupMatchesDestination: (state.lastDestinationId || 'downloads') === 'downloads',
             error: state.error || ''
         };
     }
 
-    function isBackupSender(sender, action) {
-        if (sender?.id !== chrome.runtime.id || typeof sender.url !== 'string') return false;
-        const url = sender.url.split(/[?#]/)[0];
-        if (url === chrome.runtime.getURL('options.html')) return true;
-        return url === chrome.runtime.getURL(FOLDER_WINDOW_PAGE)
-            && ['FILE_BACKUP_STATUS', 'FILE_BACKUP_USE_FOLDER', 'FILE_BACKUP_FOLDER_ACCESS', 'FILE_BACKUP_NOW'].includes(action);
-    }
-
-    async function openFolderWindow() {
-        const url = chrome.runtime.getURL(FOLDER_WINDOW_PAGE);
-        const contexts = await chrome.runtime.getContexts({ contextTypes: ['TAB'], documentUrls: [url] });
-        const ids = new Set([folderWindowId, ...contexts.map(context => context.windowId)]);
-        for (const id of ids) {
-            if (!Number.isInteger(id) || id < 0) continue;
-            try {
-                const existing = await chrome.windows.get(id);
-                if (existing.type !== 'popup') continue;
-                await chrome.windows.update(id, { focused: true });
-                folderWindowId = id;
-                return;
-            } catch (_) {
-                // 닫힌 창은 새 창으로 대체합니다.
-            }
-        }
-        const created = await chrome.windows.create({ url, type: 'popup', width: 520, height: 620, focused: true });
-        folderWindowId = created.id;
+    function isOptionsSender(sender) {
+        return sender?.id === chrome.runtime.id && typeof sender.url === 'string'
+            && sender.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
     }
 
     function isBackupDownload(item) {
@@ -340,35 +293,14 @@ const FileBackup = (() => {
     }
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (!['FILE_BACKUP_STATUS', 'FILE_BACKUP_SET_ENABLED', 'FILE_BACKUP_NOW', 'FILE_BACKUP_SHOW',
-            'FILE_BACKUP_USE_FOLDER', 'FILE_BACKUP_DEFAULT_FOLDER', 'FILE_BACKUP_FOLDER_ACCESS',
-            'FILE_BACKUP_OPEN_FOLDER_WINDOW'].includes(message?.action)) return;
-        if (!isBackupSender(sender, message.action)) {
+        if (!['FILE_BACKUP_STATUS', 'FILE_BACKUP_SET_ENABLED', 'FILE_BACKUP_NOW', 'FILE_BACKUP_SHOW'].includes(message?.action)) return;
+        if (!isOptionsSender(sender)) {
             sendResponse({ ok: false, error: '설정 화면에서만 파일 백업을 변경할 수 있습니다.' });
             return;
         }
         void enqueue(async () => {
             try {
-                if (message.action === 'FILE_BACKUP_OPEN_FOLDER_WINDOW') {
-                    await openFolderWindow();
-                } else if (['FILE_BACKUP_USE_FOLDER', 'FILE_BACKUP_DEFAULT_FOLDER', 'FILE_BACKUP_FOLDER_ACCESS'].includes(message.action)) {
-                    const { enabled, state, destination } = await read();
-                    await reconcilePending(state);
-                    if (state.pending) throw new Error('백업 파일을 저장하고 있습니다. 완료 후 저장 위치를 변경해 주세요.');
-                    let nextDestination = null;
-                    if (message.action !== 'FILE_BACKUP_DEFAULT_FOLDER') {
-                        const folder = await FileBackupFolder.describe(message.action === 'FILE_BACKUP_FOLDER_ACCESS' ? destination?.id : message.id);
-                        if (folder.permission !== 'granted') throw new Error('선택한 폴더의 읽기·쓰기 접근을 허용해 주세요.');
-                        nextDestination = { id: folder.id, label: folder.label };
-                    }
-                    await chrome.storage.local.set({ [DESTINATION_KEY]: nextDestination });
-                    state.firstChangeAt = Date.now();
-                    state.lastChangeAt = Date.now();
-                    state.retryAt = 0;
-                    state.error = '';
-                    await save(state);
-                    await tick({ force: enabled && message.action === 'FILE_BACKUP_FOLDER_ACCESS' });
-                } else if (message.action === 'FILE_BACKUP_SET_ENABLED') {
+                if (message.action === 'FILE_BACKUP_SET_ENABLED') {
                     if (typeof message.enabled !== 'boolean') throw new Error('백업 설정이 올바르지 않습니다.');
                     await chrome.storage.local.set({ [ENABLED_KEY]: message.enabled });
                     const { state } = await read();
@@ -383,8 +315,7 @@ const FileBackup = (() => {
                 } else if (message.action === 'FILE_BACKUP_NOW') {
                     await tick({ force: true });
                 } else if (message.action === 'FILE_BACKUP_SHOW') {
-                    const { state, destination } = await read();
-                    if (destination) throw new Error('선택한 폴더의 LibraryMatchingManagerBackups에서 백업 파일을 확인해 주세요.');
+                    const { state } = await read();
                     if (Number.isInteger(state.lastDownloadId) && (!state.lastDestinationId || state.lastDestinationId === 'downloads')) {
                         await chrome.downloads.show(state.lastDownloadId);
                     } else {
@@ -416,14 +347,14 @@ const FileBackup = (() => {
         if (delta.state && ['complete', 'interrupted'].includes(delta.state.current)) {
             void enqueue(async () => {
                 const { enabled, state } = await read();
-                if (!state.pending || state.pending.destination || (state.pending.downloadId !== null && state.pending.downloadId !== delta.id)) return;
+                if (!state.pending || (state.pending.downloadId !== null && state.pending.downloadId !== delta.id)) return;
                 await reconcilePending(state);
                 await schedule(enabled, state);
             });
         }
     });
-    chrome.runtime.onStartup.addListener(() => { void initialize(); });
-    chrome.runtime.onInstalled.addListener(() => { void initialize(); });
+    chrome.runtime.onStartup.addListener(() => { void enqueue(() => tick({ check: true })); });
+    chrome.runtime.onInstalled.addListener(() => { void enqueue(() => tick({ check: true })); });
 
     return { initialize, status, isBackupDownload, isBackupDownloadId: id => downloadIds.has(id) };
 })();

@@ -75,8 +75,7 @@ const stage = mkdtempSync(path.join(tmpdir(), 'book-manager-release-'));
 const files = [
     'db.js', 'dexie.min.js', 'background.js', 'common.js', 'content.js',
     'google-drive.js', 'google-sync.js', 'google-sync-ui.js', 'download-book-update.js', 'buzzheavier-download.js',
-    'file-backup.js', 'file-backup-folder.js', 'file-backup-ui.js', 'file-backup-offscreen.html', 'file-backup-offscreen.js',
-    'file-backup-folder-window.html', 'file-backup-folder-window.css', 'file-backup-folder-window.js',
+    'file-backup.js', 'file-backup-ui.js', 'file-backup-offscreen.html', 'file-backup-offscreen.js',
     'book-ui.js', 'book-ui.css', 'book-shortcuts.js', 'icon.png', 'manifest.json',
     'options.html', 'options.css', 'options.js', 'help.html', 'help.css',
     'help.js', 'help-navigation.js', 'images', 'author.json', 'category-ui.js', 'category-ui.css',

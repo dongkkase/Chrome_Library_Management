@@ -2176,30 +2176,82 @@ function showInfoToast(msg, isError = false) {
   }, 7000);
 }
 
-function showActionToast(message, allowHTML = false) {
+function showActionToast(message, allowHTML = false, undoToken = null) {
     let container = document.getElementById('book-manager-toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'book-manager-toast-container';
-        container.style.cssText = "position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;";
+        container.style.cssText = "position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 999999; display: flex; flex-direction: column; align-items: center; gap: 10px; width: max-content; max-width: calc(100vw - 32px); pointer-events: none;";
         document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
-    if (allowHTML) toast.innerHTML = message;
-    else toast.textContent = message;
-    toast.style.cssText = "background: rgba(33, 37, 41, 0.95); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transform: translateY(20px); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); white-space: nowrap; text-align: center;";
+    toast.className = 'bm-action-toast';
+    const text = document.createElement('span');
+    text.className = 'bm-action-toast-message';
+    text.setAttribute('role', 'status');
+    if (allowHTML) text.innerHTML = message;
+    else text.textContent = message;
+    toast.appendChild(text);
+
+    let timer;
+    let busy = false;
+    let dismissed = false;
+    let hovered = false;
+    const dismiss = () => {
+        if (busy || dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
+        void LibraryMotion.conceal(toast, { offset: -10 }).then(() => toast.remove());
+    };
+    const scheduleDismiss = () => {
+        clearTimeout(timer);
+        if (!busy && !dismissed && !hovered && !toast.contains(document.activeElement)) {
+            timer = setTimeout(dismiss, undoToken ? 8000 : 5000);
+        }
+    };
+    toast.addEventListener('mouseenter', () => { hovered = true; clearTimeout(timer); });
+    toast.addEventListener('mouseleave', () => { hovered = false; scheduleDismiss(); });
+    toast.addEventListener('focusin', () => clearTimeout(timer));
+    toast.addEventListener('focusout', event => {
+        if (!toast.contains(event.relatedTarget)) {
+            clearTimeout(timer);
+            if (!busy && !hovered) timer = setTimeout(dismiss, undoToken ? 8000 : 5000);
+        }
+    });
+
+    if (undoToken) {
+        const undoButton = document.createElement('button');
+        undoButton.type = 'button';
+        undoButton.className = 'bm-action-toast-undo';
+        undoButton.textContent = '되돌리기';
+        undoButton.onclick = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (busy || dismissed) return;
+            busy = true;
+            clearTimeout(timer);
+            undoButton.disabled = true;
+            undoButton.textContent = '되돌리는 중…';
+            void LibraryMotion.feedback(undoButton);
+            requestRuntimeResponse({ action: 'UNDO_QUICK_ACTION', undoToken }, response => {
+                busy = false;
+                if (response?.ok === true) {
+                    dismiss();
+                    showActionToast('변경 전 도서 정보로 되돌렸습니다.');
+                } else {
+                    undoButton.disabled = false;
+                    undoButton.textContent = '되돌리기';
+                    showInfoToast(escapeToastText(response?.error || '되돌리지 못했습니다. 다시 시도해주세요.'), true);
+                    scheduleDismiss();
+                }
+            });
+        };
+        toast.appendChild(undoButton);
+    }
     container.appendChild(toast);
-
-    void toast.offsetWidth;
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateY(0)';
-
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-10px)';
-        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 350);
-    }, 5000);
+    void LibraryMotion.reveal(toast, { offset: 20 });
+    scheduleDismiss();
 }
 
 function escapeToastText(value) {
@@ -2208,7 +2260,7 @@ function escapeToastText(value) {
     return element.innerHTML;
 }
 
-function showToast(book, isDelete = false) {
+function showToast(book, isDelete = false, undoToken = null) {
     let typeStr = '';
     let typeColor = '';
 
@@ -2235,7 +2287,7 @@ function showToast(book, isDelete = false) {
 
     const detailStr = ' <span style="color:#adb5bd; font-size:12px; font-weight:normal;">(' + details.map(escapeToastText).join(' | ') + ')</span>';
     const message = '<span style="color:' + typeColor + '; margin-right:5px;">[' + typeStr + ']</span>' + escapeToastText(book.title) + detailStr;
-    showActionToast(message, true);
+    showActionToast(message, true, undoToken);
 }
 
 function getBookTypeForTitle(titleStr, preferredBookId = null) {
@@ -3865,7 +3917,7 @@ try {
               });
           });
       } else if (request.action === "SHOW_TOAST" && request.book) {
-          showToast(request.book, request.isDelete);
+          showToast(request.book, request.isDelete, request.undoToken);
       } else if (request.action === "SHOW_INFO_TOAST") {
           showInfoToast(request.msg, request.isError);
       } else if (request.action === "UPDATE_DOWNLOAD_PROGRESS") {
